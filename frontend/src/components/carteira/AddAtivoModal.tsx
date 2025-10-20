@@ -25,7 +25,6 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
   const [liquidezDiaria, setLiquidezDiaria] = useState(false)
   const [filtroLista, setFiltroLista] = useState('')
   const [rfFormOpen, setRfFormOpen] = useState(false)
-  const [editingRfItem, setEditingRfItem] = useState<any>(null)
   
   // Novos estados para preço
   const [tipoPreco, setTipoPreco] = useState<'atual' | 'historico' | 'manual'>('atual')
@@ -67,6 +66,9 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
   const isTesouro = useMemo(() => {
     return tipoNorm.includes('renda fixa') || tipoNorm.includes('tesouro') || tipoNorm.includes('publica')
   }, [tipoNorm])
+
+  // Última etapa: 7 para renda fixa (com indexador/data/vencimento), 4 para ativos de yfinance
+  const lastStep = useMemo(() => (isTesouro ? 7 : 4), [isTesouro])
 
 
   const { data: sugestoes } = useQuery({
@@ -332,9 +334,8 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
   }
 
   const getNextStep = () => {
-    if (step === 4 && !isTesouro) {
-      // Pular step 5 (indexador) para ativos do yfinance
-      return 6
+    if (!isTesouro) {
+      return Math.min(step + 1, lastStep)
     }
     return step + 1
   }
@@ -391,7 +392,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
 
           <div className="p-4 space-y-4">
             {/* Step indicator */}
-            <div className="text-xs text-muted-foreground">Etapa {step} de 7</div>
+            <div className="text-xs text-muted-foreground">Etapa {step} de {lastStep}</div>
 
             {step === 1 && (
               <div className="space-y-3">
@@ -498,7 +499,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     <div className="mt-3">
                       <button 
                         onClick={() => {
-                          setEditingRfItem(null)
+                          // RF form agora não usa edição; apenas abrir
                           setRfFormOpen(true)
                         }}
                         className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -750,14 +751,14 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
               </div>
             )}
 
-            {step === 6 && (
+            {step === 6 && isTesouro && (
               <div className="space-y-3">
                 <label className="block text-sm font-medium flex items-center gap-2"><Calendar size={14}/> Data da compra</label>
                 <input type="date" title="Data da compra" placeholder="YYYY-MM-DD" value={dataAplicacao} onChange={(e)=>setDataAplicacao(e.target.value)} className="px-3 py-2 bg-background border border-border rounded"/>
               </div>
             )}
 
-            {step === 7 && (
+            {step === 7 && isTesouro && (
               <div className="space-y-3">
                 <label className="block text-sm font-medium">Vencimento (se houver)</label>
                 <input type="date" title="Data de vencimento" placeholder="YYYY-MM-DD" value={vencimento} onChange={(e)=>setVencimento(e.target.value)} className="px-3 py-2 bg-background border border-border rounded"/>
@@ -774,7 +775,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
             <button onClick={()=> setStep(Math.max(1, step-1))} disabled={step===1} className="px-3 py-2 rounded bg-muted text-foreground disabled:opacity-50 flex items-center gap-1">
               <ChevronLeft size={16}/> Voltar
             </button>
-            {step < 7 ? (
+            {step < lastStep ? (
               <button onClick={()=> canNext() && setStep(getNextStep())} disabled={!canNext()} className="px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1">
                 Avançar <ChevronRight size={16}/>
               </button>
@@ -792,10 +793,11 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
         open={rfFormOpen}
         onClose={() => {
           setRfFormOpen(false)
-          setEditingRfItem(null)
         }}
         onSuccess={() => {
-          // Após adicionar, podemos fechar e atualizar carteiras via invalidações no próprio modal
+          // Ao adicionar com sucesso, fechar também a modal principal
+          setRfFormOpen(false)
+          onClose()
         }}
       />
     </div>
