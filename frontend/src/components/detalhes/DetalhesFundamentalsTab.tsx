@@ -102,8 +102,8 @@ export default function DetalhesFundamentalsTab({
 
         <InfoSection title="Endividamento" icon={TrendingDown} color="red">
           <div className="space-y-1">
-            <InfoRow label="Dívida Líquida" value={formatNumber(info.debtToEquity)} icon={AlertTriangle} />
-            <InfoRow label="Dívida/EBITDA" value={formatPercentage(info.debtToEbitda ? info.debtToEbitda * 100 : null)} icon={AlertTriangle} />
+            <InfoRow label="Dívida Líquida" value={formatCurrency(info.netDebt)} icon={AlertTriangle} />
+            <InfoRow label="Dívida Líquida/EBITDA" value={info.netDebtToEbitda != null ? formatNumber(info.netDebtToEbitda) : '-'} icon={AlertTriangle} />
             <InfoRow label="Dívida/Ativos" value={formatPercentage(info.debtToAssets ? info.debtToAssets * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Capital" value={formatPercentage(info.debtToCapital ? info.debtToCapital * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Fluxo de Caixa" value={formatPercentage(info.debtToCashFlow ? info.debtToCashFlow * 100 : null)} icon={AlertTriangle} />

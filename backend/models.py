@@ -1817,11 +1817,11 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
     return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)[:10]
 
 def processar_ativos_acoes_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max):
-    """Processar ações com filtros - wrapper para compatibilidade"""
+    
     return processar_ativos_com_filtros_geral(LISTA_ACOES, 'Ação', roe_min, dy_min, pl_min, pl_max, pvp_max)
 
 def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max):
-    """Processar BDRs com filtros - wrapper para compatibilidade"""
+   
     return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
@@ -1829,7 +1829,7 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
     dados = [obter_informacoes(ticker, 'FII') for ticker in fiis]
     dados = [d for d in dados if d is not None]
     
-    # Aplicar filtros básicos
+
     filtrados = [
         ativo for ativo in dados if (
             ativo['dividend_yield'] >= (dy_min or 0) and
@@ -1838,13 +1838,13 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
         )
     ]
     
-    # Aplicar filtros de tipo e segmento se fornecidos
+
     if tipo_fii or segmento_fii:
         filtrados_final = []
         for ativo in filtrados:
             ticker = ativo.get('ticker', '')
             
-            # Buscar metadados do FII
+
             try:
                 from fii_scraper import obter_dados_fii_fundsexplorer
                 metadata = obter_dados_fii_fundsexplorer(ticker)
@@ -1853,11 +1853,11 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
                     ativo_tipo = metadata.get('tipo')
                     ativo_segmento = metadata.get('segmento')
                     
-                    # Verificar filtro de tipo
+
                     if tipo_fii and ativo_tipo != tipo_fii:
                         continue
                         
-                    # Verificar filtro de segmento
+
                     if segmento_fii and ativo_segmento != segmento_fii:
                         continue
                         

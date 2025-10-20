@@ -640,6 +640,124 @@ def api_get_ativo_details(ticker):
         info = acao.info or {}
         historico = acao.history(period="max")
         dividends = acao.dividends if hasattr(acao, 'dividends') else None
+        # ==================== MÉTRICAS DERIVADAS: Dívida Líquida/EBITDA ====================
+        try:
+            total_debt = None
+            total_cash = None
+            # fontes possíveis no info
+            try:
+                td = info.get('totalDebt')
+                if td is not None:
+                    total_debt = float(td)
+            except Exception:
+                pass
+            for cash_key in ('totalCash', 'totalCashAndShortTermInvestments', 'cash'):
+                try:
+                    c = info.get(cash_key)
+                    if c is not None:
+                        total_cash = float(c)
+                        break
+                except Exception:
+                    continue
+
+            # tentativa de complementar via balanço patrimonial
+            if (total_debt is None or total_cash is None):
+                try:
+                    bs = getattr(acao, 'balance_sheet', None)
+                    if bs is not None and not bs.empty:
+                        # pegar coluna mais recente
+                        latest_col = bs.columns[0]
+                        if total_debt is None:
+                            for k in ('TotalDebt', 'LongTermDebt', 'ShortLongTermDebt'):
+                                if k in bs.index:
+                                    try:
+                                        val = float(bs.loc[k, latest_col] or 0)
+                                        total_debt = (total_debt or 0.0) + (val if val is not None else 0.0)
+                                    except Exception:
+                                        pass
+                        if total_cash is None:
+                            for k in ('Cash', 'CashAndCashEquivalents', 'CashAndShortTermInvestments'):
+                                if k in bs.index:
+                                    try:
+                                        total_cash = float(bs.loc[k, latest_col])
+                                        break
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass
+
+            # EBITDA
+            ebitda_val = None
+            try:
+                eb = info.get('ebitda')
+                if eb is not None:
+                    ebitda_val = float(eb)
+            except Exception:
+                pass
+
+            # income statement: linha 'EBITDA'
+            if ebitda_val is None:
+                try:
+                    inc = getattr(acao, 'income_stmt', None)
+                    if inc is not None and not inc.empty:
+                        latest_col = inc.columns[0]
+                        for k in ('EBITDA', 'Ebitda'):
+                            if k in inc.index:
+                                try:
+                                    ebitda_val = float(inc.loc[k, latest_col])
+                                    break
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+
+            # fallback: operatingIncome + depreciationAndAmortization
+            if ebitda_val is None:
+                try:
+                    inc = getattr(acao, 'income_stmt', None)
+                    cf = getattr(acao, 'cashflow', None)
+                    op_inc = None
+                    dep_amort = None
+                    if inc is not None and not inc.empty and 'OperatingIncome' in inc.index:
+                        latest_col = inc.columns[0]
+                        try:
+                            op_inc = float(inc.loc['OperatingIncome', latest_col])
+                        except Exception:
+                            op_inc = None
+                    if cf is not None and not cf.empty:
+                        latest_col_cf = cf.columns[0]
+                        for k in ('DepreciationAndAmortization', 'Depreciation', 'DepreciationAmortizationDepletion'):
+                            if k in cf.index:
+                                try:
+                                    dep_amort = float(cf.loc[k, latest_col_cf])
+                                    break
+                                except Exception:
+                                    pass
+                    if op_inc is not None and dep_amort is not None:
+                        ebitda_val = float(op_inc) + float(dep_amort)
+                except Exception:
+                    pass
+
+            net_debt = None
+            net_debt_to_ebitda = None
+            try:
+                if total_debt is not None or total_cash is not None:
+                    net_debt = float(total_debt or 0.0) - float(total_cash or 0.0)
+            except Exception:
+                net_debt = None
+            try:
+                if net_debt is not None and ebitda_val and float(ebitda_val) != 0.0:
+                    net_debt_to_ebitda = float(net_debt) / float(ebitda_val)
+            except Exception:
+                net_debt_to_ebitda = None
+
+            # publicar no payload dentro de info para reaproveitar componentes atuais
+            if net_debt is not None:
+                info['netDebt'] = net_debt
+            if net_debt_to_ebitda is not None:
+                info['netDebtToEbitda'] = net_debt_to_ebitda
+        except Exception:
+            pass
         
         def convert_timestamps(obj):
             if isinstance(obj, dict):

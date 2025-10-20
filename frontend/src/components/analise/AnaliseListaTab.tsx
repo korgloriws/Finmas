@@ -104,6 +104,20 @@ function FiltrosAcoes({
             aria-label="Preço sobre valor patrimonial máximo"
           />
         </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">Dívida Líquida/EBITDA Máximo</label>
+          <input
+            type="number"
+            step="0.1"
+            value={filtros.net_debt_ebitda_max ?? 3}
+            onChange={(e) => onFiltroChange('net_debt_ebitda_max', parseFloat(e.target.value))}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+            placeholder="3"
+            aria-label="Dívida Líquida sobre EBITDA máximo"
+            title="Filtra empresas com alavancagem até o limite escolhido"
+          />
+        </div>
       </div>
       
       <div className="mt-6 flex justify-end">
@@ -642,7 +656,8 @@ export default function AnaliseListaTab() {
     dy_min: 12,
     pl_min: 1,
     pl_max: 15,
-    pvp_max: 2
+    pvp_max: 2,
+    net_debt_ebitda_max: 3
   })
   
   const [filtrosBdrs, setFiltrosBdrs] = useState<FiltrosAnalise>({
@@ -650,7 +665,8 @@ export default function AnaliseListaTab() {
     dy_min: 3,
     pl_min: 1,
     pl_max: 15,
-    pvp_max: 2
+    pvp_max: 2,
+    net_debt_ebitda_max: 3
   })
 
   const [filtrosFiis, setFiltrosFiis] = useState<FiltrosAnalise>({

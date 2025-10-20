@@ -62,6 +62,8 @@ function TabelaAtivosPorTipo({
   const porcentagemTipo = valorTotal > 0 ? (totalTipo / valorTotal * 100).toFixed(1) : '0.0'
   const isExpanded = expandedTipos[tipo] || false
   const podeRemoverTipo = ativosDoTipo.length === 0
+  const isRendaFixa = tipo.toLowerCase().includes('renda fixa')
+  const isCripto = tipo.toLowerCase().includes('cripto')
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden shadow-lg mb-6">
@@ -180,16 +182,27 @@ function TabelaAtivosPorTipo({
                     <th className="px-3 py-2 text-left font-medium text-sm">Preço Atual</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Preço de Compra</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Valor Total</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">Indexado</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">Rentab. Estimada (anual)</th>
+                    {tipo.toLowerCase().includes('renda fixa') && (
+                      <th className="px-3 py-2 text-left font-medium text-sm">Indexado</th>
+                    )}
+                    {tipo.toLowerCase().includes('renda fixa') && (
+                      <th className="px-3 py-2 text-left font-medium text-sm">Rentab. Estimada (anual)</th>
+                    )}
                     <th className="px-3 py-2 text-left font-medium text-sm">Preço Médio</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Valorização</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Rendimento</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">% Carteira</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">DY</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">ROE</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">P/L</th>
-                    <th className="px-3 py-2 text-left font-medium text-sm">P/VP</th>
+                    {!isRendaFixa && !isCripto && (
+                      <>
+                        <th className="px-3 py-2 text-left font-medium text-sm">DY</th>
+                        <th className="px-3 py-2 text-left font-medium text-sm">ROE</th>
+                        <th className="px-3 py-2 text-left font-medium text-sm">P/L</th>
+                        <th className="px-3 py-2 text-left font-medium text-sm">P/VP</th>
+                      </>
+                    )}
+                    {tipo.toLowerCase().includes('fii') && (
+                      <th className="px-3 py-2 text-left font-medium text-sm">Segmento</th>
+                    )}
                     {tipo.toLowerCase().includes('renda fixa') && (
                       <th className="px-3 py-2 text-left font-medium text-sm">Vencimento</th>
                     )}
@@ -272,29 +285,33 @@ function TabelaAtivosPorTipo({
                           {formatCurrency(ativo?.preco_compra)}
                         </td>
                         <td className="px-3 py-2 text-sm font-semibold">{formatCurrency(ativo?.valor_total)}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {ativo?.indexador ? `${ativo.indexador} ${ativo.indexador_pct ? `${ativo.indexador_pct}%` : ''}` : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-xs">
-                          {(() => {
-                            const pct = (ativo?.indexador_pct || 0)
-                            const idx = (ativo?.indexador || '') as 'CDI'|'IPCA'|'SELIC'|''
-                            const getVal = (d:any) => {
-                              if (!d) return null
-                              const v = parseFloat(String(d.valor))
-                              return isFinite(v) ? v : null
-                            }
-                            const raw = idx === 'CDI' ? getVal(indicadores?.cdi)
-                              : idx === 'IPCA' ? getVal(indicadores?.ipca)
-                              : idx === 'SELIC' ? getVal(indicadores?.selic)
-                              : null
-                            if (!idx || raw == null || !pct) return '-'
-            
-                            const baseAnual = raw <= 2 ? ((Math.pow(1 + (raw/100), 12) - 1) * 100) : raw
-                            const anual = (pct/100) * baseAnual
-                            return `${anual.toFixed(1)}% a.a.`
-                          })()}
-                        </td>
+                        {tipo.toLowerCase().includes('renda fixa') && (
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {ativo?.indexador ? `${ativo.indexador} ${ativo.indexador_pct ? `${ativo.indexador_pct}%` : ''}` : '-'}
+                          </td>
+                        )}
+                        {tipo.toLowerCase().includes('renda fixa') && (
+                          <td className="px-3 py-2 text-xs">
+                            {(() => {
+                              const pct = (ativo?.indexador_pct || 0)
+                              const idx = (ativo?.indexador || '') as 'CDI'|'IPCA'|'SELIC'|''
+                              const getVal = (d:any) => {
+                                if (!d) return null
+                                const v = parseFloat(String(d.valor))
+                                return isFinite(v) ? v : null
+                              }
+                              const raw = idx === 'CDI' ? getVal(indicadores?.cdi)
+                                : idx === 'IPCA' ? getVal(indicadores?.ipca)
+                                : idx === 'SELIC' ? getVal(indicadores?.selic)
+                                : null
+                              if (!idx || raw == null || !pct) return '-'
+              
+                              const baseAnual = raw <= 2 ? ((Math.pow(1 + (raw/100), 12) - 1) * 100) : raw
+                              const anual = (pct/100) * baseAnual
+                              return `${anual.toFixed(1)}% a.a.`
+                            })()}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-sm">{precoBase != null ? formatCurrency(precoBase) : '-'}</td>
                         <td className={`px-3 py-2 text-sm font-medium ${valorizacaoAbs != null ? (valorizacaoAbs >= 0 ? 'text-emerald-600' : 'text-red-600') : ''}`}>
                           {valorizacaoAbs != null ? formatCurrency(valorizacaoAbs) : '-'}
@@ -303,14 +320,21 @@ function TabelaAtivosPorTipo({
                           {rendimentoPct != null ? `${rendimentoPct.toFixed(1).replace('.', ',')}%` : '-'}
                         </td>
                         <td className="px-3 py-2 text-sm text-muted-foreground">{porcentagemAtivo}%</td>
-                        <td className="px-3 py-2 text-green-600 font-medium text-sm">
-                          {formatDividendYield(ativo?.dy)}
-                        </td>
-                        <td className={`px-3 py-2 font-medium text-sm ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
-                          {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
-                        </td>
-                        <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pl)}</td>
-                        <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pvp)}</td>
+                        {!isRendaFixa && !isCripto && (
+                          <>
+                            <td className="px-3 py-2 text-green-600 font-medium text-sm">
+                              {formatDividendYield(ativo?.dy)}
+                            </td>
+                            <td className={`px-3 py-2 font-medium text-sm ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
+                              {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
+                            </td>
+                            <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pl)}</td>
+                            <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pvp)}</td>
+                          </>
+                        )}
+                        {tipo.toLowerCase().includes('fii') && (
+                          <td className="px-3 py-2 text-sm">{(ativo as any)?.segmento_fii || '-'}</td>
+                        )}
                         {tipo.toLowerCase().includes('renda fixa') && (
                           <td className="px-3 py-2 text-sm">
                             <VencimentoStatus 

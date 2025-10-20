@@ -36,14 +36,31 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
 
   const queryClient = useQueryClient()
 
-  // Dados auxiliares
+
   const { data: tiposApi } = useQuery({
     queryKey: ['tipos-ativos-modal'],
     queryFn: carteiraService.getTipos,
     staleTime: 60_000,
     enabled: open,
   })
-  const tiposDisponiveis = useMemo(() => Array.from(new Set([...(tiposApi || []) as string[], 'Ação', 'FII', 'BDR', 'Criptomoeda', 'Renda Fixa Pública', 'Renda Fixa'])), [tiposApi])
+  const tiposDisponiveis = useMemo(() => {
+    const defaults = [
+      'Ações',
+      'FII',
+      "BDR'S",
+      'Renda Fixa',
+      'Stocks',
+      'Criptomoedas',
+      'Funds',
+      "ETF'S",
+      
+      'Ação',
+      'BDR',
+      'Criptomoeda',
+      'Renda Fixa Pública',
+    ]
+    return Array.from(new Set([...(tiposApi || []) as string[], ...defaults]))
+  }, [tiposApi])
 
   const { data: tesouroData } = useQuery({
     queryKey: ['tesouro-titulos-modal'],
@@ -313,21 +330,21 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
     if (step === 2) return (nome && nome.trim().length > 0) || (ticker && ticker.trim().length > 0)
     if (step === 3) return !!quantidade
     if (step === 4) {
-      // Validação específica para preço
+
       if (tipoPreco === 'atual') {
-        // Para renda fixa, não exigir preço atual
+   
         if (isTesouro) return true
         return precoAtual !== null
       }
       if (tipoPreco === 'historico') {
-        // Para renda fixa, não exigir preço histórico
+       
         if (isTesouro) return true
         return precoHistorico !== null && !erroPrecoHistorico
       }
       if (tipoPreco === 'manual') return !!preco && parseFloat(preco.replace(',', '.')) > 0
       return false
     }
-    if (step === 5) return true // Só aparece para renda fixa
+    if (step === 5) return true 
     if (step === 6) return true
     if (step === 7) return true
     return true

@@ -210,6 +210,7 @@ export interface FiltrosAnalise {
   pl_min?: number
   pl_max?: number
   pvp_max?: number
+  net_debt_ebitda_max?: number
   liq_min?: number
   tipo_fii?: string
   segmento_fii?: string
