@@ -437,7 +437,6 @@ export default function HomePage() {
     value, 
     subtitle, 
     icon: Icon, 
-
     to, 
     trend,
     loading = false,
@@ -447,7 +446,6 @@ export default function HomePage() {
     value: string
     subtitle?: string
     icon: any
-    color?: string
     to: string
     trend?: { value: number; isPositive: boolean }
     loading?: boolean
@@ -460,48 +458,48 @@ export default function HomePage() {
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-              <Link to={to} className="block">
-          <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-6 hover:shadow-2xl transition-all duration-300 cursor-pointer group">
-            {/* Background pattern */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-                          <div className="p-3 rounded-xl bg-primary text-primary-foreground shadow-lg">
-              <Icon className="w-6 h-6" />
-            </div>
+      <Link to={to} className="block touch-manipulation">
+        <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg sm:hover:shadow-2xl transition-all duration-300 cursor-pointer group min-h-[140px] sm:min-h-[160px] touch-manipulation">
+          {/* Background pattern */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        
+          <div className="relative z-10 h-full flex flex-col">
+            <div className="flex items-start justify-between mb-3 sm:mb-4">
+              <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-primary text-primary-foreground shadow-lg">
+                <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
               {trend && !loading && (
                 <motion.div 
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.5 }}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
+                  className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${
                     trend.isPositive 
                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
                       : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                   }`}
                 >
-                  {trend.isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                  <span className="hidden sm:inline">{trend.value}%</span>
+                  {trend.isPositive ? <ArrowUpRight size={12} className="sm:w-3.5 sm:h-3.5" /> : <ArrowDownRight size={12} className="sm:w-3.5 sm:h-3.5" />}
+                  <span className="hidden xs:inline">{trend.value}%</span>
                 </motion.div>
               )}
             </div>
             
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+            <div className="space-y-1 sm:space-y-2 flex-1">
+              <h3 className="text-base sm:text-lg font-semibold text-foreground leading-tight">{title}</h3>
               {loading ? (
                 <div className="animate-pulse">
-                  <div className="h-8 bg-muted rounded w-32"></div>
+                  <div className="h-6 sm:h-8 bg-muted rounded w-24 sm:w-32"></div>
                 </div>
               ) : (
-                <p className="text-3xl font-bold text-foreground">{value}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">{value}</p>
               )}
-              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+              {subtitle && <p className="text-xs sm:text-sm text-muted-foreground leading-tight">{subtitle}</p>}
             </div>
             
-            <div className="mt-4 flex items-center text-sm text-muted-foreground">
+            <div className="mt-3 sm:mt-4 flex items-center text-xs sm:text-sm text-muted-foreground">
               <span>Ver detalhes</span>
-              <ArrowUpRight className="w-4 h-4 ml-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </div>
           </div>
         </div>
@@ -559,15 +557,15 @@ export default function HomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
         whileHover={{ scale: 1.02 }}
-        className={`p-4 ${color.bg} rounded-xl border ${color.border} hover:shadow-lg transition-all duration-200`}
+        className={`p-3 sm:p-4 ${color.bg} rounded-lg sm:rounded-xl border ${color.border} hover:shadow-lg transition-all duration-200`}
       >
-        <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-lg ${color.iconBg} flex-shrink-0`}>
-            <Icon className={`w-5 h-5 ${color.iconColor}`} />
+        <div className="flex items-start gap-2 sm:gap-3">
+          <div className={`p-1.5 sm:p-2 rounded-md sm:rounded-lg ${color.iconBg} flex-shrink-0`}>
+            <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${color.iconColor}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold ${color.titleColor} mb-2 text-base`}>{title}</h3>
-            <p className={`text-sm ${color.messageColor} leading-relaxed`}>{message}</p>
+            <h3 className={`font-semibold ${color.titleColor} mb-1 sm:mb-2 text-sm sm:text-base leading-tight`}>{title}</h3>
+            <p className={`text-xs sm:text-sm ${color.messageColor} leading-relaxed`}>{message}</p>
           </div>
         </div>
       </motion.div>
@@ -1468,7 +1466,7 @@ export default function HomePage() {
           <h2 className="text-xl font-semibold text-foreground">Ações Inteligentes</h2>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {contextualActions.map((action, index) => {
             const Icon = action.icon
             
@@ -1527,23 +1525,25 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 sm:p-6 space-y-8">
-        {/* Header com animações */}
+    <div className="min-h-screen bg-background scroll-smooth">
+      <div className="container mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-6 sm:space-y-8 safe-area-inset">
+        {/* Header com animações - Mobile First */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center space-y-6"
+          className="text-center space-y-4 sm:space-y-6"
         >
-        
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
+            Dashboard Financeiro
+          </h1>
           
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto px-2">
             Visão geral completa do seu sistema financeiro e patrimonial
           </p>
           
-          {/* Controles: calendário discreto à esquerda, mostrar/ocultar à direita */}
-          <div className="flex items-center justify-between gap-4">
+          {/* Controles: calendário discreto à esquerda, mostrar/ocultar à direita - Mobile optimized */}
+          <div className="flex flex-col xs:flex-row items-center justify-between gap-3 xs:gap-4">
             <div className="relative">
               <button
                 aria-haspopup="dialog"
@@ -1601,14 +1601,13 @@ export default function HomePage() {
           </div>
         </motion.div>
 
-        {/* Cards principais com animações - Ordem Contábil */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Cards principais com animações - Mobile First */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <CardPrincipal
             title="Receitas"
             value={formatarValor(totalReceitas)}
             subtitle={`${receitas?.length || 0} registros • ${getNomeMes(mesAtual)}`}
             icon={ArrowUpRight}
-            color="green"
             to="/controle"
             trend={calcTrend(totalReceitas, totalReceitasAnterior)}
             loading={loadingResumo}
@@ -1620,7 +1619,6 @@ export default function HomePage() {
             value={formatarValor(totalDespesas)}
             subtitle={`Cartões + Outros • ${getNomeMes(mesAtual)}`}
             icon={CreditCard}
-            color="red"
             to="/controle"
             trend={calcTrend(totalDespesas, totalDespesasAnterior)}
             loading={loadingResumo}
@@ -1632,7 +1630,6 @@ export default function HomePage() {
             value={formatarValor(saldoCalculado)}
             subtitle={`${formatarValor(totalReceitas, '')} - ${formatarValor(totalDespesas, '')} • ${getNomeMes(mesAtual)}`}
             icon={Wallet}
-            color={saldoCalculado >= 0 ? 'green' : 'red'}
             to="/controle"
             trend={calcTrend(saldoCalculado, saldoAnterior)}
             loading={loadingResumo}
@@ -1644,7 +1641,6 @@ export default function HomePage() {
             value={formatarValor(totalInvestido)}
             subtitle={`${carteira?.length || 0} ativos`}
             icon={Building2}
-            color="blue"
             to="/carteira"
             trend={carteiraTrend}
             loading={loadingCarteira}
@@ -1652,28 +1648,30 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Seção de gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Seção de gráficos - Mobile First */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           {/* Gráfico de evolução financeira */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.5 }}
-            className="bg-card border border-border rounded-2xl p-6 shadow-xl"
+            className="bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg sm:shadow-xl"
           >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <LineChart className="w-6 h-6 text-primary" />
+            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-3 mb-4 sm:mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <LineChart className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground">Evolução da Carteira</h2>
               </div>
-              <h2 className="text-xl font-semibold text-foreground">Evolução da Carteira</h2>
-              <div className="ml-auto">
+              <div className="w-full xs:w-auto xs:ml-auto">
                 <select
                   value={filtroPeriodo}
                   onChange={(e)=>{
                     const val = e.target.value as any
                     setFiltroPeriodo(val)
                   }}
-                  className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm"
+                  className="w-full xs:w-auto px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm"
                   aria-label="Período do gráfico"
                 >
                   <option value="mensal">Mensal</option>
@@ -1686,9 +1684,9 @@ export default function HomePage() {
             </div>
             
             {loadingResumo ? (
-              <div className="animate-pulse h-64 bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-48 sm:h-64 bg-muted rounded-lg"></div>
             ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={200} className="sm:h-[250px]">
                 <AreaChart data={(historicoCarteira?.datas || []).map((d: string, i: number) => ({
                   data: d,
                   carteira: historicoCarteira?.carteira?.[i] ?? null,
@@ -1731,24 +1729,24 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.6 }}
             className="bg-card border border-border rounded-2xl p-6 shadow-xl"
           >
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="p-2 rounded-lg bg-primary/10">
-                <PieChartIcon className="w-6 h-6 text-primary" />
+                <PieChartIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <h2 className="text-xl font-semibold text-foreground">Distribuição da Carteira</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-foreground">Distribuição da Carteira</h2>
             </div>
             
             {loadingCarteira ? (
-              <div className="animate-pulse h-64 bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-48 sm:h-64 bg-muted rounded-lg"></div>
             ) : dadosPizza.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={200} className="sm:h-[250px]">
                 <RechartsPieChart>
                   <Pie
                     data={dadosPizza}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={40}
+                    outerRadius={80}
                     paddingAngle={5}
                     dataKey="value"
                     onClick={(data) => {
@@ -1819,8 +1817,8 @@ export default function HomePage() {
           <UpcomingEventsCard delay={0.8} />
         </div>
 
-        {/* Novos Cards de Alto Impacto */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Novos Cards de Alto Impacto - Mobile First */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <PerformanceVsMetaCard delay={0.9} />
           <OportunidadesRebalanceamentoCard delay={1.0} />
           <AlertasMercadoCard delay={1.1} />
@@ -1952,8 +1950,8 @@ export default function HomePage() {
             <h2 className="text-2xl font-semibold text-foreground">Insights e Recomendações</h2>
           </div>
           
-          {/* Insights básicos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {/* Insights básicos - Mobile First */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
             <InsightCard
               title="Diversificação"
               message={carteira && carteira.length < 5 
