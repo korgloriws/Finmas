@@ -2,59 +2,72 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { X, Save, Building2, Calendar, Percent, DollarSign, AlertCircle } from 'lucide-react'
-import { rfCatalogService } from '../../services/api'
+import { carteiraService } from '../../services/api'
 
 interface RendaFixaFormModalProps {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
-  editingItem?: any
 }
 
-export default function RendaFixaFormModal({ open, onClose, onSuccess, editingItem }: RendaFixaFormModalProps) {
+export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFixaFormModalProps) {
   const [formData, setFormData] = useState({
-    nome: editingItem?.nome || '',
-    emissor: editingItem?.emissor || '',
-    tipo: editingItem?.tipo || 'CDB',
-    indexador: editingItem?.indexador || 'CDI',
-    taxa_percentual: editingItem?.taxa_percentual || 100,
-    taxa_fixa: editingItem?.taxa_fixa || 0,
-    quantidade: editingItem?.quantidade || '',
-    preco: editingItem?.preco || '',
-    data_inicio: editingItem?.data_inicio || '',
-    vencimento: editingItem?.vencimento || '',
-    liquidez_diaria: editingItem?.liquidez_diaria || false,
-    isento_ir: editingItem?.isento_ir || false,
-    observacao: editingItem?.observacao || ''
+    nome: '',
+    emissor: '',
+    tipo: 'CDB',
+    indexador: 'CDI' as '' | 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | 'CDI+' | 'IPCA+',
+    taxa_percentual: 100 as number | string,
+    taxa_fixa: 0 as number | string,
+    quantidade: '' as number | string,
+    preco: '' as number | string,
+    data_inicio: '',
+    vencimento: '',
+    liquidez_diaria: false,
+    isento_ir: false,
+    observacao: ''
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const queryClient = useQueryClient()
 
-  const createMutation = useMutation({
-    mutationFn: rfCatalogService.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rf-catalog-modal'] })
-      queryClient.invalidateQueries({ queryKey: ['rf-catalog'] })
-      onSuccess?.()
-      onClose()
-    },
-    onError: (error: any) => {
-      console.error('Erro ao criar item:', error)
-    }
-  })
+  const addDirectMutation = useMutation({
+    mutationFn: async () => {
+      const quantidadeNum = Number(formData.quantidade)
+      const precoNum = Number(formData.preco)
+      const taxaPercentualNum = Number(formData.taxa_percentual)
+      const taxaFixaNum = Number(formData.taxa_fixa)
 
-  const updateMutation = useMutation({
-    mutationFn: (data: any) => rfCatalogService.update({ ...data, id: editingItem?.id }),
+      let indexador_pct: number | undefined = undefined
+      if (formData.indexador === 'CDI' || formData.indexador === 'IPCA') {
+        indexador_pct = isNaN(taxaPercentualNum) ? undefined : taxaPercentualNum
+      } else if (formData.indexador === 'CDI+' || formData.indexador === 'IPCA+' || formData.indexador === 'PREFIXADO' || formData.indexador === 'SELIC') {
+        indexador_pct = isNaN(taxaFixaNum) ? undefined : taxaFixaNum
+      }
+
+      return carteiraService.adicionarAtivo(
+        (formData.nome || '').toUpperCase(),
+        isNaN(quantidadeNum) ? 0 : quantidadeNum,
+        'Renda Fixa',
+        isNaN(precoNum) ? 1.0 : precoNum,
+        formData.nome || undefined,
+        formData.indexador || undefined,
+        indexador_pct,
+        formData.data_inicio || undefined,
+        formData.vencimento || undefined,
+        formData.isento_ir || undefined,
+        formData.liquidez_diaria || undefined,
+      )
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rf-catalog-modal'] })
-      queryClient.invalidateQueries({ queryKey: ['rf-catalog'] })
+      queryClient.invalidateQueries({ queryKey: ['carteira'] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })
       onSuccess?.()
       onClose()
     },
     onError: (error: any) => {
-      console.error('Erro ao atualizar item:', error)
+      console.error('Erro ao adicionar renda fixa diretamente na carteira:', error)
     }
   })
 
@@ -104,19 +117,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, editingIt
       return
     }
 
-    const submitData = {
-      ...formData,
-      taxa_percentual: Number(formData.taxa_percentual),
-      taxa_fixa: Number(formData.taxa_fixa),
-      quantidade: Number(formData.quantidade),
-      preco: Number(formData.preco)
-    }
-
-    if (editingItem) {
-      updateMutation.mutate(submitData)
-    } else {
-      createMutation.mutate(submitData)
-    }
+    addDirectMutation.mutate()
   }
 
   const handleInputChange = (field: string, value: any) => {
@@ -126,7 +127,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, editingIt
     }
   }
 
-  const isLoading = createMutation.isPending || updateMutation.isPending
+  const isLoading = addDirectMutation.isPending
 
   if (!open) return null
 
@@ -146,10 +147,10 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, editingIt
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">
-                  {editingItem ? 'Editar' : 'Novo'} Produto de Renda Fixa
+                  Novo Produto de Renda Fixa
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  {editingItem ? 'Atualize as informações do produto' : 'Cadastre um novo produto no catálogo'}
+                  Preencha os dados do produto e adicionaremos diretamente à carteira
                 </p>
               </div>
             </div>
@@ -506,14 +507,14 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, editingIt
               type="submit"
               disabled={isLoading}
               className="px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={editingItem ? 'Atualizar produto' : 'Cadastrar produto'}
+              title={'Adicionar produto à carteira'}
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              {editingItem ? 'Atualizar' : 'Cadastrar'}
+              Adicionar
             </button>
           </div>
         </form>

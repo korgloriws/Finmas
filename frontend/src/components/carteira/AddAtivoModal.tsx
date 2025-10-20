@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { carteiraService, ativoService, listasService, rfCatalogService } from '../../services/api'
+import { carteiraService, ativoService, listasService } from '../../services/api'
 import { normalizeTicker } from '../../utils/tickerUtils'
-import { X, ChevronLeft, ChevronRight, ShieldCheck, Calendar, Percent, DollarSign, Layers, Edit, Plus, Building2 } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, ShieldCheck, Calendar, Percent, DollarSign, Layers, Plus } from 'lucide-react'
 import RendaFixaFormModal from './RendaFixaFormModal'
 
 interface AddAtivoModalProps {
@@ -68,12 +68,6 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
     return tipoNorm.includes('renda fixa') || tipoNorm.includes('tesouro') || tipoNorm.includes('publica')
   }, [tipoNorm])
 
-  const { data: rfCatalog, refetch: refetchRfCatalog } = useQuery({
-    queryKey: ['rf-catalog-modal'],
-    queryFn: rfCatalogService.list,
-    enabled: open && (tipoNorm.includes('renda fixa') || tipoNorm.includes('tesouro') || tipoNorm.includes('publica')),
-    staleTime: 60_000,
-  })
 
   const { data: sugestoes } = useQuery({
     queryKey: ['ativos-sugestoes-modal'],
@@ -500,91 +494,18 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                       <div className="text-xs text-muted-foreground">Nenhum título do Tesouro disponível agora.</div>
                     )}
 
-                    {/* Catálogo local de RF */}
+                    {/* A lista de catálogo local de RF foi removida para evitar divergências entre SQLite e PostgreSQL */}
                     <div className="mt-3">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-medium text-foreground">Renda Fixa (Catálogo Local)</div>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => {
-                              setEditingRfItem(null)
-                              setRfFormOpen(true)
-                            }}
-                            className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Novo
-                          </button>
-                        </div>
-                      </div>
-                      {(rfCatalog as any)?.items?.length ? (
-                        <div className="max-h-64 overflow-auto border border-border rounded-xl">
-                          {(rfCatalog as any).items.filter((it:any)=>{
-                            const q = (filtroLista||'').toLowerCase()
-                            if (!q) return true
-                            const label = `${it?.nome||''} ${it?.emissor||''} ${it?.tipo||''} ${it?.indexador||''}`.toLowerCase()
-                            return label.includes(q)
-                          }).map((it:any)=> (
-                            <div key={it.id} className="group border-b border-border last:border-b-0">
-                              <div className="flex items-center justify-between p-3">
-                                <button 
-                                  onClick={()=>{
-                                    // Preencher todos os campos do formulário principal
-                                    setTipo('Renda Fixa')
-                                    setNome(it.nome)
-                                    setTicker(it.nome.toUpperCase())
-                                    setQuantidade(it.quantidade ? String(it.quantidade) : '')
-                                    setPreco(it.preco ? String(it.preco) : '')
-                                    setIndexador((it.indexador || '') as any)
-                                    setIndexadorPct(it.taxa_fixa != null ? String(it.taxa_fixa) : '')
-                                    setVencimento(it.vencimento || '')
-                                    setLiquidezDiaria(!!it.liquidez_diaria)
-                                    setIsentoIr(!!it.isento_ir)
-                                    setDataAplicacao(it.data_inicio || '')
-                                    // Definir tipo de preço como manual para usar o valor da modal
-                                    setTipoPreco('manual')
-                                    
-                                
-                                    setStep(7)
-                                  }} 
-                                  className="flex-1 text-left hover:bg-muted/50 rounded-lg p-2 -m-2 transition-colors"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div>
-                                      <div className="text-sm font-medium text-foreground">{it.nome}</div>
-                                      <div className="text-xs text-muted-foreground">
-                                        {it.emissor} • {it.tipo} • {it.indexador}
-                                        {it.taxa_percentual ? ` • ${it.taxa_percentual}%` : ''}
-                                        {it.taxa_fixa ? ` + ${it.taxa_fixa}% a.a.` : ''}
-                                      </div>
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        Qtd: {it.quantidade || 'N/A'} • Preço: R$ {it.preco ? it.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'N/A'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setEditingRfItem(it)
-                                    setRfFormOpen(true)
-                                  }}
-                                  className="opacity-0 group-hover:opacity-100 p-2 hover:bg-muted rounded-lg transition-all"
-                                  title="Editar produto"
-                                >
-                                  <Edit className="w-4 h-4 text-muted-foreground" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <div className="text-sm">Nenhum produto cadastrado ainda</div>
-                          <div className="text-xs">Clique em "Novo" para adicionar o primeiro</div>
-                        </div>
-                      )}
+                      <button 
+                        onClick={() => {
+                          setEditingRfItem(null)
+                          setRfFormOpen(true)
+                        }}
+                        className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Cadastrar renda fixa e adicionar
+                      </button>
                     </div>
                   </div>
                 ) : isAcoes && (acoesList as any)?.tickers?.length ? (
@@ -874,9 +795,8 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
           setEditingRfItem(null)
         }}
         onSuccess={() => {
-          refetchRfCatalog()
+          // Após adicionar, podemos fechar e atualizar carteiras via invalidações no próprio modal
         }}
-        editingItem={editingRfItem}
       />
     </div>
   )
