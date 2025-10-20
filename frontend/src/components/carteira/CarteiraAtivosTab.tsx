@@ -64,6 +64,7 @@ function TabelaAtivosPorTipo({
   const podeRemoverTipo = ativosDoTipo.length === 0
   const isRendaFixa = tipo.toLowerCase().includes('renda fixa')
   const isCripto = tipo.toLowerCase().includes('cripto')
+  const isFii = tipo.toLowerCase().includes('fii')
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden shadow-lg mb-6">
@@ -200,7 +201,7 @@ function TabelaAtivosPorTipo({
                         <th className="px-3 py-2 text-left font-medium text-sm">P/VP</th>
                       </>
                     )}
-                    {tipo.toLowerCase().includes('fii') && (
+                    {isFii && (
                       <th className="px-3 py-2 text-left font-medium text-sm">Segmento</th>
                     )}
                     {tipo.toLowerCase().includes('renda fixa') && (
@@ -332,7 +333,7 @@ function TabelaAtivosPorTipo({
                             <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pvp)}</td>
                           </>
                         )}
-                        {tipo.toLowerCase().includes('fii') && (
+                        {isFii && (
                           <td className="px-3 py-2 text-sm">{(ativo as any)?.segmento_fii || '-'}</td>
                         )}
                         {tipo.toLowerCase().includes('renda fixa') && (
@@ -509,29 +510,41 @@ function TabelaAtivosPorTipo({
                           </div>
                         </div>
                         
-                        <div className="space-y-1.5 sm:space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-muted-foreground">DY</span>
-                            <span className="text-xs sm:text-sm text-green-600 font-medium">
-                              {formatDividendYield(ativo?.dy)}
-                            </span>
+                        {!isRendaFixa && !isCripto && (
+                          <div className="space-y-1.5 sm:space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">DY</span>
+                              <span className="text-xs sm:text-sm text-green-600 font-medium">
+                                {formatDividendYield(ativo?.dy)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">P/L</span>
+                              <span className="text-xs sm:text-sm">{formatNumber(ativo?.pl)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">P/VP</span>
+                              <span className="text-xs sm:text-sm">{formatNumber(ativo?.pvp)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">ROE</span>
+                              <span className={`text-xs sm:text-sm font-medium ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
+                                {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
+                              </span>
+                            </div>
                           </div>
+                        )}
+                      </div>
+
+                      {/* Segmento para FIIs */}
+                      {isFii && (ativo as any)?.segmento_fii && (
+                        <div className="pt-2 sm:pt-3 border-t border-border">
                           <div className="flex justify-between items-center">
-                            <span className="text-xs text-muted-foreground">P/L</span>
-                            <span className="text-xs sm:text-sm">{formatNumber(ativo?.pl)}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-muted-foreground">P/VP</span>
-                            <span className="text-xs sm:text-sm">{formatNumber(ativo?.pvp)}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-muted-foreground">ROE</span>
-                            <span className={`text-xs sm:text-sm font-medium ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
-                              {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
-                            </span>
+                            <span className="text-xs text-muted-foreground">Segmento</span>
+                            <span className="text-xs sm:text-sm font-medium">{(ativo as any)?.segmento_fii}</span>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Status de Vencimento para Renda Fixa */}
                       {tipo.toLowerCase().includes('renda fixa') && ativo?.status_vencimento && (
