@@ -105,7 +105,6 @@
   }
 }
 
-
 @layer base {
   * {
     @apply border-border;
@@ -147,4 +146,4 @@
     -ms-user-select: text;
     user-select: text;
   }
-} 
+}

@@ -459,47 +459,47 @@ export default function HomePage() {
       whileTap={{ scale: 0.98 }}
     >
       <Link to={to} className="block touch-manipulation">
-        <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 hover:shadow-lg sm:hover:shadow-2xl transition-all duration-300 cursor-pointer min-h-[120px] sm:min-h-[160px] touch-manipulation">
+        <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:shadow-lg sm:hover:shadow-2xl transition-all duration-300 cursor-pointer min-h-[100px] sm:min-h-[120px] touch-manipulation">
           {/* Background pattern */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         
           <div className="relative z-10 h-full flex flex-col">
-            <div className="flex items-start justify-between mb-2 sm:mb-4">
-              <div className="p-1.5 sm:p-3 rounded-md sm:rounded-xl bg-primary text-primary-foreground shadow-lg">
-                <Icon className="w-4 h-4 sm:w-6 sm:h-6" />
+            <div className="flex items-start justify-between mb-2 sm:mb-3">
+              <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+                <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
               </div>
               {trend && !loading && (
                 <motion.div 
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.5 }}
-                  className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${
+                  className={`flex items-center gap-1 px-2 sm:px-2 py-1 rounded-full text-xs font-semibold ${
                     trend.isPositive 
                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
                       : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                   }`}
                 >
-                  {trend.isPositive ? <ArrowUpRight size={12} className="sm:w-3.5 sm:h-3.5" /> : <ArrowDownRight size={12} className="sm:w-3.5 sm:h-3.5" />}
+                  {trend.isPositive ? <ArrowUpRight size={10} className="sm:w-3 sm:h-3" /> : <ArrowDownRight size={10} className="sm:w-3 sm:h-3" />}
                   <span className="hidden xs:inline">{trend.value}%</span>
                 </motion.div>
               )}
             </div>
             
             <div className="space-y-1 flex-1">
-              <h3 className="text-sm sm:text-lg font-semibold text-foreground leading-tight">{title}</h3>
+              <h3 className="text-sm sm:text-base font-semibold text-foreground leading-tight">{title}</h3>
               {loading ? (
                 <div className="animate-pulse">
-                  <div className="h-5 sm:h-8 bg-muted rounded w-20 sm:w-32"></div>
+                  <div className="h-4 sm:h-6 bg-muted rounded w-16 sm:w-24"></div>
                 </div>
               ) : (
-                <p className="text-xl sm:text-3xl font-bold text-foreground leading-tight">{value}</p>
+                <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">{value}</p>
               )}
               {subtitle && <p className="text-xs sm:text-sm text-muted-foreground leading-tight">{subtitle}</p>}
             </div>
             
-            <div className="mt-2 sm:mt-4 flex items-center text-xs sm:text-sm text-muted-foreground">
+            <div className="mt-2 sm:mt-3 flex items-center text-xs text-muted-foreground">
               <span>Ver detalhes</span>
-              <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              <ArrowUpRight className="w-3 h-3 sm:w-3 sm:h-3 ml-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </div>
           </div>
         </div>
@@ -561,7 +561,7 @@ export default function HomePage() {
       >
         <div className="flex items-start gap-2 sm:gap-3">
           <div className={`p-1.5 sm:p-2 rounded-md sm:rounded-lg ${color.iconBg} flex-shrink-0`}>
-            <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${color.iconColor}`} />
+            <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${color.iconColor}`} />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className={`font-semibold ${color.titleColor} mb-1 sm:mb-2 text-sm sm:text-base leading-tight`}>{title}</h3>
@@ -662,16 +662,16 @@ export default function HomePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
-        className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xl"
+        className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg sm:shadow-xl"
       >
-        <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
           <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 flex-shrink-0">
-            <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           </div>
-          <h2 className="text-sm sm:text-xl font-semibold text-foreground">Status do Sistema</h2>
+          <h2 className="text-sm sm:text-lg font-semibold text-foreground">Status do Sistema</h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           {sortedItems.map((item, index) => {
             const Icon = item.icon
             
@@ -781,9 +781,9 @@ export default function HomePage() {
       >
         <div className="flex items-center gap-2 mb-3 sm:mb-6">
           <div className="p-1.5 rounded-md bg-primary/10">
-            <Calendar className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+            <Calendar className="w-3 h-3 sm:w-5 sm:h-5 text-primary" />
           </div>
-          <h2 className="text-sm sm:text-xl font-semibold text-foreground">Próximos Eventos</h2>
+          <h2 className="text-sm sm:text-lg font-semibold text-foreground">Próximos Eventos</h2>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1105,13 +1105,13 @@ export default function HomePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
-        className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xl"
+        className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg sm:shadow-xl"
       >
-        <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
           <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 flex-shrink-0">
-            <PieChart className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           </div>
-          <h3 className="text-sm sm:text-xl font-semibold text-foreground">Rebalanceamento</h3>
+          <h3 className="text-sm sm:text-lg font-semibold text-foreground">Rebalanceamento</h3>
         </div>
 
         {/* Status do Rebalanceamento */}
@@ -1461,12 +1461,12 @@ export default function HomePage() {
       >
         <div className="flex items-center gap-2 mb-3 sm:mb-6">
           <div className="p-1.5 rounded-md bg-primary/10">
-            <Lightbulb className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+            <Lightbulb className="w-3 h-3 sm:w-5 sm:h-5 text-primary" />
           </div>
-          <h2 className="text-sm sm:text-xl font-semibold text-foreground">Ações Inteligentes</h2>
+          <h2 className="text-sm sm:text-lg font-semibold text-foreground">Ações Inteligentes</h2>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
           {contextualActions.map((action, index) => {
             const Icon = action.icon
             
@@ -1532,13 +1532,13 @@ export default function HomePage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center space-y-3 sm:space-y-6"
+          className="text-center space-y-2"
         >
-          <h1 className="text-lg sm:text-3xl lg:text-4xl font-bold text-foreground">
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
 
           </h1>
           
-          <p className="text-xs sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto px-2">
+          <p className="text-xs sm:text-sm lg:text-base text-muted-foreground max-w-2xl mx-auto px-2">
             Visão geral completa do seu sistema financeiro e patrimonial
           </p>
           
@@ -1550,7 +1550,7 @@ export default function HomePage() {
                 onClick={() => setAbrirMesPicker(v => !v)}
                 className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-card/60 backdrop-blur border border-border rounded-full text-xs sm:text-sm hover:bg-card/80 transition shadow-sm"
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline select-none">{getNomeMes(mesAtual)} {anoAtual}</span>
               </button>
               {abrirMesPicker && (
@@ -1592,9 +1592,9 @@ export default function HomePage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setOcultarValor(!ocultarValor)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-secondary text-secondary-foreground rounded-full hover:bg-secondary/80 transition shadow-sm"
+                className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-secondary text-secondary-foreground rounded-full text-xs sm:text-sm hover:bg-secondary/80 transition shadow-sm"
               >
-                {ocultarValor ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {ocultarValor ? <EyeOff className="w-3 h-3 sm:w-4 sm:h-4" /> : <Eye className="w-3 h-3 sm:w-4 sm:h-4" />}
                 <span className="hidden sm:inline select-none">{ocultarValor ? 'Mostrar' : 'Ocultar'}</span>
               </motion.button>
             </div>
@@ -1602,7 +1602,7 @@ export default function HomePage() {
         </motion.div>
 
         {/* Cards principais com animações - Mobile First */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
           <CardPrincipal
             title="Receitas"
             value={formatarValor(totalReceitas)}
@@ -1649,7 +1649,7 @@ export default function HomePage() {
         </div>
 
         {/* Seção de gráficos - Mobile First */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
           {/* Gráfico de evolução financeira */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
@@ -1657,12 +1657,12 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.5 }}
             className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl"
           >
-            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2 mb-2 sm:mb-6">
+            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2 mb-2 sm:mb-4">
               <div className="flex items-center gap-3">
                 <div className="p-1.5 rounded-md bg-primary/10">
-                  <LineChart className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+                  <LineChart className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
                 </div>
-                <h2 className="text-sm sm:text-xl font-semibold text-foreground">Evolução da Carteira</h2>
+                <h2 className="text-sm sm:text-lg font-semibold text-foreground">Evolução da Carteira</h2>
               </div>
               <div className="w-full xs:w-auto xs:ml-auto">
                 <select
@@ -1684,9 +1684,10 @@ export default function HomePage() {
             </div>
             
             {loadingResumo ? (
-              <div className="animate-pulse h-32 sm:h-64 bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
-              <ResponsiveContainer width="100%" height={150} className="sm:h-[250px]">
+              <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96">
+                <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={(historicoCarteira?.datas || []).map((d: string, i: number) => ({
                   data: d,
                   carteira: historicoCarteira?.carteira?.[i] ?? null,
@@ -1714,7 +1715,8 @@ export default function HomePage() {
                   <Area type="monotone" dataKey="ipca" stroke="#ef4444" fill="#ef4444" fillOpacity={0.05} strokeWidth={1.2} name="IPCA" />
                   <Area type="monotone" dataKey="cdi" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.06} strokeWidth={1.2} name="CDI" />
                 </AreaChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground">
                 Nenhum dado disponível para o período selecionado.
@@ -1729,25 +1731,25 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.6 }}
             className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl"
           >
-            <div className="flex items-center gap-2 mb-2 sm:mb-6">
+            <div className="flex items-center gap-2 mb-2 sm:mb-4">
               <div className="p-1.5 rounded-md bg-primary/10">
-                <PieChartIcon className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+                <PieChartIcon className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               </div>
-              <h2 className="text-sm sm:text-xl font-semibold text-foreground">Distribuição da Carteira</h2>
+              <h2 className="text-sm sm:text-lg font-semibold text-foreground">Distribuição da Carteira</h2>
             </div>
             
             {loadingCarteira ? (
-              <div className="animate-pulse h-32 sm:h-64 bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-64 sm:h-80 md:h-96 lg:h-[28rem] bg-muted rounded-lg"></div>
             ) : dadosPizza.length > 0 ? (
-              <div className="w-full h-32 sm:h-64">
+              <div className="w-full h-64 sm:h-80 md:h-96 lg:h-[28rem]">
                 <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
                   <Pie
                     data={dadosPizza}
                     cx="50%"
                     cy="50%"
-                    innerRadius={20}
-                    outerRadius={50}
+                    innerRadius="15%"
+                    outerRadius="70%"
                     paddingAngle={3}
                     dataKey="value"
                     onClick={(data) => {
@@ -1761,7 +1763,7 @@ export default function HomePage() {
                       <Cell key={`cell-${index}`} fill={entry.fill}>
                         <Label
                           content={({ viewBox, percent }: any) => {
-                            if (percent && percent > 0.05 && viewBox) { 
+                            if (percent && percent > 0.08 && viewBox) { 
                               const { cx, cy, midAngle, innerRadius, outerRadius } = viewBox;
                               const RADIAN = Math.PI / 180;
                               const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
@@ -1775,7 +1777,7 @@ export default function HomePage() {
                                   fill="white"
                                   textAnchor="middle"
                                   dominantBaseline="central"
-                                  fontSize="12"
+                                  fontSize="10"
                                   fontWeight="bold"
                                   filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))"
                                 >
@@ -1820,7 +1822,7 @@ export default function HomePage() {
         </div>
 
         {/* Novos Cards de Alto Impacto - Mobile First */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
           <PerformanceVsMetaCard delay={0.9} />
           <OportunidadesRebalanceamentoCard delay={1.0} />
           <AlertasMercadoCard delay={1.1} />
@@ -1837,9 +1839,9 @@ export default function HomePage() {
           >
             <div className="flex items-center gap-2 mb-3 sm:mb-6">
               <div className="p-1.5 rounded-md bg-primary/10">
-                <Award className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+                <Award className="w-3 h-3 sm:w-5 sm:h-5 text-primary" />
               </div>
-              <h2 className="text-sm sm:text-xl font-semibold text-foreground">Top 5 Ativos</h2>
+              <h2 className="text-sm sm:text-lg font-semibold text-foreground">Top 5 Ativos</h2>
             </div>
             
             {loadingCarteira ? (
@@ -1890,9 +1892,9 @@ export default function HomePage() {
           >
             <div className="flex items-center gap-2 mb-3 sm:mb-6">
               <div className="p-1.5 rounded-md bg-primary/10">
-                <BarChartIcon className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+                <BarChartIcon className="w-3 h-3 sm:w-5 sm:h-5 text-primary" />
               </div>
-              <h2 className="text-sm sm:text-xl font-semibold text-foreground">Gastos por Categoria</h2>
+              <h2 className="text-sm sm:text-lg font-semibold text-foreground">Gastos por Categoria</h2>
               <div className="ml-auto">
                 <select
                   value={gastosPeriodo}
@@ -1907,9 +1909,10 @@ export default function HomePage() {
               </div>
             </div>
             {loadingResumo ? (
-              <div className="animate-pulse h-64 bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : dadosGastos.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+              <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96">
+                <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosGastos}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
@@ -1929,7 +1932,8 @@ export default function HomePage() {
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground">
                 Nenhuma despesa registrada para o período selecionado.
@@ -1947,9 +1951,9 @@ export default function HomePage() {
         >
           <div className="flex items-center gap-2 mb-4 sm:mb-8">
             <div className="p-1.5 rounded-md bg-primary/10">
-              <Zap className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
+              <Zap className="w-3 h-3 sm:w-5 sm:h-5 text-primary" />
             </div>
-            <h2 className="text-sm sm:text-2xl font-semibold text-foreground">Insights e Recomendações</h2>
+            <h2 className="text-sm sm:text-lg font-semibold text-foreground">Insights e Recomendações</h2>
           </div>
           
           {/* Insights básicos - Mobile First */}
