@@ -88,8 +88,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       
       if (response.status === 201) {
-      
-        await login(username, password)
+
+        setUser(null)
+        navigate('/login', { replace: true })
       } else {
         throw new Error('Erro no registro')
       }

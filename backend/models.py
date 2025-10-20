@@ -1915,6 +1915,18 @@ def init_carteira_db(usuario=None):
                         roe NUMERIC
                     )
                 ''')
+                # Garantir colunas adicionais usadas pelos selects da carteira
+                try:
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS preco_compra NUMERIC')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS preco_medio NUMERIC')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS indexador TEXT')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS indexador_pct NUMERIC')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS data_aplicacao TEXT')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS vencimento TEXT')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS isento_ir BOOLEAN')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS liquidez_diaria BOOLEAN')
+                except Exception as _:
+                    pass
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS historico_carteira (
                         id SERIAL PRIMARY KEY,

@@ -36,11 +36,11 @@ def cache_query(ttl: int = 300):
 # ==================== OTIMIZAÇÕES DE QUERY ====================
 
 class DatabaseOptimizer:
-    """Otimizador de queries para PostgreSQL"""
+    
     
     @staticmethod
     def optimize_carteira_query(usuario: str) -> str:
-        """Query otimizada para carteira"""
+      
         return """
         SELECT 
             a.ticker,

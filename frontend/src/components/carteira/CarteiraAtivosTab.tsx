@@ -231,7 +231,7 @@ function TabelaAtivosPorTipo({
                           remaining -= consume
                           if (lot.qty <= 0) lots.shift()
                         }
-                        // Se vendeu mais do que possuía, ignorar excedente (sem posição short)
+                        
                       }
                     }
                     const totalQtd = lots.reduce((s, l) => s + l.qty, 0)

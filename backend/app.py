@@ -156,8 +156,11 @@ def api_registro():
         
         resultado = cadastrar_usuario(nome, username, senha, pergunta_seguranca, resposta_seguranca)
         if resultado:
-           
-            inicializar_bancos_usuario(username)
+
+            try:
+                inicializar_bancos_usuario(username)
+            except Exception as _:
+                pass
             return jsonify({"message": "Usuário cadastrado com sucesso"}), 201
         else:
             return jsonify({"error": "Erro ao cadastrar usuário"}), 500
