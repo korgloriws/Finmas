@@ -419,7 +419,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                   value={tipo}
                   onChange={(e)=>setTipo(e.target.value)}
                   placeholder="Ex.: Ação, FII, BDR, Renda Fixa Pública"
-                  className="w-full px-3 py-2 bg-background border border-border rounded"
+                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                 />
                 <datalist id="tipos-modal">
                   {tiposDisponiveis.map((t)=> (
@@ -439,7 +439,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                       placeholder="Ex.: Petrobras PN"
                       value={nome}
                       onChange={(e)=>setNome(e.target.value)}
-                      className="w-full px-3 py-2 bg-background border border-border rounded"
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                     />
                     <label className="block text-sm font-medium mt-3">Ticker (opcional)</label>
                     <input
@@ -447,7 +447,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                       placeholder="Ex.: PETR4, ITUB4, VISC11"
                       value={ticker}
                       onChange={(e)=>setTicker(e.target.value)}
-                      className="w-full px-3 py-2 bg-background border border-border rounded"
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                     />
 
                     {/* Filtro de lista */}
@@ -460,7 +460,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                           placeholder="Digite para filtrar..."
                           value={filtroLista}
                           onChange={(e)=>setFiltroLista(e.target.value)}
-                          className="w-full px-3 py-2 bg-background border border-border rounded"
+                          className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                         />
                       </div>
                     )}
@@ -498,7 +498,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                           const label = `${t?.nome || ''} ${(t?.indexador_normalizado||t?.indexador||'')}`.toLowerCase()
                           return label.includes(q)
                         }).map((t:any, i:number)=> (
-                          <button key={i} onClick={()=>pickTesouro(t)} className="w-full text-left px-3 py-2 hover:bg-accent border-b border-border last:border-b-0">
+                          <button key={i} onClick={()=>pickTesouro(t)} className="w-full text-left px-2.5 py-1.5 hover:bg-accent border-b border-border last:border-b-0 text-sm">
                             <div className="flex items-center justify-between">
                               <div className="text-sm">
                                 {(t.indexador_normalizado || t.indexador) || '—'} {t.vencimento ? `• ${String(t.vencimento).slice(0,10)}`:''}
@@ -519,7 +519,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                           // RF form agora não usa edição; apenas abrir
                           setRfFormOpen(true)
                         }}
-                        className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                         Cadastrar renda fixa e adicionar
@@ -531,7 +531,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     <div className="text-xs text-muted-foreground mb-1">Ações</div>
                     <div className="max-h-80 overflow-auto border border-border rounded">
                       {(acoesList as any).tickers.filter((t:string)=> t.toUpperCase().includes((filtroLista||'').toUpperCase())).map((t:string, i:number)=> (
-                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-3 py-2 hover:bg-accent border-b border-border last:border-b-0">
+                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-2.5 py-1.5 hover:bg-accent border-b border-border last:border-b-0 text-sm">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0">
                               <LogoBadge ticker={t} />
@@ -548,7 +548,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     <div className="text-xs text-muted-foreground mb-1">FIIs</div>
                     <div className="max-h-80 overflow-auto border border-border rounded">
                       {(fiisList as any).tickers.filter((t:string)=> t.toUpperCase().includes((filtroLista||'').toUpperCase())).map((t:string, i:number)=> (
-                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-3 py-2 hover:bg-accent border-b border-border last:border-b-0">
+                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-2.5 py-1.5 hover:bg-accent border-b border-border last:border-b-0 text-sm">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0">
                               <LogoBadge ticker={t} />
@@ -565,7 +565,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     <div className="text-xs text-muted-foreground mb-1">BDRs</div>
                     <div className="max-h-80 overflow-auto border border-border rounded">
                       {(bdrsList as any).tickers.filter((t:string)=> t.toUpperCase().includes((filtroLista||'').toUpperCase())).map((t:string, i:number)=> (
-                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-3 py-2 hover:bg-accent border-b border-border last:border-b-0">
+                        <button key={i} onClick={()=> pickTickerFromList(t)} className="w-full text-left px-2.5 py-1.5 hover:bg-accent border-b border-border last:border-b-0 text-sm">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0">
                               <LogoBadge ticker={t} />
@@ -582,7 +582,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     <div className="text-xs text-muted-foreground mb-1">Sugestões</div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {(sugestoes as any[]).slice(0,6).map((s:any, i:number)=> (
-                        <button key={i} onClick={()=>{ setTicker(s.value); setNome(s.label.split(' - ')[1] || s.value) }} className="text-left px-3 py-2 border border-border rounded hover:bg-accent">
+                        <button key={i} onClick={()=>{ setTicker(s.value); setNome(s.label.split(' - ')[1] || s.value) }} className="text-left px-2.5 py-1.5 border border-border rounded hover:bg-accent text-sm">
                           {s.label}
                         </button>
                       ))}
@@ -602,7 +602,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                   value={quantidade}
                   onChange={(e)=>setQuantidade(e.target.value)}
                   aria-label="Quantidade"
-                  className="w-full px-3 py-2 bg-background border border-border rounded"
+                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                 />
               </div>
             )}
@@ -674,7 +674,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                       onChange={(e) => setDataCompra(e.target.value)}
                       max={new Date().toISOString().split('T')[0]}
                       aria-label="Data da compra"
-                      className="w-full px-3 py-2 bg-background border border-border rounded"
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                     />
                     {precoHistorico && (
                       <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
@@ -707,7 +707,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                       value={preco}
                       onChange={(e) => setPreco(e.target.value)}
                       aria-label="Preço por ação"
-                      className="w-full px-3 py-2 bg-background border border-border rounded"
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                     />
                   </div>
                 )}
@@ -742,7 +742,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
               <div className="space-y-3">
                 <label className="block text-sm font-medium flex items-center gap-2"><Layers size={14}/> Indexador (opcional)</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select title="Selecionar indexador" value={indexador} onChange={(e)=>setIndexador(e.target.value as any)} className="px-3 py-2 bg-background border border-border rounded">
+                  <select title="Selecionar indexador" value={indexador} onChange={(e)=>setIndexador(e.target.value as any)} className="px-2.5 py-1.5 bg-background border border-border rounded text-sm">
                     <option value="">Sem indexador</option>
                     <option value="CDI">CDI</option>
                     <option value="CDI+">CDI+ (CDI + taxa fixa)</option>
@@ -762,7 +762,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                     }
                     value={indexadorPct}
                     onChange={(e)=>setIndexadorPct(e.target.value)}
-                    className="px-3 py-2 bg-background border border-border rounded"
+                    className="px-2.5 py-1.5 bg-background border border-border rounded text-sm"
                   />
                 </div>
               </div>
@@ -789,15 +789,15 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
           </div>
 
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
-            <button onClick={()=> setStep(Math.max(1, step-1))} disabled={step===1} className="px-3 py-2 rounded bg-muted text-foreground disabled:opacity-50 flex items-center gap-1">
+            <button onClick={()=> setStep(Math.max(1, step-1))} disabled={step===1} className="px-2.5 py-1.5 rounded bg-muted text-foreground disabled:opacity-50 flex items-center gap-1 text-sm">
               <ChevronLeft size={16}/> Voltar
             </button>
             {step < lastStep ? (
-              <button onClick={()=> canNext() && setStep(getNextStep())} disabled={!canNext()} className="px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1">
+              <button onClick={()=> canNext() && setStep(getNextStep())} disabled={!canNext()} className="px-2.5 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1 text-sm">
                 Avançar <ChevronRight size={16}/>
               </button>
             ) : (
-              <button onClick={()=> adicionarMutation.mutate()} disabled={adicionarMutation.isPending} className="px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50">
+              <button onClick={()=> adicionarMutation.mutate()} disabled={adicionarMutation.isPending} className="px-2.5 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50 text-sm">
                 {adicionarMutation.isPending ? 'Adicionando...' : 'Adicionar ativo'}
               </button>
             )}

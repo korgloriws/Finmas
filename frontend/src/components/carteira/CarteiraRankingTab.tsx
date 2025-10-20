@@ -16,7 +16,7 @@ export default function CarteiraRankingTab({
 }: CarteiraRankingTabProps) {
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold mb-4">🏆 Rankings da Carteira</h2>
+      <h2 className="text-xl font-semibold mb-4">Rankings da Carteira</h2>
       
       {carteira && carteira.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

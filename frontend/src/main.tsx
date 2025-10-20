@@ -9,11 +9,11 @@ import './index.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2, // 2 minutos (reduzido para melhor performance)
-      gcTime: 1000 * 60 * 10, // 10 minutos (dados ficam em cache)
+      staleTime: 1000 * 60 * 2, 
+      gcTime: 1000 * 60 * 10, 
       retry: 1,
-      refetchOnWindowFocus: false, // Evita refetch desnecessário
-      refetchOnMount: true, // Refetch quando montar componente
+      refetchOnWindowFocus: false, 
+      refetchOnMount: true, 
     },
   },
 })
@@ -38,8 +38,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 
-// Adicionar classe 'loaded' ao body quando a aplicação carregar
-// Isso remove o fundo branco da splash screen do PWA
+
 document.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('loaded')
 }) 

@@ -24,16 +24,16 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, PieCha
 
 // Categorias de despesas com ícones (copiado da ControleDespesaTab)
 const CATEGORIAS_DESPESAS = [
-  { value: 'farmacia', label: 'Farmácia', icon: '💊', color: '#ef4444' },
-  { value: 'supermercado', label: 'Supermercado', icon: '🛒', color: '#10b981' },
-  { value: 'contas_casa', label: 'Contas da Casa', icon: '🏠', color: '#3b82f6' },
-  { value: 'contas_filhos', label: 'Contas dos Filhos', icon: '👶', color: '#f59e0b' },
-  { value: 'despesas_fixas', label: 'Despesas Fixas', icon: '⚡', color: '#8b5cf6' },
-  { value: 'saude', label: 'Saúde', icon: '❤️', color: '#ec4899' },
-  { value: 'alimentacao', label: 'Alimentação', icon: '🍽️', color: '#06b6d4' },
-  { value: 'transporte', label: 'Transporte', icon: '🚗', color: '#84cc16' },
-  { value: 'lazer', label: 'Lazer', icon: '🎬', color: '#f97316' },
-  { value: 'outros', label: 'Outros', icon: '📋', color: '#6b7280' }
+  { value: 'farmacia', label: 'Farmácia', icon: '', color: '#ef4444' },
+  { value: 'supermercado', label: 'Supermercado', icon: '', color: '#10b981' },
+  { value: 'contas_casa', label: 'Contas da Casa', icon: '', color: '#3b82f6' },
+  { value: 'contas_filhos', label: 'Contas dos Filhos', icon: '', color: '#f59e0b' },
+  { value: 'despesas_fixas', label: 'Despesas Fixas', icon: '', color: '#8b5cf6' },
+  { value: 'saude', label: 'Saúde', icon: '', color: '#ec4899' },
+  { value: 'alimentacao', label: 'Alimentação', icon: '', color: '#06b6d4' },
+  { value: 'transporte', label: 'Transporte', icon: '', color: '#84cc16' },
+  { value: 'lazer', label: 'Lazer', icon: '', color: '#f97316' },
+  { value: 'outros', label: 'Outros', icon: '', color: '#6b7280' }
 ]
 
 export default function ControlePage() {
@@ -257,7 +257,7 @@ export default function ControlePage() {
           <p className="text-muted-foreground mb-4">Ocorreu um erro inesperado. Tente recarregar a página.</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm"
           >
             Recarregar Página
           </button>
@@ -337,7 +337,7 @@ export default function ControlePage() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setOcultarValores(!ocultarValores)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm ${
                 ocultarValores 
                   ? 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200' 
                   : 'bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200'
@@ -359,7 +359,7 @@ export default function ControlePage() {
         <div className="flex flex-wrap gap-2 mb-8">
         <button
           onClick={() => setAbaAtiva('financeiro')}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
             abaAtiva === 'financeiro'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -370,7 +370,7 @@ export default function ControlePage() {
         </button>
           <button
             onClick={() => setAbaAtiva('receitas')}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'receitas'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -381,7 +381,7 @@ export default function ControlePage() {
           </button>
           <button
             onClick={() => setAbaAtiva('despesas')}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'despesas'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -392,7 +392,7 @@ export default function ControlePage() {
           </button>
           <button
             onClick={() => setAbaAtiva('cartoes')}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'cartoes'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -403,7 +403,7 @@ export default function ControlePage() {
         </button>
         <button
           onClick={() => setAbaAtiva('alimentacao')}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
             abaAtiva === 'alimentacao'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -521,7 +521,7 @@ export default function ControlePage() {
             </div>
                 <div className="text-right">
                   <div className={`text-2xl ${(saldo?.saldo || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
-                    {(saldo?.saldo || 0) >= 0 ? '✓ Positivo' : '⚠ Negativo'}
+                    {(saldo?.saldo || 0) >= 0 ? 'Positivo' : 'Negativo'}
             </div>
                   <p className="text-sm text-muted-foreground">
                     {receitasDespesas?.receitas ? 

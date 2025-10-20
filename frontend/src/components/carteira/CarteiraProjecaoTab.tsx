@@ -304,7 +304,7 @@ export default function CarteiraProjecaoTab({
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
             <div className="text-sm text-amber-800">
-              <p className="font-medium mb-1">⚠️ Aviso Importante</p>
+              <p className="font-medium mb-1">Aviso Importante</p>
               <p>
                 Esta projeção é baseada em dados históricos e médias calculadas. 
                 <strong> O passado não é garantia de resultados futuros.</strong> 
@@ -343,7 +343,7 @@ export default function CarteiraProjecaoTab({
              <div className="flex items-start gap-3">
                <DollarSign className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                <div className="text-sm text-blue-800">
-                 <p className="font-medium mb-1">💡 Sobre os Dividendos</p>
+                 <p className="font-medium mb-1">Sobre os Dividendos</p>
                  <p>
                    Como não há histórico de proventos recebidos, a projeção será baseada apenas no 
                    <strong> crescimento de capital</strong> (sem dividendos). 

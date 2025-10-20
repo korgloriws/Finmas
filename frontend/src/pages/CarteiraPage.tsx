@@ -20,6 +20,8 @@ import {
   Calculator,
   PlusCircle,
   Zap,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { carteiraService } from '../services/api'
@@ -510,13 +512,13 @@ export default function CarteiraPage() {
   const TabButton = ({ id, label, icon: Icon, isActive }: { id: string; label: string; icon: any; isActive: boolean }) => (
     <button
       onClick={() => setActiveTab(id)}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all duration-200 text-sm ${
         isActive 
           ? 'bg-primary text-primary-foreground shadow-md' 
           : 'bg-muted text-muted-foreground hover:bg-muted/80'
       }`}
     >
-      <Icon size={18} />
+      <Icon size={14} />
       {label}
     </button>
   )
@@ -544,10 +546,11 @@ export default function CarteiraPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setOcultarValor(!ocultarValor)}
-            className="flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors text-sm"
             title={ocultarValor ? 'Mostrar valor' : 'Ocultar valor'}
           >
-            {ocultarValor ? '👁 Mostrar Valor' : '🔒 Ocultar Valor'}
+            {ocultarValor ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            <span>{ocultarValor ? 'Mostrar Valor' : 'Ocultar Valor'}</span>
           </button>
         </div>
       </div>
@@ -607,7 +610,7 @@ export default function CarteiraPage() {
             </div>
             <button
               onClick={()=>setAddModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow text-sm"
             >
               <PlusCircle size={18} /> Adicionar Ativo
             </button>
@@ -626,7 +629,7 @@ export default function CarteiraPage() {
                     type="text"
                     value={renameTipoValue}
                     onChange={(e)=>setRenameTipoValue(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded bg-background text-foreground"
+                    className="w-full px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-sm"
                     placeholder="Novo nome do tipo"
                     aria-label="Novo nome do tipo"
                   />
@@ -634,7 +637,7 @@ export default function CarteiraPage() {
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
                     onClick={()=>setManageTipoOpen({open:false})}
-                    className="px-3 py-2 rounded bg-muted text-foreground hover:bg-muted/80"
+                    className="px-2.5 py-1.5 rounded bg-muted text-foreground hover:bg-muted/80 text-sm"
                   >
                     Cancelar
                   </button>
@@ -648,7 +651,7 @@ export default function CarteiraPage() {
                         setManageTipoOpen({open:false})
                       } catch {}
                     }}
-                    className="px-3 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                    className="px-2.5 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 text-sm"
                   >
                     Salvar
                   </button>

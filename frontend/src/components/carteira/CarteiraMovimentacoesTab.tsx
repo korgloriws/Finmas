@@ -22,7 +22,7 @@ export default function CarteiraMovimentacoesTab({
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <h2 className="text-xl font-semibold">🔄 Movimentações</h2>
+        <h2 className="text-xl font-semibold">Movimentações</h2>
         <div className="flex flex-col xs:flex-row items-stretch xs:items-end gap-2 sm:gap-4 w-full sm:w-auto">
           <div className="w-full xs:w-auto">
             <label className="block text-sm font-medium mb-1">Mês</label>

@@ -772,7 +772,7 @@ export default function CarteiraAtivosTab({
             </h3>
             <button
               onClick={() => setShowB3Import(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-xs"
             >
               <FileSpreadsheet className="w-4 h-4" />
               Importar B3 .xlsx
@@ -866,15 +866,15 @@ export default function CarteiraAtivosTab({
                 
                 alert('Funcionalidade de adicionar ativo será implementada')
               }}
-              className="flex items-center gap-2 px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors text-sm"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
               Adicionar Ativo
             </button>
           </div>
 
           <div className="mt-8 text-sm text-muted-foreground">
-            <p>💡 <strong>Dica:</strong> Use a importação da B3 para adicionar todos os seus ativos de uma vez!</p>
+            <p><strong>Dica:</strong> Use a importação da B3 para adicionar todos os seus ativos de uma vez!</p>
           </div>
         </div>
       )}

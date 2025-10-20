@@ -1,10 +1,11 @@
-import  { useState, useMemo } from 'react'
+import  { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 // import { useLazyData } from '../hooks/useLazyData' // Para uso futuro
 import { Link } from 'react-router-dom'
 // @ts-ignore
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
+import { toast } from 'react-hot-toast'
 import { 
   BarChart3, 
   Wallet, 
@@ -28,6 +29,7 @@ import {
   Target,
   Shield,
   Globe,
+  RefreshCw,
   Star,
   Activity,
   PieChart,
@@ -107,13 +109,15 @@ export default function HomePage() {
   }
 
   // Carregamento prioritário - dados essenciais primeiro
-  const { data: carteira, isLoading: loadingCarteira } = useQuery({
+  const { data: carteira, isLoading: loadingCarteira, isFetching: isFetchingCarteira } = useQuery({
     queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
     retry: 3,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true, 
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 2 * 60 * 1000, 
+    refetchInterval: 3 * 60 * 1000, 
+    refetchIntervalInBackground: true, 
   })
 
   // Resumo home - carregamento sob demanda (só quando necessário)
@@ -129,6 +133,30 @@ export default function HomePage() {
 
   const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')
   const [gastosPeriodo, setGastosPeriodo] = useState<'1m' | '3m' | '6m'>('1m')
+  
+  // Estados para monitorar atualizações automáticas
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
+  const isFirstLoad = useRef(true)
+
+  // Monitorar atualizações automáticas da carteira
+  useEffect(() => {
+    if (carteira && !isFirstLoad.current) {
+      setUltimaAtualizacao(new Date())
+      // Notificação sutil apenas para atualizações automáticas (não no primeiro carregamento)
+      toast.success('Carteira atualizada automaticamente', {
+        duration: 2000,
+        position: 'top-right',
+        style: {
+          background: '#10b981',
+          color: '#fff',
+          fontSize: '12px',
+        },
+      })
+    }
+    if (carteira && isFirstLoad.current) {
+      isFirstLoad.current = false
+    }
+  }, [carteira])
 
 
 
@@ -155,9 +183,11 @@ export default function HomePage() {
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true, // Atualiza quando volta o foco
     enabled: !!user && !!carteira, // Só carrega depois da carteira
-    staleTime: 10 * 60 * 1000, // 10 minutos
+    staleTime: 3 * 60 * 1000, // 3 minutos (reduzido)
+    refetchInterval: 5 * 60 * 1000, // Atualiza automaticamente a cada 5 minutos
+    refetchIntervalInBackground: true, // Continua atualizando mesmo com a aba em background
   })
 
 
@@ -1538,9 +1568,23 @@ export default function HomePage() {
 
           </h1>
           
-          <p className="text-xs sm:text-sm lg:text-base text-muted-foreground max-w-2xl mx-auto px-2">
-            Visão geral completa do seu sistema financeiro e patrimonial
-          </p>
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-xs sm:text-sm lg:text-base text-muted-foreground max-w-2xl mx-auto px-2">
+              Visão geral completa do seu sistema financeiro e patrimonial
+            </p>
+            {/* Indicador de atualização automática */}
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <RefreshCw className={`w-3 h-3 ${isFetchingCarteira ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {isFetchingCarteira ? 'Atualizando...' : 'Auto'}
+              </span>
+              {ultimaAtualizacao && !isFetchingCarteira && (
+                <span className="hidden md:inline text-xs opacity-70">
+                  • {ultimaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          </div>
           
           {/* Controles: calendário discreto à esquerda, mostrar/ocultar à direita - Mobile optimized */}
           <div className="flex flex-row items-center justify-between gap-3 sm:gap-4">
@@ -1739,9 +1783,9 @@ export default function HomePage() {
             </div>
             
             {loadingCarteira ? (
-              <div className="animate-pulse h-64 sm:h-80 md:h-96 lg:h-[28rem] bg-muted rounded-lg"></div>
+              <div className="animate-pulse h-56 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : dadosPizza.length > 0 ? (
-              <div className="w-full h-64 sm:h-80 md:h-96 lg:h-[28rem]">
+              <div className="w-full h-56 sm:h-64 md:h-80 lg:h-96">
                 <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
                   <Pie
@@ -1792,23 +1836,31 @@ export default function HomePage() {
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))', 
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-card p-2 rounded-md shadow-lg border border-border text-sm">
+                            <p className="font-semibold text-foreground">{data.name}</p>
+                            <p className="text-foreground">{formatCurrency(data.value)} ({`${(data.percent * 100).toFixed(1)}%`})</p>
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
-                    formatter={(value: any, _name: any, props: any) => [
-                      `${formatCurrency(value)} (${props.payload.percentage}%)`, 
-                      'Valor'
-                    ]}
                   />
-                  <Legend />
+                  <Legend 
+                    wrapperStyle={{ 
+                      color: 'hsl(var(--foreground))',
+                      fontSize: '12px',
+                      paddingLeft: '10px'
+                    }}
+                  />
                 </RechartsPieChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <div className="h-56 flex items-center justify-center text-muted-foreground">
                   Nenhum ativo na carteira
                 </div>
               )}

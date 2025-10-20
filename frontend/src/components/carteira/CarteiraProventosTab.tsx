@@ -28,7 +28,7 @@ export default function CarteiraProventosTab({
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h2 className="text-lg md:text-xl font-semibold">💰 Proventos</h2>
+        <h2 className="text-lg md:text-xl font-semibold">Proventos</h2>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <label className="text-sm font-medium">Filtro por período:</label>
           <select
@@ -62,7 +62,7 @@ export default function CarteiraProventosTab({
         <div className="space-y-6">
           {/* Seção 1: Proventos Pagos (Histórico) */}
           <div className="bg-muted/30 rounded-lg p-4 md:p-6">
-            <h3 className="text-lg font-semibold mb-4">📊 Proventos Pagos (Histórico)</h3>
+            <h3 className="text-lg font-semibold mb-4">Proventos Pagos (Histórico)</h3>
             
             {loadingProventos ? (
               <div className="text-center text-muted-foreground py-8">
@@ -192,7 +192,7 @@ export default function CarteiraProventosTab({
 
           {/* Seção 2: Proventos Recebidos */}
           <div className="bg-muted/30 rounded-lg p-4 md:p-6">
-            <h3 className="text-lg font-semibold mb-4">💰 Proventos Recebidos (Baseado na Carteira)</h3>
+            <h3 className="text-lg font-semibold mb-4">Proventos Recebidos (Baseado na Carteira)</h3>
             
             {loadingProventosRecebidos ? (
               <div className="text-center text-muted-foreground py-8">

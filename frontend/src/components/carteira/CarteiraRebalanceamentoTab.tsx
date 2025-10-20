@@ -667,11 +667,11 @@ export default function CarteiraRebalanceamentoTab({
 }: CarteiraRebalanceamentoTabProps) {
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">⚖️ Rebalanceamento da Carteira</h2>
+      <h2 className="text-xl font-semibold">Rebalanceamento da Carteira</h2>
       
       {/* Configuração de Período e Último Rebalanceamento */}
       <div className="bg-muted/30 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">📅 Configuração de Período</h3>
+        <h3 className="text-lg font-semibold mb-4"> Configuração de Período</h3>
         <RebalanceConfigForm
           defaultPeriodo={(rbConfig as any)?.periodo || 'mensal'}
           defaultLastRebalanceDate={(rbConfig as any)?.last_rebalance_date}
@@ -684,7 +684,7 @@ export default function CarteiraRebalanceamentoTab({
 
       {/* Configuração de Tipos e Porcentagens */}
       <div className="bg-muted/30 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">🎯 Configuração de Tipos e Porcentagens</h3>
+        <h3 className="text-lg font-semibold mb-4">Configuração de Tipos e Porcentagens</h3>
         <TargetsForm
           defaultTargets={(rbConfig as any)?.targets || {}}
           onSave={(targets: any) => {
@@ -736,7 +736,7 @@ export default function CarteiraRebalanceamentoTab({
       {/* Status e Histórico */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-muted/30 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">📊 Status do Rebalanceamento</h3>
+          <h3 className="text-lg font-semibold mb-4">Status do Rebalanceamento</h3>
           {rbStatus ? (
             <RebalanceStatus status={rbStatus} />
           ) : (
@@ -745,7 +745,7 @@ export default function CarteiraRebalanceamentoTab({
         </div>
         
         <div className="bg-muted/30 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">📝 Histórico de Rebalanceamentos</h3>
+          <h3 className="text-lg font-semibold mb-4">Histórico de Rebalanceamentos</h3>
           <RebalanceHistory 
             history={rbHistory?.history || []}
             onRegisterHistory={(date: string) => {
