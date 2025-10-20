@@ -16,21 +16,6 @@
     border: none !important;
     outline: none !important;
   }
-
-  /* PWA - Logo com fundo branco */
-  @media (display-mode: standalone) {
-    .finmas-logo {
-      background: white !important;
-      background-color: white !important;
-      border-radius: 8px;
-      padding: 8px;
-    }
-    
-    .finmas-logo img {
-      background: white !important;
-      background-color: white !important;
-    }
-  }
   
   .progress-bar {
     width: var(--progress-width, 0%);
@@ -126,6 +111,13 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* PWA Splash Screen - fundo branco apenas durante carregamento inicial */
+  @media (display-mode: standalone) {
+    body:not(.loaded) {
+      background-color: #ffffff !important;
+    }
   }
 }
 

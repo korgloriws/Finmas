@@ -36,7 +36,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,
-) 
+)
+
+// Adicionar classe 'loaded' ao body quando a aplicação carregar
+// Isso remove o fundo branco da splash screen do PWA
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.classList.add('loaded')
+}) 
 
 
 if ('serviceWorker' in navigator) {
