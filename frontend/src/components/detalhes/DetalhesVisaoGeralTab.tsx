@@ -18,8 +18,9 @@ import {
   Award
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatNumber, formatDividendYield } from '../../utils/formatters'
+import PortfolioFIIComponent from './PortfolioFII'
 
-// Componente para card de métrica
+
 function MetricCard({ 
   title, 
   value, 
@@ -79,7 +80,7 @@ function MetricCard({
   )
 }
 
-// Componente para seção de informações
+
 function InfoSection({ 
   title, 
   icon: Icon, 
@@ -110,7 +111,7 @@ function InfoSection({
   )
 }
 
-// Componente para linha de informação
+
 function InfoRow({ 
   label, 
   value, 
@@ -147,7 +148,7 @@ function InfoRow({
   )
 }
 
-// Função para calcular variação
+
 function calcularVariacao(valorAtual: number, valorAnterior: number): number {
   if (!valorAnterior || valorAnterior === 0) return 0
   return ((valorAtual - valorAnterior) / valorAnterior) * 100
@@ -165,6 +166,7 @@ interface DetalhesVisaoGeralTabProps {
   }
   tipoAtivo: string
   fiiInfo: any
+  fiiMetadata?: any
   grahamBadge: { label: string; color: string } | null
   bazinBadge: { label: string; color: string } | null
   enterpriseValue: number | null
@@ -181,6 +183,7 @@ export default function DetalhesVisaoGeralTab({
   strategyDetails,
   tipoAtivo,
   fiiInfo,
+  fiiMetadata,
   grahamBadge,
   bazinBadge,
   enterpriseValue,
@@ -409,6 +412,15 @@ export default function DetalhesVisaoGeralTab({
           </div>
         </InfoSection>
       </div>
+
+      {/* Seção de Portfólio para FIIs */}
+      {tipoAtivo === 'FII' && fiiMetadata?.portfolio && (
+        <div className="mt-8">
+          <InfoSection title="Portfólio do FII" icon={Building2} color="blue">
+            <PortfolioFIIComponent portfolio={fiiMetadata.portfolio} />
+          </InfoSection>
+        </div>
+      )}
     </motion.div>
   )
 }

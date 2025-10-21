@@ -63,7 +63,7 @@ from fii_scraper import obter_metadata_fii
 from models import cache
 import requests
 try:
-    import cloudscraper # type: ignore
+    import cloudscraper 
 except Exception:
     cloudscraper = None
 

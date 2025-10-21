@@ -6,6 +6,108 @@ import requests
 import re
 import time
 from typing import Optional, Dict
+# Função de extração de portfólio integrada
+def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
+    """
+    Extrai portfólio usando os padrões corretos encontrados no HTML
+    """
+    try:
+        portfolio = {
+            'imoveis': [],
+            'titulos': [],
+            'estados_distribuicao': {},
+            'tipos_imoveis': [],
+            'total_area': 0
+        }
+        
+        # Extrair nomes reais dos imóveis (padrão: "Shopping Plaza Sul", "Caxias Shopping", etc.)
+        # Padrão encontrado: <div class="locationGrid__title">Nome do Imóvel</div>
+        nome_imovel_pattern = r'<div class="locationGrid__title">([^<]+)</div>'
+        nomes_imoveis = re.findall(nome_imovel_pattern, html)
+        
+        # Limpar e filtrar nomes
+        nomes_imoveis = [nome.strip() for nome in nomes_imoveis if nome.strip()]
+        
+        
+        # Extrair endereços reais (padrão encontrado: </b>Endereço</li>)
+        endereco_pattern = r'</b>([^<]+)</li>'
+        enderecos = re.findall(endereco_pattern, html)
+        
+        # Extrair cidades e estados (padrão encontrado: </b>Cidade - Estado</li>)
+        cidade_estado_pattern = r'</b>([^<]+)\s*-\s*([A-Z]{2})</li>'
+        cidades_estados = re.findall(cidade_estado_pattern, html)
+        
+        # Combinar endereços com cidades/estados
+        if enderecos and cidades_estados:
+            for i, endereco in enumerate(enderecos):
+                if i < len(cidades_estados):
+                    cidade, estado = cidades_estados[i]
+                    
+                    # Usar nome real se disponível, senão usar "Imóvel X"
+                    nome_imovel = f'Imóvel {i+1}'
+                    if i < len(nomes_imoveis):
+                        nome_imovel = nomes_imoveis[i]
+                    
+                    imovel = {
+                        'nome': nome_imovel,
+                        'endereco': endereco.strip(),
+                        'cidade': cidade.strip(),
+                        'estado': estado.strip(),
+                        'area': 0,  # Não encontramos área nos padrões atuais
+                        'tipo': determinar_tipo_imovel_scraping(endereco, cidade)
+                    }
+                    portfolio['imoveis'].append(imovel)
+        
+        # Extrair distribuição por estados
+        if portfolio['imoveis']:
+            estados = {}
+            for imovel in portfolio['imoveis']:
+                estado = imovel['estado']
+                if estado:
+                    if estado not in estados:
+                        estados[estado] = 0
+                    estados[estado] += 1
+            
+            # Converter para percentuais
+            total = len(portfolio['imoveis'])
+            for estado in estados:
+                portfolio['estados_distribuicao'][estado] = (estados[estado] / total) * 100
+        
+        # Extrair tipos de imóveis
+        if portfolio['imoveis']:
+            tipos = list(set([imovel['tipo'] for imovel in portfolio['imoveis'] if imovel['tipo']]))
+            portfolio['tipos_imoveis'] = tipos
+        
+        # Verificar se encontrou informações relevantes
+        if portfolio['imoveis'] or portfolio['estados_distribuicao']:
+            return portfolio
+        
+        return None
+        
+    except Exception as e:
+        print(f"[ERRO] Extração de portfólio: {e}")
+        return None
+
+
+def determinar_tipo_imovel_scraping(endereco: str, cidade: str) -> str:
+    """
+    Determina o tipo de imóvel baseado no endereço e cidade
+    """
+    endereco_lower = endereco.lower()
+    cidade_lower = cidade.lower()
+    
+    # Padrões específicos encontrados
+    if 'estrada' in endereco_lower or 'rodovia' in endereco_lower:
+        return 'Logística'
+    elif 'avenida' in endereco_lower:
+        if 'shopping' in cidade_lower or 'center' in cidade_lower:
+            return 'Shopping'
+        else:
+            return 'Comercial'
+    elif 'rua' in endereco_lower:
+        return 'Comercial'
+    else:
+        return 'Comercial'
 
 
 def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
@@ -109,7 +211,13 @@ def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
                     resultado['gestora'] = gestora
                     break
         
-        # Sucesso se temos pelo menos o tipo ou segmento
+        # Extrair PORTFÓLIO
+        portfolio = extrair_portfolio_fundsexplorer(html, ticker_limpo)
+        if portfolio:
+            resultado['portfolio'] = portfolio
+            print(f"[PORTFÓLIO] Encontrado: {len(portfolio.get('imoveis', []))} imóveis, {len(portfolio.get('titulos', []))} títulos")
+        
+
         if 'tipo' in resultado or 'segmento' in resultado:
             print(f"[SUCESSO] {resultado}")
             return resultado
@@ -123,9 +231,7 @@ def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
 
 
 def obter_metadata_fii(ticker: str) -> Optional[Dict]:
-    """
-    Função principal para obter metadados de FII
-    """
+
     return obter_dados_fii_fundsexplorer(ticker)
 
 
@@ -133,7 +239,7 @@ def obter_metadata_fii(ticker: str) -> Optional[Dict]:
 if __name__ == '__main__':
     print("\n=== TESTE DE SCRAPING DE FIIs (V2) ===\n")
     
-    tickers = ['HGLG11', 'MXRF11', 'VISC11', 'KNRI11', 'XPML11']
+    tickers = ['HGLG11', 'MXRF11', 'VISC11', 'KNRI11', 'XPML11',"XPCI11"]
     
     for ticker in tickers:
         print(f"\n--- {ticker} ---")

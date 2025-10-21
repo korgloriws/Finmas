@@ -18,6 +18,29 @@ export interface AtivoDetalhes {
   dividends: Record<string, any>
 }
 
+export interface ImovelPortfolio {
+  nome: string
+  endereco: string
+  cidade: string
+  estado: string
+  area: number
+  tipo: string
+}
+
+export interface TituloPortfolio {
+  codigo: string
+  descricao: string
+  percentual: number
+}
+
+export interface PortfolioFII {
+  imoveis: ImovelPortfolio[]
+  titulos: TituloPortfolio[]
+  estados_distribuicao: Record<string, number>
+  tipos_imoveis: string[]
+  total_area: number
+}
+
 export interface TickerSugestao {
   label: string
   value: string

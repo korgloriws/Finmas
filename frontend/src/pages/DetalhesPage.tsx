@@ -42,14 +42,14 @@ export default function DetalhesPage() {
     enabled: !!ticker,
   })
 
-  // Buscar metadados de FII em tempo real (apenas para FIIs brasileiros)
+  
   const isFiiBrasileiro = ticker && (ticker.toUpperCase().endsWith('11.SA') || ticker.toUpperCase().endsWith('11'))
   const { data: fiiMetadata } = useQuery({
     queryKey: ['fii-metadata', ticker],
     queryFn: () => ativoService.getFiiMetadata(ticker),
     enabled: Boolean(ticker) && Boolean(isFiiBrasileiro),
-    staleTime: 60 * 60 * 1000, // 1 hora de cache
-    retry: 1, // Tentar apenas 1 vez se falhar
+    staleTime: 60 * 60 * 1000, 
+    retry: 1, 
   })
 
   const { data: historico, isLoading: loadingHistorico } = useQuery<Array<Record<string, any>>>({
@@ -152,21 +152,21 @@ export default function DetalhesPage() {
 
   const info: any = detalhes?.info || {}
   
-  // Mesclar dados de FII: yfinance (básico) + scraping (completo)
+ 
   const fiiInfo: any = useMemo(() => {
     const baseFiiInfo = detalhes?.fii || {}
     
-    // Se temos metadados do scraping, mesclar dando prioridade aos dados do scraping
+
     if (fiiMetadata && Object.keys(fiiMetadata).length > 0) {
       return {
         ...baseFiiInfo,
-        // Dados do scraping têm prioridade
+       
         tipo: fiiMetadata.tipo || baseFiiInfo.tipo,
         segmento: fiiMetadata.segmento || baseFiiInfo.segmento,
         vacancia: fiiMetadata.vacancia ?? baseFiiInfo.vacancia,
         num_cotistas: fiiMetadata.num_cotistas ?? baseFiiInfo.num_cotistas,
         gestora: fiiMetadata.gestora || baseFiiInfo.gestora,
-        fonte_metadata: fiiMetadata.fonte, // Para debug
+        fonte_metadata: fiiMetadata.fonte, 
       }
     }
     
@@ -184,11 +184,11 @@ export default function DetalhesPage() {
     return 'Ação'
   }, [info, ticker])
 
-  // Métricas normalizadas
+
   const roePct = useMemo(() => {
     const v = info?.returnOnEquity as number | undefined
     if (v == null) return null
-    return v * 100 // yfinance retorna fração
+    return v * 100 
   }, [info])
 
   const dyPct = useMemo(() => {
@@ -882,6 +882,7 @@ export default function DetalhesPage() {
                 strategyDetails={strategyDetails}
                 tipoAtivo={tipoAtivo}
                 fiiInfo={fiiInfo}
+                fiiMetadata={fiiMetadata}
                 grahamBadge={grahamBadge}
                 bazinBadge={bazinBadge}
                 enterpriseValue={enterpriseValue}

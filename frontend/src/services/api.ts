@@ -115,6 +115,7 @@ export const ativoService = {
     num_cotistas?: number
     gestora?: string
     fonte?: string
+    portfolio?: import('../types').PortfolioFII
   } | null> => {
     try {
       const normalizedTicker = normalizeTicker(ticker)
