@@ -1,16 +1,11 @@
-"""
-Módulo otimizado para scraping de dados de FIIs brasileiros
-Fontes: FundsExplorer (usando regex no HTML bruto)
-"""
+
 import requests
 import re
 import time
 from typing import Optional, Dict
-# Função de extração de portfólio integrada
+
 def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
-    """
-    Extrai portfólio usando os padrões corretos encontrados no HTML
-    """
+
     try:
         portfolio = {
             'imoveis': [],
@@ -20,30 +15,29 @@ def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
             'total_area': 0
         }
         
-        # Extrair nomes reais dos imóveis (padrão: "Shopping Plaza Sul", "Caxias Shopping", etc.)
-        # Padrão encontrado: <div class="locationGrid__title">Nome do Imóvel</div>
+
         nome_imovel_pattern = r'<div class="locationGrid__title">([^<]+)</div>'
         nomes_imoveis = re.findall(nome_imovel_pattern, html)
         
-        # Limpar e filtrar nomes
+
         nomes_imoveis = [nome.strip() for nome in nomes_imoveis if nome.strip()]
         
         
-        # Extrair endereços reais (padrão encontrado: </b>Endereço</li>)
+
         endereco_pattern = r'</b>([^<]+)</li>'
         enderecos = re.findall(endereco_pattern, html)
         
-        # Extrair cidades e estados (padrão encontrado: </b>Cidade - Estado</li>)
+
         cidade_estado_pattern = r'</b>([^<]+)\s*-\s*([A-Z]{2})</li>'
         cidades_estados = re.findall(cidade_estado_pattern, html)
         
-        # Combinar endereços com cidades/estados
+
         if enderecos and cidades_estados:
             for i, endereco in enumerate(enderecos):
                 if i < len(cidades_estados):
                     cidade, estado = cidades_estados[i]
                     
-                    # Usar nome real se disponível, senão usar "Imóvel X"
+
                     nome_imovel = f'Imóvel {i+1}'
                     if i < len(nomes_imoveis):
                         nome_imovel = nomes_imoveis[i]
@@ -111,9 +105,7 @@ def determinar_tipo_imovel_scraping(endereco: str, cidade: str) -> str:
 
 
 def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
-    """
-    Obtém dados de FII do FundsExplorer usando regex no HTML bruto
-    """
+
     ticker_limpo = ticker.replace('.SA', '').replace('.sa', '').upper()
     
     url = f'https://www.fundsexplorer.com.br/funds/{ticker_limpo}'
@@ -143,18 +135,18 @@ def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
             'fonte': 'FundsExplorer'
         }
         
-        # Extrair TIPO - Padrão universal: "do tipo X"
+     
         tipo_match = re.search(r'do\s+tipo\s+([a-záàâãéèêíïóôõöúçñ\s]+)', html, re.I)
         tipo_text = None
         if tipo_match:
             tipo_text = tipo_match.group(1).strip()
-            # Limitar ao primeiro ponto, vírgula ou nova linha
+          
             tipo_text = tipo_text.split('.')[0].split(',')[0].split('\n')[0].strip()
             
             if tipo_text and len(tipo_text) < 100:
                 tipo_lower = tipo_text.lower()
                 
-                # Classificar o tipo
+
                 if 'papel' in tipo_lower or 'fof' in tipo_lower or 'receb' in tipo_lower or 'cri' in tipo_lower:
                     resultado['tipo'] = 'Papel'
                 elif 'híbrido' in tipo_lower or 'hibrido' in tipo_lower or 'misto' in tipo_lower:
@@ -162,10 +154,10 @@ def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
                 elif 'tijolo' in tipo_lower:
                     resultado['tipo'] = 'Tijolo'
                 else:
-                    # Se não identificou claramente, assume Tijolo
+                    
                     resultado['tipo'] = 'Tijolo'
         
-        # Extrair SEGMENTO - Múltiplos padrões
+
         segmento_patterns = [
             r'do\s+segmento\s+de\s+([a-záàâãéèêíïóôõöúçñ\s]+)',
             r'de\s+segmento\s+([a-záàâãéèêíïóôõöúçñ\s]+)',
@@ -177,12 +169,12 @@ def obter_dados_fii_fundsexplorer(ticker: str) -> Optional[Dict]:
             match = re.search(pattern, html, re.I)
             if match:
                 segmento_text = match.group(1).strip()
-                # Limitar ao primeiro ponto, vírgula ou nova linha
+              
                 segmento_text = segmento_text.split('.')[0].split(',')[0].split('\n')[0].strip()
                 
-                # Validar tamanho
+
                 if segmento_text and len(segmento_text) < 50:
-                    # Capitalizar primeira letra
+   
                     segmento_text = segmento_text.capitalize()
                     resultado['segmento'] = segmento_text
                     break

@@ -2042,6 +2042,73 @@ def api_tesouro_titulos():
        
         return jsonify({"titulos": [], "fallback": True, "error": str(e)}), 200
 
+# ==================== NOVA API TESOURO DIRETO COM BIBLIOTECA ====================
+
+@server.route("/api/tesouro-direto/titulos", methods=["GET"])
+def api_tesouro_direto_titulos():
+    """
+    Nova API para títulos do Tesouro Direto usando tesouro-direto-br
+    """
+    try:
+        # Cache para evitar chamadas excessivas
+        try:
+            if cache:
+                cached = cache.get("tesouro_direto_titulos")
+                if cached is not None:
+                    return jsonify(cached)
+        except Exception:
+            pass
+
+        # Importar e usar a nova API
+        from tesouro_direto_api import obter_titulos_tesouro_direto
+        
+        resultado = obter_titulos_tesouro_direto()
+        
+        # Cache por 1 hora (dados são atualizados apenas em dias úteis)
+        try:
+            if cache:
+                cache.set("tesouro_direto_titulos", resultado, timeout=3600)
+        except Exception:
+            pass
+            
+        return jsonify(resultado)
+        
+    except Exception as e:
+        print(f"ERRO na API tesouro-direto: {e}")
+        return jsonify({
+            "titulos": [],
+            "total": 0,
+            "data_referencia": datetime.now().strftime('%Y-%m-%d'),
+            "categorias": [],
+            "indexadores": [],
+            "erro": str(e)
+        }), 500
+
+@server.route("/api/tesouro-direto/ettj", methods=["GET"])
+def api_tesouro_direto_ettj():
+    """
+    API para ETTJ do Tesouro Direto
+    """
+    try:
+        from tesouro_direto_api import obter_ettj_atual
+        resultado = obter_ettj_atual()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/tesouro-direto/movimentacoes", methods=["GET"])
+def api_tesouro_direto_movimentacoes():
+    """
+    API para movimentações do Tesouro Direto
+    """
+    try:
+        tipo = request.args.get('tipo', 'venda')
+        from tesouro_direto_api import obter_movimentacoes_tesouro
+        resultado = obter_movimentacoes_tesouro(tipo)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
 @server.route("/api/carteira/tipos", methods=["GET", "POST", "PUT", "DELETE"])
 def api_asset_types():
     try:
