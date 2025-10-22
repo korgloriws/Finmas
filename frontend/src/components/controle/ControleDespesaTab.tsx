@@ -45,6 +45,7 @@ export default function ControleDespesaTab({
   const [inputCategoria, setInputCategoria] = useState('')
   const [inputTipo, setInputTipo] = useState('')
   const [inputObservacao, setInputObservacao] = useState('')
+  const [inputIsPrevisao, setInputIsPrevisao] = useState(false)
   const [editingDespesaId, setEditingDespesaId] = useState<number | null>(null)
   const [editDespesaNome, setEditDespesaNome] = useState('')
   const [editDespesaValor, setEditDespesaValor] = useState('')
@@ -52,6 +53,17 @@ export default function ControleDespesaTab({
   const [editDespesaCategoria, setEditDespesaCategoria] = useState('')
   const [editDespesaTipo, setEditDespesaTipo] = useState('')
   const [editDespesaObservacao, setEditDespesaObservacao] = useState('')
+  
+
+  const [previsoes, setPrevisoes] = useState<Array<{
+    id: string
+    nome: string
+    valor: number
+    data: string
+    categoria: string
+    tipo: string
+    observacao?: string
+  }>>([])
 
   const queryClient = useQueryClient()
 
@@ -104,30 +116,48 @@ export default function ControleDespesaTab({
     setInputCategoria('')
     setInputTipo('')
     setInputObservacao('')
+    setInputIsPrevisao(false)
   }, [])
 
-  // Handlers
+
   const handleAdicionarDespesa = useCallback(() => {
     if (!inputNome || !inputValor) return
     
     const valor = parseFloat(inputValor.replace(',', '.'))
     if (!isFinite(valor) || valor <= 0) return
 
-    // Validar e normalizar data
+    
     let dataFinal = inputData || new Date().toISOString().split('T')[0]
     try {
-      // Verificar se a data é válida
+
       const dataObj = new Date(dataFinal)
       if (isNaN(dataObj.getTime())) {
         dataFinal = new Date().toISOString().split('T')[0]
       } else {
-        // Garantir formato YYYY-MM-DD
+
         dataFinal = dataObj.toISOString().split('T')[0]
       }
     } catch (error) {
       dataFinal = new Date().toISOString().split('T')[0]
     }
 
+    // Se for previsão, adicionar apenas ao estado local (visual)
+    if (inputIsPrevisao) {
+      const novaPrevisao = {
+        id: Date.now().toString(),
+        nome: inputNome,
+        valor,
+        data: dataFinal,
+        categoria: inputCategoria,
+        tipo: inputTipo,
+        observacao: inputObservacao
+      }
+      setPrevisoes(prev => [...prev, novaPrevisao])
+      limparFormulario()
+      return
+    }
+
+    // Se não for previsão, seguir fluxo normal
     const opts = {
       data: dataFinal,
       categoria: inputCategoria,
@@ -137,13 +167,45 @@ export default function ControleDespesaTab({
     }
 
     adicionarOutroMutation.mutate({ nome: inputNome, valor, opts })
-  }, [inputNome, inputValor, inputData, inputCategoria, inputTipo, inputObservacao, adicionarOutroMutation])
+  }, [inputNome, inputValor, inputData, inputCategoria, inputTipo, inputObservacao, inputIsPrevisao, adicionarOutroMutation, limparFormulario])
 
   const handleRemoverDespesa = useCallback((id: number) => {
     if (confirm('Tem certeza que deseja remover esta despesa?')) {
       removerOutroMutation.mutate(id)
     }
   }, [removerOutroMutation])
+
+  // Função para pagar uma previsão (converter em despesa real)
+  const handlePagarPrevisao = useCallback((previsaoId: string) => {
+    const previsao = previsoes.find(p => p.id === previsaoId)
+    if (!previsao) return
+
+    // Converter previsão em despesa real
+    const opts = {
+      data: previsao.data,
+      categoria: previsao.categoria,
+      tipo: previsao.tipo,
+      pago: 'Sim',
+      observacao: previsao.observacao || undefined
+    }
+
+    // Adicionar como despesa real
+    adicionarOutroMutation.mutate({ 
+      nome: previsao.nome, 
+      valor: previsao.valor, 
+      opts 
+    })
+
+    // Remover da lista de previsões
+    setPrevisoes(prev => prev.filter(p => p.id !== previsaoId))
+  }, [previsoes, adicionarOutroMutation])
+
+  // Função para remover uma previsão
+  const handleRemoverPrevisao = useCallback((previsaoId: string) => {
+    if (confirm('Tem certeza que deseja remover esta previsão?')) {
+      setPrevisoes(prev => prev.filter(p => p.id !== previsaoId))
+    }
+  }, [])
 
   const handleIniciarEdicaoDespesa = useCallback((despesa: OutroGasto) => {
     setEditingDespesaId(despesa.id)
@@ -321,6 +383,21 @@ export default function ControleDespesaTab({
             </select>
           </div>
           
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              Status
+            </label>
+            <select
+              value={inputIsPrevisao ? 'previsao' : 'despesa'}
+              onChange={(e) => setInputIsPrevisao(e.target.value === 'previsao')}
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Status da despesa"
+            >
+              <option value="despesa">Despesa</option>
+              <option value="previsao">Previsão</option>
+            </select>
+          </div>
+          
         </div>
         
         <div className="mt-4">
@@ -402,6 +479,61 @@ export default function ControleDespesaTab({
         </div>
       </motion.div>
 
+      {/* Seção de Previsões */}
+      {previsoes.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card border border-border rounded-2xl p-6 shadow-xl mb-6"
+        >
+          <h3 className="text-lg font-semibold mb-4 text-foreground flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-warning/10">
+              <Calendar className="w-5 h-5 text-warning" />
+            </div>
+            Previsões de Gastos
+          </h3>
+          
+          <div className="space-y-3">
+            {previsoes.map((previsao) => {
+              const categoria = CATEGORIAS_DESPESAS.find(c => c.value === previsao.categoria) || CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
+              const IconComponent = categoria.icon
+              
+              return (
+                <div key={previsao.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-warning/10">
+                      <IconComponent className="w-4 h-4 text-warning" />
+                    </div>
+                    <div>
+                      <div className="font-medium">{previsao.nome}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatCurrency(previsao.valor)} • {new Date(previsao.data).toLocaleDateString('pt-BR')}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePagarPrevisao(previsao.id)}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Pagar
+                    </button>
+                    <button
+                      onClick={() => handleRemoverPrevisao(previsao.id)}
+                      className="p-2 text-destructive hover:bg-destructive/10 rounded"
+                      title="Remover previsão"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* Conteúdo Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tabela de Despesas */}
@@ -423,6 +555,7 @@ export default function ControleDespesaTab({
                   <tr>
                     <th className="px-4 py-3 text-left font-medium">Nome</th>
                     <th className="px-4 py-3 text-left font-medium">Valor</th>
+                    <th className="px-4 py-3 text-left font-medium">Data</th>
                     <th className="px-4 py-3 text-left font-medium">Categoria</th>
                     <th className="px-4 py-3 text-left font-medium">Ações</th>
                   </tr>
@@ -469,6 +602,9 @@ export default function ControleDespesaTab({
                           ) : (
                             formatCurrency(despesa.valor)
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {new Date(despesa.data).toLocaleDateString('pt-BR')}
                         </td>
                         <td className="px-4 py-3">
                           {editingDespesaId === despesa.id ? (
