@@ -3273,5 +3273,173 @@ def api_simulador_monte_carlo():
         return jsonify({"error": str(e)}), 500
 
 
+# ==================== API MERCADOS B3 ====================
+
+@server.route("/api/mercados/bdrs", methods=["GET"])
+def api_mercados_bdrs():
+    """
+    API para BDRs (Brazilian Depositary Receipts)
+    """
+    try:
+        limite = request.args.get('limite', 50, type=int)
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_bdrs(limite)
+        return jsonify({
+            "bdrs": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/debentures", methods=["GET"])
+def api_mercados_debentures():
+    """
+    API para Debentures
+    """
+    try:
+        limite = request.args.get('limite', 50, type=int)
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_debentures(limite)
+        return jsonify({
+            "debentures": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/cris", methods=["GET"])
+def api_mercados_cris():
+    """
+    API para CRIs (Certificados de Recebíveis Imobiliários)
+    """
+    try:
+        limite = request.args.get('limite', 50, type=int)
+        from mercados_api import MercadosAPI
+        api_instance = MercadosAPI()
+   
+        resultado = api_instance.obter_cris(limite)
+
+        return jsonify({
+            "cris": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        import traceback
+   
+        return jsonify({"erro": str(e), "traceback": traceback.format_exc()}), 500
+
+@server.route("/api/mercados/cras", methods=["GET"])
+def api_mercados_cras():
+
+    try:
+        limite = request.args.get('limite', 50, type=int)
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_cras(limite)
+        return jsonify({
+            "cras": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/ibov", methods=["GET"])
+def api_mercados_ibov():
+
+    try:
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_carteira_ibov()
+        return jsonify({
+            "ibov": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/negociacoes-balcao", methods=["GET"])
+def api_mercados_negociacoes_balcao():
+    """
+    API para negociações de balcão
+    """
+    try:
+        limite = request.args.get('limite', 100, type=int)
+        data_str = request.args.get('data')
+        
+        data = None
+        if data_str:
+            try:
+                data = datetime.strptime(data_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_negociacoes_balcao(data, limite)
+        return jsonify({
+            "negociacoes_balcao": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/negociacoes-intraday", methods=["GET"])
+def api_mercados_negociacoes_intraday():
+    """
+    API para negociações intraday
+    """
+    try:
+        limite = request.args.get('limite', 100, type=int)
+        data_str = request.args.get('data')
+        
+        data = None
+        if data_str:
+            try:
+                data = datetime.strptime(data_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_negociacoes_intraday(data, limite)
+        return jsonify({
+            "negociacoes_intraday": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/securitizadoras", methods=["GET"])
+def api_mercados_securitizadoras():
+    """
+    API para securitizadoras
+    """
+    try:
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_securitizadoras()
+        return jsonify({
+            "securitizadoras": resultado,
+            "total": len(resultado),
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d')
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/mercados/resumo", methods=["GET"])
+def api_mercados_resumo():
+    """
+    API para resumo completo do mercado
+    """
+    try:
+        from mercados_api import mercados_api
+        resultado = mercados_api.obter_resumo_mercado()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
 if __name__ == "__main__":
     server.run(debug=False, port=5005, host='0.0.0.0') 

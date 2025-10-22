@@ -47,12 +47,12 @@ def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
                         'endereco': endereco.strip(),
                         'cidade': cidade.strip(),
                         'estado': estado.strip(),
-                        'area': 0,  # Não encontramos área nos padrões atuais
+                        'area': 0, 
                         'tipo': determinar_tipo_imovel_scraping(endereco, cidade)
                     }
                     portfolio['imoveis'].append(imovel)
         
-        # Extrair distribuição por estados
+     
         if portfolio['imoveis']:
             estados = {}
             for imovel in portfolio['imoveis']:
@@ -62,7 +62,7 @@ def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
                         estados[estado] = 0
                     estados[estado] += 1
             
-            # Converter para percentuais
+           
             total = len(portfolio['imoveis'])
             for estado in estados:
                 portfolio['estados_distribuicao'][estado] = (estados[estado] / total) * 100
@@ -84,13 +84,11 @@ def extrair_portfolio_fundsexplorer(html: str, ticker: str) -> Optional[Dict]:
 
 
 def determinar_tipo_imovel_scraping(endereco: str, cidade: str) -> str:
-    """
-    Determina o tipo de imóvel baseado no endereço e cidade
-    """
+
     endereco_lower = endereco.lower()
     cidade_lower = cidade.lower()
     
-    # Padrões específicos encontrados
+
     if 'estrada' in endereco_lower or 'rodovia' in endereco_lower:
         return 'Logística'
     elif 'avenida' in endereco_lower:
