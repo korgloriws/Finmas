@@ -4978,12 +4978,22 @@ def _upgrade_controle_schema(usuario=None):
             conn.close()
 
 def salvar_receita(nome, valor, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
-
+    
     usuario = get_usuario_atual()
     if not usuario:
         return {"success": False, "message": "Usuário não autenticado"}
 
-    data_atual = (data or datetime.now().strftime('%Y-%m-%d'))
+    # Validar e normalizar data
+    try:
+        if data:
+            # Tentar parsear a data para validar formato
+            datetime.strptime(data, '%Y-%m-%d')
+            data_atual = data
+        else:
+            data_atual = datetime.now().strftime('%Y-%m-%d')
+    except ValueError:
+        # Se data inválida, usar data atual
+        data_atual = datetime.now().strftime('%Y-%m-%d')
     if _is_postgres():
         conn = _pg_conn_for_user(usuario)
         try:
@@ -5266,7 +5276,17 @@ def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, rec
     if not usuario:
         return {"success": False, "message": "Usuário não autenticado"}
 
-    data_atual = (data or datetime.now().strftime('%Y-%m-%d'))
+    # Validar e normalizar data
+    try:
+        if data:
+            # Tentar parsear a data para validar formato
+            datetime.strptime(data, '%Y-%m-%d')
+            data_atual = data
+        else:
+            data_atual = datetime.now().strftime('%Y-%m-%d')
+    except ValueError:
+        # Se data inválida, usar data atual
+        data_atual = datetime.now().strftime('%Y-%m-%d')
     if _is_postgres():
         conn = _pg_conn_for_user(usuario)
         try:

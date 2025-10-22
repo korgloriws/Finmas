@@ -7,7 +7,7 @@ import { Marmita, GastoMensal } from '../types'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
 export default function MarmitasPage() {
-  const [inputData, setInputData] = useState('')
+  const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
   const [inputValor, setInputValor] = useState('')
   const [inputComprou, setInputComprou] = useState(true)
   const [filtroMes, setFiltroMes] = useState<number>(new Date().getMonth() + 1)

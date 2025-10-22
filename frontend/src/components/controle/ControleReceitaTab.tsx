@@ -25,7 +25,7 @@ export default function ControleReceitaTab({
 }: ControleReceitaTabProps) {
   const [inputNome, setInputNome] = useState('')
   const [inputValor, setInputValor] = useState('')
-  const [inputData, setInputData] = useState('')
+  const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
   const [inputCategoria, setInputCategoria] = useState('')
   const [inputTipo, setInputTipo] = useState('fixo')
   const [inputRecorrencia, setInputRecorrencia] = useState('mensal')
@@ -65,7 +65,7 @@ export default function ControleReceitaTab({
       queryClient.invalidateQueries({ queryKey: ['saldo'] })
       setInputNome('')
       setInputValor('')
-      setInputData('')
+      setInputData(new Date().toISOString().split('T')[0])
       setInputCategoria('')
       setInputTipo('fixo')
       setInputRecorrencia('mensal')
@@ -98,8 +98,23 @@ export default function ControleReceitaTab({
     const valor = parseFloat(inputValor.replace(',', '.'))
     if (!isFinite(valor) || valor <= 0) return
 
+    // Validar e normalizar data
+    let dataFinal = inputData || new Date().toISOString().split('T')[0]
+    try {
+      // Verificar se a data é válida
+      const dataObj = new Date(dataFinal)
+      if (isNaN(dataObj.getTime())) {
+        dataFinal = new Date().toISOString().split('T')[0]
+      } else {
+        // Garantir formato YYYY-MM-DD
+        dataFinal = dataObj.toISOString().split('T')[0]
+      }
+    } catch (error) {
+      dataFinal = new Date().toISOString().split('T')[0]
+    }
+
     const opts = {
-      data: inputData || new Date().toISOString().split('T')[0],
+      data: dataFinal,
       categoria: inputCategoria || undefined,
       tipo: inputTipo,
       recorrencia: inputRecorrencia

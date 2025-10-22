@@ -21,7 +21,7 @@ export default function ControleAlimentacaoTab({
   filtroAno, 
   ocultarValores
 }: ControleAlimentacaoTabProps) {
-  const [inputData, setInputData] = useState('')
+  const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
   const [inputValor, setInputValor] = useState('')
   const [inputComprou, setInputComprou] = useState(true)
   const [periodoGrafico] = useState('3m')
@@ -53,7 +53,7 @@ export default function ControleAlimentacaoTab({
       queryClient.invalidateQueries({ queryKey: ['marmitas'] })
       queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
       queryClient.invalidateQueries({ queryKey: ['saldo'] })
-      setInputData('')
+      setInputData(new Date().toISOString().split('T')[0])
       setInputValor('')
       setInputComprou(true)
     },

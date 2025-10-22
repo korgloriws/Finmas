@@ -56,7 +56,7 @@ export default function CarteiraPage() {
   const [inputIndexador, setInputIndexador] = useState<'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | ''>('')
   const [inputIndexadorPct, setInputIndexadorPct] = useState('')
 
-  const [inputDataAplicacao, setInputDataAplicacao] = useState<string>('')
+  const [inputDataAplicacao, setInputDataAplicacao] = useState<string>(new Date().toISOString().split('T')[0])
   const [inputVencimento, setInputVencimento] = useState<string>('')
   const [inputIsentoIr, setInputIsentoIr] = useState<boolean>(false)
   const [editingId, setEditingId] = useState<number | null>(null)
