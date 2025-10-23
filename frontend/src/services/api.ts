@@ -393,6 +393,13 @@ export const carteiraService = {
       return []
     }
   },
+
+  // ==================== NOVO SERVIÇO OTIMIZADO ====================
+  
+  getProjecao: async (horizonte: number = 12): Promise<any> => {
+    const response = await api.get(`/carteira/projecao?horizonte=${horizonte}`)
+    return response.data
+  },
 }
 
 export const marmitasService = {
@@ -402,6 +409,17 @@ export const marmitasService = {
     if (ano) params.append('ano', ano.toString())
     
     const response = await api.get(`/marmitas?${params.toString()}`)
+    return response.data
+  },
+
+  // ==================== NOVO SERVIÇO OTIMIZADO ====================
+  
+  getMarmitasCompleto: async (mes?: number, ano?: number): Promise<any> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', mes.toString())
+    if (ano) params.append('ano', ano.toString())
+    
+    const response = await api.get(`/marmitas/completo?${params.toString()}`)
     return response.data
   },
 
@@ -450,6 +468,17 @@ export const controleService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/dados-completos?${params.toString()}`)
+    return response.data
+  },
+
+  // ==================== NOVOS SERVIÇOS OTIMIZADOS ====================
+  
+  getFinanceiroCompleto: async (mes?: string, ano?: string): Promise<any> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', mes)
+    if (ano) params.append('ano', ano)
+    
+    const response = await api.get(`/controle/financeiro-completo?${params.toString()}`)
     return response.data
   },
 
@@ -658,6 +687,17 @@ export const cartaoService = {
   // Cartões Cadastrados
   getCartoesCadastrados: async (): Promise<CartaoCadastrado[]> => {
     const response = await api.get('/controle/cartoes-cadastrados')
+    return response.data
+  },
+
+  // ==================== NOVO SERVIÇO OTIMIZADO ====================
+  
+  getCartoesCompletos: async (mes?: string, ano?: string): Promise<any> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', mes)
+    if (ano) params.append('ano', ano)
+    
+    const response = await api.get(`/controle/cartoes-completos?${params.toString()}`)
     return response.data
   },
 
