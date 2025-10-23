@@ -168,6 +168,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // Invalidar todo o cache do React Query para forçar recarregamento
       queryClient.clear()
       
+      // Limpar cache específico de dados do usuário
+      queryClient.removeQueries({ queryKey: ['carteira'] })
+      queryClient.removeQueries({ queryKey: ['home-resumo'] })
+      queryClient.removeQueries({ queryKey: ['controle'] })
+      queryClient.removeQueries({ queryKey: ['cartoes-cadastrados'] })
+      queryClient.removeQueries({ queryKey: ['compras-cartao'] })
+      queryClient.removeQueries({ queryKey: ['total-compras-cartao'] })
+      
       // Navegar para a tela de login sem recarregar a página
       navigate('/login', { replace: true })
     } catch (error) {
