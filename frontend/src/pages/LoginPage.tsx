@@ -53,7 +53,7 @@ const LoginPage = () => {
     setLoading(true)
     setError('')
 
-    // Validação para registro
+ 
     if (!isLogin) {
       if (!formData.pergunta_seguranca.trim() || !formData.resposta_seguranca.trim()) {
         setError('Pergunta e resposta de segurança são obrigatórias')

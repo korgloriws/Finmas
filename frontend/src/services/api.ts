@@ -436,6 +436,23 @@ export const marmitasService = {
 
 export const controleService = {
 
+  // ==================== NOVO SERVIÇO OTIMIZADO ====================
+  
+  getDadosCompletos: async (mes?: string, ano?: string): Promise<{
+    receitas: Receita[]
+    outros: OutroGasto[]
+    saldo: number
+    evolucao: EvolucaoFinanceira[]
+    receitas_despesas: ReceitasDespesas
+  }> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', mes)
+    if (ano) params.append('ano', ano)
+    
+    const response = await api.get(`/controle/dados-completos?${params.toString()}`)
+    return response.data
+  },
+
   getReceitas: async (mes?: string, ano?: string, pessoa?: string): Promise<Receita[]> => {
     const params = new URLSearchParams()
     if (mes) params.append('mes', mes)

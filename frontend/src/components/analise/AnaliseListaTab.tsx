@@ -1097,7 +1097,7 @@ export default function AnaliseListaTab() {
     dy_min: 3,
     pl_min: 1,
     pl_max: 15,
-    pvp_max: 2,
+    pvp_max: 3,
     net_debt_ebitda_max: 3
   })
 
