@@ -1265,7 +1265,164 @@ carregamento_em_andamento = False
 lock = threading.Lock()  
 
 
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+# ==================== CACHE INTELIGENTE (PRODUÇÃO vs LOCAL) ====================
+
+def _get_cache_config():
+    """Configuração de cache baseada no ambiente"""
+    is_production = bool(os.getenv('DATABASE_URL')) or os.getenv('ENVIRONMENT') == 'production'
+    
+    if is_production:
+        # Produção: Redis com configurações otimizadas
+        redis_url = os.getenv('REDIS_URL')
+        if redis_url:
+            return {
+                'CACHE_TYPE': 'RedisCache',
+                'CACHE_REDIS_URL': redis_url,
+                'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutos
+                'CACHE_KEY_PREFIX': 'finmas:',
+                'CACHE_REDIS_DB': 0,
+                'CACHE_REDIS_HOST': 'localhost',
+                'CACHE_REDIS_PORT': 6379,
+                'CACHE_REDIS_PASSWORD': None,
+                'CACHE_REDIS_DECODE_RESPONSES': True
+            }
+    
+    # Local: SimpleCache (mantém como está)
+    return {'CACHE_TYPE': 'SimpleCache'}
+
+# Inicializar cache com tratamento de erro
+try:
+    cache = Cache(config=_get_cache_config())
+    # Testar conexão com cache em produção
+    if _is_production():
+        try:
+            cache.set('test_connection', 'ok', timeout=1)
+            cache.delete('test_connection')
+            print("Cache Redis conectado com sucesso")
+        except Exception as e:
+            print(f"Erro ao conectar com Redis: {e}")
+            # Fallback para SimpleCache se Redis falhar
+            cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+            print("Usando SimpleCache como fallback")
+except Exception as e:
+    print(f"Erro ao inicializar cache: {e}")
+    # Fallback para SimpleCache
+    cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+
+# ==================== CACHE HELPERS PARA DADOS INTERNOS ====================
+
+def _is_production():
+    """Verifica se está em produção"""
+    if os.getenv('DISABLE_CACHE'):
+        return False  # Desabilitar cache se DISABLE_CACHE estiver definido
+    return bool(os.getenv('DATABASE_URL')) or os.getenv('ENVIRONMENT') == 'production'
+
+def _cache_key(usuario, func_name, *args):
+    """Gera chave de cache única"""
+    if not _is_production():
+        return None  # Não usar cache em local
+    return f"finmas:{usuario}:{func_name}:{hash(str(args))}"
+
+def cache_internal_data(timeout=300):
+    """Decorator para cache de dados internos (só em produção)"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            if not _is_production():
+                return func(*args, **kwargs)  # Local: sem cache
+            
+            usuario = get_usuario_atual()
+            if not usuario:
+                return func(*args, **kwargs)
+            
+            cache_key = _cache_key(usuario, func.__name__, args, kwargs)
+            if not cache_key:
+                return func(*args, **kwargs)
+            
+            # Verificar cache com tratamento de erro
+            try:
+                cached = cache.get(cache_key)
+                if cached is not None:
+                    return cached
+            except Exception as e:
+                print(f"Erro ao verificar cache para {cache_key}: {e}")
+                # Continuar sem cache se houver erro
+            
+            # Executar função e cachear resultado com tratamento de erro
+            result = func(*args, **kwargs)
+            try:
+                cache.set(cache_key, result, timeout=timeout)
+            except Exception as e:
+                print(f"Erro ao salvar no cache para {cache_key}: {e}")
+                # Continuar mesmo se cache falhar
+            
+            return result
+        return wrapper
+    return decorator
+
+def invalidate_user_cache(usuario):
+    """Invalida cache de um usuário específico"""
+    if not _is_production():
+        return  # Local: não precisa invalidar
+    
+    try:
+        print(f"Invalidando cache para usuário: {usuario}")
+        
+        # Invalidar cache específico do controle
+        cache_keys_to_clear = [
+            f"finmas:{usuario}:carregar_receitas_mes_ano:*",
+            f"finmas:{usuario}:carregar_outros_mes_ano:*", 
+            f"finmas:{usuario}:calcular_saldo_mes_ano:*",
+            f"finmas:{usuario}:obter_carteira:*",
+            f"finmas:{usuario}:obter_movimentacoes:*",
+            f"controle_completo:{usuario}:*"
+        ]
+        
+        for pattern in cache_keys_to_clear:
+            try:
+                cache.delete_memoized_pattern(pattern)
+                print(f"Cache pattern invalidado: {pattern}")
+            except Exception as e:
+                print(f"Erro ao invalidar pattern {pattern}: {e}")
+        
+        # Limpar cache geral se for Redis
+        try:
+            if hasattr(cache, 'cache') and hasattr(cache.cache, 'clear'):
+                cache.cache.clear()
+                print("Cache Redis limpo completamente")
+        except Exception as e:
+            print(f"Erro ao limpar cache Redis: {e}")
+                
+    except Exception as e:
+        print(f"Erro geral ao invalidar cache do usuário {usuario}: {e}")
+        # Não falhar se cache não funcionar
+
+def invalidate_controle_cache(usuario, mes=None, ano=None):
+    """Invalida cache específico do controle financeiro"""
+    if not _is_production():
+        return
+    
+    try:
+        if mes and ano:
+            # Invalidar cache específico do mês/ano
+            cache_keys = [
+                f"finmas:{usuario}:carregar_receitas_mes_ano:({mes}, {ano}, None)",
+                f"finmas:{usuario}:carregar_outros_mes_ano:({mes}, {ano})",
+                f"finmas:{usuario}:calcular_saldo_mes_ano:({mes}, {ano}, None)",
+                f"controle_completo:{usuario}:{mes}:{ano}:*"
+            ]
+        else:
+            # Invalidar todo cache do usuário
+            invalidate_user_cache(usuario)
+            return
+            
+        for key in cache_keys:
+            try:
+                cache.delete(key)
+            except Exception:
+                pass
+                
+    except Exception:
+        pass
 
 global_state = {"df_ativos": None, "carregando": False}
 
@@ -3681,6 +3838,7 @@ def obter_carteira_com_metadados_fii():
         print(f"Erro ao obter carteira com metadados: {e}")
         return []
 
+@cache_internal_data(timeout=180)  # 3 minutos de cache (dados mais dinâmicos)
 def obter_carteira():
 
     try:
@@ -4106,6 +4264,7 @@ def registrar_movimentacao(data, ticker, nome_completo, quantidade, preco, tipo,
             pass
         return {"success": False, "message": f"Erro ao registrar movimentação: {str(e)}"}
 
+@cache_internal_data(timeout=300)  # 5 minutos de cache
 def obter_movimentacoes(mes=None, ano=None):
 
     try:
@@ -5016,6 +5175,15 @@ def salvar_receita(nome, valor, data=None, categoria=None, tipo=None, recorrenci
     ''', (nome, valor, data_atual, categoria, tipo, recorrencia, parcelas_total, parcela_atual, grupo_parcela, observacao))
     conn.commit()
     conn.close()
+    
+    # Invalidar cache após modificação
+    try:
+        from datetime import datetime
+        mes = datetime.strptime(data_atual, '%Y-%m-%d').month
+        ano = datetime.strptime(data_atual, '%Y-%m-%d').year
+        invalidate_controle_cache(usuario, str(mes), str(ano))
+    except Exception:
+        pass
 
 def atualizar_receita(id_registro, nome=None, valor=None, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
 
@@ -5089,6 +5257,7 @@ def remover_receita(id_registro):
     """Remover receita - wrapper para compatibilidade"""
     return _remover_registro_generico("receitas", id_registro, "controle")
 
+@cache_internal_data(timeout=300)  # 5 minutos de cache
 def carregar_receitas_mes_ano(mes, ano, pessoa=None):
    
     usuario = get_usuario_atual()
@@ -5310,6 +5479,7 @@ def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, rec
     conn.commit()
     conn.close()
 
+@cache_internal_data(timeout=300)  # 5 minutos de cache
 def carregar_outros_mes_ano(mes, ano):
     
     usuario = get_usuario_atual()
@@ -5638,6 +5808,7 @@ def inicializar_bancos_usuario(usuario):
     init_controle_db(usuario)
     init_marmitas_db(usuario)
 
+@cache_internal_data(timeout=300)  # 5 minutos de cache
 def calcular_saldo_mes_ano(mes, ano, pessoa=None):
     
     usuario = get_usuario_atual()

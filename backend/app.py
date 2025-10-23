@@ -254,35 +254,55 @@ def api_login():
 
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
-
     try:
-       
-        from models import limpar_sessoes_expiradas, SESSION_LOCK
+        from models import limpar_sessoes_expiradas, SESSION_LOCK, invalidate_user_cache
         import threading
         
-     
+        usuario_atual = get_usuario_atual()
+        
         try:
             token = request.cookies.get('session_token')
             if token:
                 invalidar_sessao(token)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Erro ao invalidar sessão: {e}")
         
+        if usuario_atual:
+            try:
+                invalidate_user_cache(usuario_atual)
+                print(f"Cache limpo para usuário: {usuario_atual}")
+            except Exception as e:
+                print(f"Erro ao limpar cache do usuário {usuario_atual}: {e}")
         
-        limpar_sessoes_expiradas()
+        try:
+            if cache:
+                cache.clear()
+                print("Cache geral limpo")
+        except Exception as e:
+            print(f"Erro ao limpar cache geral: {e}")
         
-     
+        try:
+            limpar_sessoes_expiradas()
+        except Exception as e:
+            print(f"Erro ao limpar sessões expiradas: {e}")
+        
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
-      
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
         return response
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Erro no logout: {e}")
+        # Mesmo com erro, tentar limpar o que for possível
+        try:
+            response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
+            response.delete_cookie('session_token')
+            return response
+        except Exception:
+            return jsonify({"error": str(e)}), 500
 
 @server.route("/api/auth/usuario-atual", methods=["GET"])
 def api_usuario_atual():
@@ -324,6 +344,60 @@ def api_debug_bancos():
         return jsonify({
             "bancos_dir": bancos_dir,
             "usuarios": usuarios
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/auth/debug-cache", methods=["GET"])
+def api_debug_cache():
+    """Endpoint para debug do cache em produção"""
+    try:
+        from models import _is_production, cache
+        
+        debug_info = {
+            "is_production": _is_production(),
+            "cache_type": getattr(cache, 'cache_type', 'unknown'),
+            "cache_available": False,
+            "cache_test": False,
+            "redis_url": os.getenv('REDIS_URL'),
+            "database_url": bool(os.getenv('DATABASE_URL')),
+            "environment": os.getenv('ENVIRONMENT')
+        }
+        
+        # Testar cache
+        try:
+            cache.set('debug_test', 'ok', timeout=1)
+            debug_info["cache_available"] = True
+            
+            cached_value = cache.get('debug_test')
+            if cached_value == 'ok':
+                debug_info["cache_test"] = True
+                cache.delete('debug_test')
+        except Exception as e:
+            debug_info["cache_error"] = str(e)
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/auth/disable-cache", methods=["POST"])
+def api_disable_cache():
+    """Endpoint para desabilitar cache em caso de problemas"""
+    try:
+        import os
+        # Definir variável de ambiente para desabilitar cache
+        os.environ['DISABLE_CACHE'] = 'true'
+        
+        # Limpar cache atual
+        try:
+            if cache:
+                cache.clear()
+        except Exception:
+            pass
+        
+        return jsonify({
+            "message": "Cache desabilitado com sucesso",
+            "cache_disabled": True
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3443,3 +3517,4 @@ def api_mercados_resumo():
 
 if __name__ == "__main__":
     server.run(debug=False, port=5005, host='0.0.0.0') 
+
