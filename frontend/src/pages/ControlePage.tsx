@@ -9,9 +9,8 @@ import {
   ChefHat, CreditCard, Target, Calendar
 } from 'lucide-react'
 import { controleService, cartaoService, marmitasService } from '../services/api'
-import { useControleData } from '../hooks/useOptimizedControle'
 import HelpTips from '../components/HelpTips'
-
+// Lazy loading dos componentes de controle
 import { lazy, Suspense } from 'react'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -20,10 +19,10 @@ const ControleReceitaTab = lazy(() => import('../components/controle/ControleRec
 const ControleDespesaTab = lazy(() => import('../components/controle/ControleDespesaTab'))
 const ControleCartaoTab = lazy(() => import('../components/controle/ControleCartaoTab'))
 import { formatCurrency } from '../utils/formatters'
-import { EvolucaoFinanceira } from '../types'
+import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, PieChart as RechartsPieChart, Pie, Cell, Area, ComposedChart, BarChart, Bar } from 'recharts'
 
-
+// Categorias de despesas com ícones (copiado da ControleDespesaTab)
 const CATEGORIAS_DESPESAS = [
   { value: 'farmacia', label: 'Farmácia', icon: '', color: '#ef4444' },
   { value: 'supermercado', label: 'Supermercado', icon: '', color: '#10b981' },
@@ -81,17 +80,32 @@ export default function ControlePage() {
   }, [])
 
 
-  // ==================== QUERY OTIMIZADA - BUSCA TUDO DE UMA VEZ ====================
-  
-  const { 
-    receitas, 
-    outros, 
-    saldo, 
-    evolucao: dadosGraficoEvolucao, 
-    receitasDespesas,
-    isLoading: loadingControle,
-    error: errorControle
-  } = useControleData(filtroMes, filtroAno)
+  // Carregamento prioritário - dados essenciais da aba financeiro
+  const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
+    queryKey: ['receitas-despesas', filtroMes, filtroAno],
+    queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 1 * 60 * 1000, // 1 minuto
+  })
+
+  const { data: saldo } = useQuery<{ saldo: number }>({
+    queryKey: ['saldo', filtroMes, filtroAno],
+    queryFn: () => controleService.getSaldo(filtroMes, filtroAno),
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 1 * 60 * 1000, // 1 minuto
+  })
+
+  // Carregamento secundário - gráficos (só quando necessário)
+  const { data: dadosGraficoEvolucao } = useQuery<EvolucaoFinanceira[]>({
+    queryKey: ['evolucao-financeira', filtroMes, filtroAno, periodoEvolucao],
+    queryFn: () => controleService.getEvolucaoFinanceira(filtroMes, filtroAno),
+    retry: 1,
+    refetchOnWindowFocus: false,
+    enabled: abaAtiva === 'financeiro', // Só carrega na aba financeiro
+    staleTime: 5 * 60 * 1000, // 5 minutos
+  })
 
   // Query para comparação com mês anterior (sempre ativa)
   const { data: dadosComparacao } = useQuery<EvolucaoFinanceira[]>({
@@ -107,7 +121,14 @@ export default function ControlePage() {
   })
 
   // Carregamento sob demanda - dados das abas específicas
-  // (outros já incluído na query otimizada acima)
+  const { data: outros } = useQuery({
+    queryKey: ['outros', filtroMes, filtroAno],
+    queryFn: () => controleService.getOutros(filtroMes, filtroAno),
+    retry: 1,
+    refetchOnWindowFocus: false,
+    enabled: abaAtiva === 'despesas', // Só carrega na aba despesas
+    staleTime: 2 * 60 * 1000, // 2 minutos
+  })
 
   const { data: cartoes } = useQuery({
     queryKey: ['cartoes-cadastrados', filtroMes, filtroAno],
@@ -494,13 +515,13 @@ export default function ControlePage() {
               <div className="flex items-center justify-between mb-4">
             <div>
                   <h3 className="text-lg font-semibold mb-2 text-foreground">Saldo Total do Mês</h3>
-                  <p className={`text-4xl font-bold ${(saldo || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
-                    {ocultarValores ? '***' : formatCurrency(saldo || 0)}
+                  <p className={`text-4xl font-bold ${(saldo?.saldo || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
+                    {ocultarValores ? '***' : formatCurrency(saldo?.saldo || 0)}
                   </p>
             </div>
                 <div className="text-right">
-                  <div className={`text-2xl ${(saldo || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
-                    {(saldo || 0) >= 0 ? 'Positivo' : 'Negativo'}
+                  <div className={`text-2xl ${(saldo?.saldo || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
+                    {(saldo?.saldo || 0) >= 0 ? 'Positivo' : 'Negativo'}
             </div>
                   <p className="text-sm text-muted-foreground">
                     {receitasDespesas?.receitas ? 
@@ -861,7 +882,7 @@ export default function ControlePage() {
                 </p>
                 <div className="text-2xl font-bold text-foreground">
                   {receitasDespesas?.receitas ? 
-                    `${Math.round(((saldo || 0) / (receitasDespesas.receitas * 0.2)) * 100)}%` : 
+                    `${Math.round(((saldo?.saldo || 0) / (receitasDespesas.receitas * 0.2)) * 100)}%` : 
                     '0%'
                   }
           </div>

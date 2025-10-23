@@ -1,5 +1,5 @@
 import  { useState, useMemo, useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 // import { useLazyData } from '../hooks/useLazyData' // Para uso futuro
 import { Link } from 'react-router-dom'
 // @ts-ignore
@@ -62,6 +62,7 @@ import AtivosDetalhesModal from '../components/carteira/AtivosDetalhesModal'
 
 export default function HomePage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [ocultarValor, setOcultarValor] = useState(true) 
   const [mesAtual, setMesAtual] = useState(new Date().getMonth() + 1)
   const [anoAtual, setAnoAtual] = useState(new Date().getFullYear())
@@ -138,6 +139,39 @@ export default function HomePage() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
   const isFirstLoad = useRef(true)
 
+  // ==================== REFRESH AUTOMÁTICO ====================
+  
+  // Função para refresh automático (preços + indexadores)
+  const refreshCompleto = async () => {
+    try {
+      // Executar ambos em paralelo (silencioso)
+      const [precosResult, indexadoresResult] = await Promise.all([
+        carteiraService.refreshCarteira(),
+        carteiraService.refreshIndexadores()
+      ])
+      
+      const totalAtualizados = (precosResult.updated || 0) + (indexadoresResult.updated || 0)
+      
+      if (precosResult.success && indexadoresResult.success && totalAtualizados > 0) {
+        // Notificação sutil apenas se houve atualizações
+        toast.success(`${totalAtualizados} ativos atualizados automaticamente`, {
+          duration: 2000,
+          position: 'top-right',
+          style: {
+            background: '#10b981',
+            color: '#fff',
+            fontSize: '12px',
+          },
+        })
+        queryClient.invalidateQueries({ queryKey: ['carteira'] })
+        setUltimaAtualizacao(new Date())
+      }
+    } catch (error) {
+      // Falha silenciosa para não incomodar o usuário
+      console.log('Refresh automático falhou:', error)
+    }
+  }
+
   // Monitorar atualizações automáticas da carteira
   useEffect(() => {
     if (carteira && !isFirstLoad.current) {
@@ -157,6 +191,31 @@ export default function HomePage() {
       isFirstLoad.current = false
     }
   }, [carteira])
+
+  // ==================== REFRESH AUTOMÁTICO ====================
+  
+
+  useEffect(() => {
+    if (user && carteira && carteira.length > 0) {
+      // Aguardar um pouco para não sobrecarregar na inicialização
+      const timer = setTimeout(() => {
+        refreshCompleto()
+      }, 2000) // 2 segundos após carregar a carteira
+      
+      return () => clearTimeout(timer)
+    }
+  }, [user, carteira])
+
+  // Refresh automático periódico (a cada 10 minutos)
+  useEffect(() => {
+    if (!user) return
+
+    const interval = setInterval(() => {
+      refreshCompleto()
+    }, 10 * 60 * 1000) // 10 minutos
+
+    return () => clearInterval(interval)
+  }, [user])
 
 
 
@@ -183,11 +242,11 @@ export default function HomePage() {
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
-    refetchOnWindowFocus: true, // Atualiza quando volta o foco
-    enabled: !!user && !!carteira, // Só carrega depois da carteira
-    staleTime: 3 * 60 * 1000, // 3 minutos (reduzido)
-    refetchInterval: 5 * 60 * 1000, // Atualiza automaticamente a cada 5 minutos
-    refetchIntervalInBackground: true, // Continua atualizando mesmo com a aba em background
+    refetchOnWindowFocus: true, 
+    enabled: !!user && !!carteira, 
+    staleTime: 3 * 60 * 1000, 
+    refetchInterval: 5 * 60 * 1000, 
+    refetchIntervalInBackground: true, 
   })
 
 
@@ -1585,6 +1644,7 @@ export default function HomePage() {
               )}
             </div>
           </div>
+          
           
           {/* Controles: calendário discreto à esquerda, mostrar/ocultar à direita - Mobile optimized */}
           <div className="flex flex-row items-center justify-between gap-3 sm:gap-4">

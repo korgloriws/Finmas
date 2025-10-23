@@ -78,7 +78,7 @@ export default function ControleCartaoTab({
   const queryClient = useQueryClient()
 
   // Queries
-  const { data: cartoes } = useQuery<CartaoCadastrado[]>({
+  const { data: cartoes, isLoading: cartoesLoading } = useQuery<CartaoCadastrado[]>({
     queryKey: ['cartoes-cadastrados'],
     queryFn: () => cartaoService.getCartoesCadastrados(),
     retry: 1,
@@ -86,7 +86,7 @@ export default function ControleCartaoTab({
   })
 
 
-  const { data: compras } = useQuery<CompraCartao[]>({
+  const { data: compras, isLoading: comprasLoading } = useQuery<CompraCartao[]>({
     queryKey: ['compras-cartao', cartaoSelecionado, filtroMes, filtroAno],
     queryFn: () => cartaoService.getComprasCartao(cartaoSelecionado!, filtroMes, filtroAno),
     enabled: !!cartaoSelecionado,
@@ -94,7 +94,7 @@ export default function ControleCartaoTab({
     refetchOnWindowFocus: false,
   })
 
-  const { data: totalCompras } = useQuery<number>({
+  const { data: totalCompras, isLoading: totalLoading } = useQuery<number>({
     queryKey: ['total-compras-cartao', cartaoSelecionado, filtroMes, filtroAno],
     queryFn: () => cartaoService.getTotalComprasCartao(cartaoSelecionado!, filtroMes, filtroAno),
     enabled: !!cartaoSelecionado,
@@ -367,14 +367,47 @@ export default function ControleCartaoTab({
   }, [cartaoAtual, totalCompras])
 
 
+  // Estados de loading combinados
+  const isLoading = cartoesLoading || comprasLoading || totalLoading
+
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Cartões de Crédito</h2>
-          <p className="text-muted-foreground">Gerencie seus cartões e compras</p>
-        </div>
+      {/* Animação de Carregamento */}
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex items-center justify-center py-12"
+          >
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                <CreditCard className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-primary" />
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-medium text-foreground">Carregando cartões...</p>
+                <p className="text-sm text-muted-foreground">Aguarde enquanto buscamos seus dados</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Conteúdo Principal */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isLoading ? 0.3 : 1 }}
+        transition={{ duration: 0.3 }}
+        className={isLoading ? 'pointer-events-none' : ''}
+      >
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Cartões de Crédito</h2>
+            <p className="text-muted-foreground">Gerencie seus cartões e compras</p>
+          </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setMostrarFormularioCartao(true)}
@@ -1054,6 +1087,7 @@ export default function ControleCartaoTab({
           </motion.div>
         )}
       </AnimatePresence>
+      </motion.div>
     </div>
   )
 }
