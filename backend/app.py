@@ -201,16 +201,8 @@ def api_login():
                 pass
             
 
-            # LIMPEZA PREVENTIVA: Limpar dados de usuários anteriores
-            try:
-                from models import clear_all_user_data
-                clear_all_user_data()
-                print(f"DEBUG: Limpeza preventiva realizada para usuário: {username}")
-            except Exception as e:
-                print(f"DEBUG: Erro na limpeza preventiva: {e}")
-            
-            set_usuario_atual(username)
-            print(f"DEBUG: Usuário atual definido: {username}")
+            # SISTEMA SEGURO: Não usar variáveis globais - apenas tokens de sessão
+            print(f"DEBUG: Login realizado para usuário: {username} - SEM VARIÁVEIS GLOBAIS")
            
             session_token = criar_sessao(username, duracao_segundos=3600)
            
@@ -263,48 +255,46 @@ def api_login():
 
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
+    """LOGOUT SEGURO: Apenas invalidar token - sem variáveis globais"""
     try:
-        from models import limpar_sessoes_expiradas, SESSION_LOCK, clear_all_user_data
-        import threading
+        from models import limpar_sessoes_expiradas
         
         usuario_atual = get_usuario_atual()
         print(f"DEBUG: Logout iniciado para usuário: {usuario_atual}")
         
-        # 1. Invalidar sessão
+        # 1. Invalidar sessão (CRÍTICO)
         try:
             token = request.cookies.get('session_token')
             if token:
                 invalidar_sessao(token)
-                print("DEBUG: Sessão invalidada")
+                print("DEBUG: Sessão invalidada com sucesso")
+            else:
+                print("DEBUG: Nenhum token encontrado para invalidar")
         except Exception as e:
             print(f"DEBUG: Erro ao invalidar sessão: {e}")
         
-        # 2. LIMPEZA COMPLETA DE TODOS OS DADOS (CRÍTICO)
-        try:
-            clear_all_user_data()
-            print("DEBUG: Limpeza completa de dados realizada")
-        except Exception as e:
-            print(f"DEBUG: Erro na limpeza completa: {e}")
-        
-        # 3. Limpar sessões expiradas
+        # 2. Limpar sessões expiradas
         try:
             limpar_sessoes_expiradas()
             print("DEBUG: Sessões expiradas limpas")
         except Exception as e:
             print(f"DEBUG: Erro ao limpar sessões expiradas: {e}")
         
-        # 4. Criar resposta com headers anti-cache
+        # 3. Resposta segura
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
+        # Headers anti-cache
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
+        print("DEBUG: Logout concluído com sucesso")
         return response
+        
     except Exception as e:
-        print(f"Erro no logout: {e}")
-        # Mesmo com erro, tentar limpar o que for possível
+        print(f"DEBUG: Erro no logout: {e}")
+        # Mesmo com erro, invalidar token
         try:
             response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
             response.delete_cookie('session_token')

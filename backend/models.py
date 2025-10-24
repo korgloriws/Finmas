@@ -981,19 +981,10 @@ def delete_asset_type(nome: str):
     finally:
         conn.close()
 def set_usuario_atual(username):
-   
-    global USUARIO_ATUAL
-    with SESSION_LOCK:
-        USUARIO_ATUAL = username
-        
-        # Limpar cache do Flask g para garantir dados frescos
-        try:
-            from flask import g
-            if hasattr(g, "_usuario_atual_cached"):
-                delattr(g, "_usuario_atual_cached")
-            print(f"DEBUG: Cache Flask g limpo para usuário: {username}")
-        except Exception as e:
-            print(f"DEBUG: Erro ao limpar Flask g: {e}")
+    """DEPRECATED: Não usar mais - sistema agora funciona apenas com tokens de sessão"""
+    print(f"DEBUG: set_usuario_atual chamado para {username} - DEPRECATED")
+    # NÃO fazer nada - sistema agora funciona apenas com tokens
+    pass
 
 def _create_sessions_table_if_needed():
     if _is_postgres():
@@ -1095,7 +1086,8 @@ def invalidar_todas_sessoes() -> None:
         except Exception:
             pass
 def get_usuario_atual():
-    print("DEBUG: get_usuario_atual chamada")
+    """OBRIGATÓRIO: Sempre validar por token de sessão - SEM variáveis globais"""
+    print("DEBUG: get_usuario_atual chamada - VALIDAÇÃO POR TOKEN")
    
     try:
         from flask import request, g
@@ -1103,23 +1095,12 @@ def get_usuario_atual():
         request = None
         g = None
    
-    if g is not None:
-        try:
-            cached_user = getattr(g, "_usuario_atual_cached")
-            print(f"DEBUG: get_usuario_atual: Usuário em cache: {cached_user}")
-            return cached_user
-        except Exception:
-            pass
+    # SEMPRE validar por token - NUNCA usar cache global
     try:
         token = request.cookies.get('session_token') if request else None
         print(f"DEBUG: get_usuario_atual: Token encontrado: {bool(token)}")
         if not token:
             print("DEBUG: get_usuario_atual: Nenhum token encontrado")
-            if g is not None:
-                try:
-                    setattr(g, "_usuario_atual_cached", None)
-                except Exception:
-                    pass
             return None
         _create_sessions_table_if_needed()
         if _is_postgres():
@@ -1150,12 +1131,8 @@ def get_usuario_atual():
                             except Exception:
                                 pass
                         return None
-                    if g is not None:
-                        try:
-                            setattr(g, "_usuario_atual_cached", username)
-                        except Exception:
-                            pass
-                    print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
+                    # NÃO usar cache Flask g - sempre validar por token
+                    print(f"DEBUG: get_usuario_atual: Retornando usuário {username} - VALIDADO POR TOKEN")
                     return username
             finally:
                 try:
@@ -1191,12 +1168,8 @@ def get_usuario_atual():
                         except Exception:
                             pass
                     return None
-                if g is not None:
-                    try:
-                        setattr(g, "_usuario_atual_cached", username)
-                    except Exception:
-                        pass
-                print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
+                # NÃO usar cache Flask g - sempre validar por token
+                print(f"DEBUG: get_usuario_atual: Retornando usuário {username} - VALIDADO POR TOKEN")
                 return username
             finally:
                 conn.close()
