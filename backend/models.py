@@ -1280,41 +1280,18 @@ def _get_cache_config():
                 'CACHE_REDIS_URL': redis_url,
                 'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutos
                 'CACHE_KEY_PREFIX': 'finmas:',
-                'CACHE_REDIS_DB': 0,
-                'CACHE_REDIS_HOST': 'localhost',
-                'CACHE_REDIS_PORT': 6379,
-                'CACHE_REDIS_PASSWORD': None,
-                'CACHE_REDIS_DECODE_RESPONSES': True
+                'CACHE_REDIS_DB': 0
             }
     
     # Local: SimpleCache (mantém como está)
     return {'CACHE_TYPE': 'SimpleCache'}
 
-# Inicializar cache com tratamento de erro
-try:
-    cache = Cache(config=_get_cache_config())
-    # Testar conexão com cache em produção
-    if _is_production():
-        try:
-            cache.set('test_connection', 'ok', timeout=1)
-            cache.delete('test_connection')
-            print("Cache Redis conectado com sucesso")
-        except Exception as e:
-            print(f"Erro ao conectar com Redis: {e}")
-            # Fallback para SimpleCache se Redis falhar
-            cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
-            print("Usando SimpleCache como fallback")
-except Exception as e:
-    print(f"Erro ao inicializar cache: {e}")
-    # Fallback para SimpleCache
-    cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+cache = Cache(config=_get_cache_config())
 
 # ==================== CACHE HELPERS PARA DADOS INTERNOS ====================
 
 def _is_production():
     """Verifica se está em produção"""
-    if os.getenv('DISABLE_CACHE'):
-        return False  # Desabilitar cache se DISABLE_CACHE estiver definido
     return bool(os.getenv('DATABASE_URL')) or os.getenv('ENVIRONMENT') == 'production'
 
 def _cache_key(usuario, func_name, *args):
@@ -1338,23 +1315,14 @@ def cache_internal_data(timeout=300):
             if not cache_key:
                 return func(*args, **kwargs)
             
-            # Verificar cache com tratamento de erro
-            try:
-                cached = cache.get(cache_key)
-                if cached is not None:
-                    return cached
-            except Exception as e:
-                print(f"Erro ao verificar cache para {cache_key}: {e}")
-                # Continuar sem cache se houver erro
+            # Verificar cache
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
             
-            # Executar função e cachear resultado com tratamento de erro
+            # Executar função e cachear resultado
             result = func(*args, **kwargs)
-            try:
-                cache.set(cache_key, result, timeout=timeout)
-            except Exception as e:
-                print(f"Erro ao salvar no cache para {cache_key}: {e}")
-                # Continuar mesmo se cache falhar
-            
+            cache.set(cache_key, result, timeout=timeout)
             return result
         return wrapper
     return decorator
@@ -1365,36 +1333,22 @@ def invalidate_user_cache(usuario):
         return  # Local: não precisa invalidar
     
     try:
-        print(f"Invalidando cache para usuário: {usuario}")
-        
         # Invalidar cache específico do controle
         cache_keys_to_clear = [
             f"finmas:{usuario}:carregar_receitas_mes_ano:*",
             f"finmas:{usuario}:carregar_outros_mes_ano:*", 
             f"finmas:{usuario}:calcular_saldo_mes_ano:*",
-            f"finmas:{usuario}:obter_carteira:*",
-            f"finmas:{usuario}:obter_movimentacoes:*",
             f"controle_completo:{usuario}:*"
         ]
         
         for pattern in cache_keys_to_clear:
             try:
                 cache.delete_memoized_pattern(pattern)
-                print(f"Cache pattern invalidado: {pattern}")
-            except Exception as e:
-                print(f"Erro ao invalidar pattern {pattern}: {e}")
-        
-        # Limpar cache geral se for Redis
-        try:
-            if hasattr(cache, 'cache') and hasattr(cache.cache, 'clear'):
-                cache.cache.clear()
-                print("Cache Redis limpo completamente")
-        except Exception as e:
-            print(f"Erro ao limpar cache Redis: {e}")
+            except Exception:
+                pass
                 
-    except Exception as e:
-        print(f"Erro geral ao invalidar cache do usuário {usuario}: {e}")
-        # Não falhar se cache não funcionar
+    except Exception:
+        pass  # Falha silenciosa
 
 def invalidate_controle_cache(usuario, mes=None, ano=None):
     """Invalida cache específico do controle financeiro"""

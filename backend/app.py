@@ -3517,4 +3517,3 @@ def api_mercados_resumo():
 
 if __name__ == "__main__":
     server.run(debug=False, port=5005, host='0.0.0.0') 
-

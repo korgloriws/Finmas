@@ -47,11 +47,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (response.data.username) {
         setUser(response.data.username)
       } else {
+        // Se não há usuário, limpar todos os caches
         setUser(null)
+        queryClient.clear()
+        queryClient.invalidateQueries()
+        queryClient.removeQueries()
       }
     } catch (error) {
-   
+      // Em caso de erro, garantir limpeza completa
       setUser(null)
+      queryClient.clear()
+      queryClient.invalidateQueries()
+      queryClient.removeQueries()
     } finally {
       setLoading(false)
     }
@@ -59,17 +66,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const login = async (username: string, password: string) => {
     try {
+      // 1. Limpar qualquer cache residual antes do login
+      queryClient.clear()
+      queryClient.invalidateQueries()
+      queryClient.removeQueries()
+      
+      // 2. Fazer login
       const response = await api.post('/auth/login', {
         username,
         senha: password
       })
       
       if (response.data.username) {
+        // 3. Limpar caches novamente após login bem-sucedido
+        queryClient.clear()
+        
+        // 4. Definir novo usuário
         setUser(response.data.username)
       } else {
         throw new Error('Erro no login')
       }
     } catch (error: any) {
+      // Em caso de erro, garantir limpeza
+      queryClient.clear()
+      setUser(null)
+      
       if (error.response?.data?.error) {
         throw new Error(error.response.data.error)
       }
@@ -162,27 +183,52 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = async () => {
     try {
+      // 1. Fazer logout no backend
       await api.post('/auth/logout')
+      
+      // 2. Limpar estado do usuário
       setUser(null)
       
-      // Invalidar todo o cache do React Query para forçar recarregamento
+      // 3. Limpeza completa de todos os caches
+      // Limpar todo o cache do React Query
       queryClient.clear()
       
-      // Limpar cache específico de dados do usuário
-      queryClient.removeQueries({ queryKey: ['carteira'] })
-      queryClient.removeQueries({ queryKey: ['home-resumo'] })
-      queryClient.removeQueries({ queryKey: ['controle'] })
-      queryClient.removeQueries({ queryKey: ['cartoes-cadastrados'] })
-      queryClient.removeQueries({ queryKey: ['compras-cartao'] })
-      queryClient.removeQueries({ queryKey: ['total-compras-cartao'] })
+      // Invalidar todas as queries específicas
+      queryClient.invalidateQueries()
       
-      // Navegar para a tela de login sem recarregar a página
+      // Remover todas as queries do cache
+      queryClient.removeQueries()
+      
+      // Limpar cache do localStorage/sessionStorage se houver
+      try {
+        localStorage.removeItem('user')
+        localStorage.removeItem('carteira')
+        localStorage.removeItem('controle')
+        localStorage.removeItem('marmitas')
+        sessionStorage.clear()
+      } catch (e) {
+        // Falha silenciosa se não houver storage
+      }
+      
+      // 4. Navegar para login
       navigate('/login', { replace: true })
+      
     } catch (error) {
       console.error('Erro ao fazer logout:', error)
-      // Mesmo com erro, limpar o estado local
+      
+      // Mesmo com erro, fazer limpeza completa
       setUser(null)
       queryClient.clear()
+      queryClient.invalidateQueries()
+      queryClient.removeQueries()
+      
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+      } catch (e) {
+        // Falha silenciosa
+      }
+      
       navigate('/login', { replace: true })
     }
   }
