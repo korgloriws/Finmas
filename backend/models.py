@@ -1408,7 +1408,6 @@ def clear_all_user_data():
         print(f"DEBUG: Erro na limpeza completa: {e}")
         # Mesmo com erro, tentar limpar o básico
         try:
-            global global_state
             global_state.clear()
             global_state["df_ativos"] = None
             global_state["carregando"] = False
