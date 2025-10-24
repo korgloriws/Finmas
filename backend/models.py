@@ -981,10 +981,10 @@ def delete_asset_type(nome: str):
     finally:
         conn.close()
 def set_usuario_atual(username):
-    """DEPRECATED: Não usar mais - sistema agora funciona apenas com tokens de sessão"""
-    print(f"DEBUG: set_usuario_atual chamado para {username} - DEPRECATED")
-    # NÃO fazer nada - sistema agora funciona apenas com tokens
-    pass
+   
+    global USUARIO_ATUAL
+    with SESSION_LOCK:
+        USUARIO_ATUAL = username
 
 def _create_sessions_table_if_needed():
     if _is_postgres():
@@ -1086,8 +1086,7 @@ def invalidar_todas_sessoes() -> None:
         except Exception:
             pass
 def get_usuario_atual():
-    """OBRIGATÓRIO: Sempre validar por token de sessão - SEM variáveis globais"""
-    print("DEBUG: get_usuario_atual chamada - VALIDAÇÃO POR TOKEN")
+    print("DEBUG: get_usuario_atual chamada")
    
     try:
         from flask import request, g
@@ -1095,12 +1094,23 @@ def get_usuario_atual():
         request = None
         g = None
    
-    # SEMPRE validar por token - NUNCA usar cache global
+    if g is not None:
+        try:
+            cached_user = getattr(g, "_usuario_atual_cached")
+            print(f"DEBUG: get_usuario_atual: Usuário em cache: {cached_user}")
+            return cached_user
+        except Exception:
+            pass
     try:
         token = request.cookies.get('session_token') if request else None
         print(f"DEBUG: get_usuario_atual: Token encontrado: {bool(token)}")
         if not token:
             print("DEBUG: get_usuario_atual: Nenhum token encontrado")
+            if g is not None:
+                try:
+                    setattr(g, "_usuario_atual_cached", None)
+                except Exception:
+                    pass
             return None
         _create_sessions_table_if_needed()
         if _is_postgres():
@@ -1131,8 +1141,12 @@ def get_usuario_atual():
                             except Exception:
                                 pass
                         return None
-                    # NÃO usar cache Flask g - sempre validar por token
-                    print(f"DEBUG: get_usuario_atual: Retornando usuário {username} - VALIDADO POR TOKEN")
+                    if g is not None:
+                        try:
+                            setattr(g, "_usuario_atual_cached", username)
+                        except Exception:
+                            pass
+                    print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
                     return username
             finally:
                 try:
@@ -1168,14 +1182,37 @@ def get_usuario_atual():
                         except Exception:
                             pass
                     return None
-                # NÃO usar cache Flask g - sempre validar por token
-                print(f"DEBUG: get_usuario_atual: Retornando usuário {username} - VALIDADO POR TOKEN")
+                if g is not None:
+                    try:
+                        setattr(g, "_usuario_atual_cached", username)
+                    except Exception:
+                        pass
+                print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
                 return username
             finally:
                 conn.close()
     except Exception as e:
         print(f"DEBUG: get_usuario_atual: Exceção: {e}")
         return None
+
+def verify_user_access(required_user=None):
+    """Verifica se o usuário atual tem acesso aos dados - SEGURANÇA CRÍTICA"""
+    try:
+        current_user = get_usuario_atual()
+        if not current_user:
+            print("SECURITY: Nenhum usuário autenticado")
+            return False
+            
+        if required_user and current_user != required_user:
+            print(f"SECURITY: Tentativa de acesso não autorizado - Usuário atual: {current_user}, Requerido: {required_user}")
+            # Limpar cache em caso de tentativa de acesso não autorizado
+            emergency_cache_clear()
+            return False
+            
+        return True
+    except Exception as e:
+        print(f"SECURITY: Erro na verificação de acesso: {e}")
+        return False
 
 def limpar_sessoes_expiradas():
     try:
@@ -1332,87 +1369,6 @@ def invalidate_user_cache(usuario):
     except Exception:
         pass  # Falha silenciosa
 
-def clear_all_user_data():
-    """Limpa TODOS os dados de usuário - função crítica para logout"""
-    try:
-        # 1. Limpar global_state
-        global global_state
-        global_state.clear()
-        global_state["df_ativos"] = None
-        global_state["carregando"] = False
-        print("DEBUG: global_state limpo")
-        
-        # 2. Limpar cache Flask g
-        try:
-            from flask import g
-            if hasattr(g, "_usuario_atual_cached"):
-                delattr(g, "_usuario_atual_cached")
-            print("DEBUG: Cache Flask g limpo")
-        except Exception as e:
-            print(f"DEBUG: Erro ao limpar Flask g: {e}")
-        
-        # 3. Limpar cache Redis/Flask-Caching
-        if cache:
-            try:
-                cache.clear()
-                print("DEBUG: Cache Flask-Caching limpo")
-            except Exception as e:
-                print(f"DEBUG: Erro ao limpar cache Flask-Caching: {e}")
-        
-        # 4. Limpar Redis diretamente se disponível
-        try:
-            import redis
-            redis_url = os.getenv('REDIS_URL')
-            if redis_url:
-                r = redis.from_url(redis_url)
-                r.flushdb()
-                print("DEBUG: Redis limpo completamente")
-        except Exception as redis_error:
-            print(f"DEBUG: Redis não disponível: {redis_error}")
-        
-        # 5. Limpar variáveis globais
-        global USUARIO_ATUAL
-        USUARIO_ATUAL = None
-        print("DEBUG: USUARIO_ATUAL limpo")
-        
-        print("DEBUG: Limpeza completa de dados de usuário realizada")
-        
-    except Exception as e:
-        print(f"DEBUG: Erro na limpeza completa: {e}")
-        # Mesmo com erro, tentar limpar o básico
-        try:
-            global_state.clear()
-            global_state["df_ativos"] = None
-            global_state["carregando"] = False
-        except Exception:
-            pass
-
-def force_clear_user_context():
-    """Força limpeza do contexto do usuário - função de emergência"""
-    try:
-        # Limpar global_state
-        global global_state
-        global_state.clear()
-        global_state["df_ativos"] = None
-        global_state["carregando"] = False
-        
-        # Limpar variáveis globais
-        global USUARIO_ATUAL
-        USUARIO_ATUAL = None
-        
-        # Limpar cache Flask g
-        try:
-            from flask import g
-            if hasattr(g, "_usuario_atual_cached"):
-                delattr(g, "_usuario_atual_cached")
-        except Exception:
-            pass
-        
-        print("DEBUG: Contexto do usuário forçadamente limpo")
-        
-    except Exception as e:
-        print(f"DEBUG: Erro na limpeza forçada: {e}")
-
 def invalidate_controle_cache(usuario, mes=None, ano=None):
     """Invalida cache específico do controle financeiro"""
     if not _is_production():
@@ -1440,6 +1396,48 @@ def invalidate_controle_cache(usuario, mes=None, ano=None):
                 
     except Exception:
         pass
+
+def emergency_cache_clear():
+    """Limpeza de emergência do cache - SEGURANÇA MÁXIMA"""
+    try:
+        if cache:
+            # Limpar cache geral
+            cache.clear()
+            print("EMERGENCY: Cache geral limpo")
+            
+            # Tentar limpar Redis diretamente
+            try:
+                import redis
+                redis_url = os.getenv('REDIS_URL')
+                if redis_url:
+                    r = redis.from_url(redis_url)
+                    r.flushdb()
+                    print("EMERGENCY: Cache Redis limpo")
+            except Exception:
+                pass
+                
+        print("EMERGENCY: Limpeza de emergência concluída")
+    except Exception as e:
+        print(f"EMERGENCY: Erro na limpeza de emergência: {e}")
+
+def force_user_isolation():
+    """Força isolamento completo entre usuários - LIMPEZA TOTAL"""
+    try:
+        # Limpar estado global
+        set_usuario_atual(None)
+        
+        # Limpeza de emergência do cache
+        emergency_cache_clear()
+        
+        # Limpar sessões
+        try:
+            limpar_sessoes_expiradas()
+        except Exception:
+            pass
+            
+        print("ISOLATION: Isolamento forçado entre usuários")
+    except Exception as e:
+        print(f"ISOLATION: Erro no isolamento forçado: {e}")
 
 global_state = {"df_ativos": None, "carregando": False}
 
@@ -6562,3 +6560,4 @@ def executar_monte_carlo(n_simulacoes=10000, periodo_anos=5, confianca=95):
     except Exception as e:
         print(f"Erro na simulação Monte Carlo: {e}")
         return {"error": str(e)}
+

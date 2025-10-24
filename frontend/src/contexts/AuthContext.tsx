@@ -162,20 +162,66 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = async () => {
     try {
+      // Limpeza agressiva do cache do navegador
+      try {
+        // Limpar localStorage
+        localStorage.clear()
+        
+        // Limpar sessionStorage
+        sessionStorage.clear()
+        
+        // Limpar cache do navegador se possível
+        if ('caches' in window) {
+          const cacheNames = await caches.keys()
+          await Promise.all(
+            cacheNames.map(cacheName => caches.delete(cacheName))
+          )
+        }
+      } catch (cacheError) {
+        console.warn('Erro ao limpar cache do navegador:', cacheError)
+      }
+      
+      // Fazer logout no backend
       await api.post('/auth/logout')
       setUser(null)
       
       // Invalidar todo o cache do React Query para forçar recarregamento
       queryClient.clear()
       
+      // Limpar todos os dados do React Query
+      queryClient.removeQueries()
+      queryClient.invalidateQueries()
+      
       // Navegar para a tela de login sem recarregar a página
       navigate('/login', { replace: true })
+      
+      // Forçar reload da página para garantir limpeza completa
+      setTimeout(() => {
+        window.location.reload()
+      }, 100)
+      
     } catch (error) {
       console.error('Erro ao fazer logout:', error)
       // Mesmo com erro, limpar o estado local
       setUser(null)
       queryClient.clear()
+      queryClient.removeQueries()
+      queryClient.invalidateQueries()
+      
+      // Limpar storage local
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+      } catch (storageError) {
+        console.warn('Erro ao limpar storage:', storageError)
+      }
+      
       navigate('/login', { replace: true })
+      
+      // Forçar reload da página
+      setTimeout(() => {
+        window.location.reload()
+      }, 100)
     }
   }
 

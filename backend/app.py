@@ -27,7 +27,7 @@ from models import (
     set_usuario_atual, get_usuario_atual, inicializar_bancos_usuario, criar_sessao, invalidar_sessao,
 
     verificar_resposta_seguranca, alterar_senha_direta, atualizar_pergunta_seguranca,
-    invalidar_todas_sessoes, clear_all_user_data, force_clear_user_context,
+    invalidar_todas_sessoes,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -201,8 +201,28 @@ def api_login():
                 pass
             
 
-            # SISTEMA SEGURO: Não usar variáveis globais - apenas tokens de sessão
-            print(f"DEBUG: Login realizado para usuário: {username} - SEM VARIÁVEIS GLOBAIS")
+            set_usuario_atual(username)
+            
+            # CRÍTICO: Limpar cache de usuários anteriores para evitar dados residuais
+            try:
+                if cache:
+                    # Limpeza agressiva do cache
+                    cache.clear()
+                    print(f"LOGIN: Cache limpo no login para usuário: {username}")
+                    
+                    # Limpeza adicional do Redis se disponível
+                    try:
+                        import redis
+                        redis_url = os.getenv('REDIS_URL')
+                        if redis_url:
+                            r = redis.from_url(redis_url)
+                            r.flushdb()  # Limpar todo o banco Redis
+                            print(f"LOGIN: Cache Redis limpo para usuário: {username}")
+                    except Exception as redis_error:
+                        print(f"LOGIN: Redis não disponível ou erro: {redis_error}")
+                        
+            except Exception as e:
+                print(f"LOGIN: Erro ao limpar cache no login: {e}")
            
             session_token = criar_sessao(username, duracao_segundos=3600)
            
@@ -255,46 +275,68 @@ def api_login():
 
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
-    """LOGOUT SEGURO: Apenas invalidar token - sem variáveis globais"""
     try:
-        from models import limpar_sessoes_expiradas
+        from models import limpar_sessoes_expiradas, SESSION_LOCK, invalidate_user_cache
+        import threading
         
         usuario_atual = get_usuario_atual()
-        print(f"DEBUG: Logout iniciado para usuário: {usuario_atual}")
         
-        # 1. Invalidar sessão (CRÍTICO)
         try:
             token = request.cookies.get('session_token')
             if token:
                 invalidar_sessao(token)
-                print("DEBUG: Sessão invalidada com sucesso")
-            else:
-                print("DEBUG: Nenhum token encontrado para invalidar")
         except Exception as e:
-            print(f"DEBUG: Erro ao invalidar sessão: {e}")
+            print(f"Erro ao invalidar sessão: {e}")
         
-        # 2. Limpar sessões expiradas
+        if usuario_atual:
+            try:
+                invalidate_user_cache(usuario_atual)
+                print(f"Cache limpo para usuário: {usuario_atual}")
+            except Exception as e:
+                print(f"Erro ao limpar cache do usuário {usuario_atual}: {e}")
+        
+        # Limpeza mais agressiva do cache
+        try:
+            if cache:
+                # Limpar cache geral
+                cache.clear()
+                print("Cache geral limpo")
+                
+                # Limpar cache específico do Flask-Caching
+                if hasattr(cache, 'clear'):
+                    cache.clear()
+                    print("Cache Flask-Caching limpo")
+                
+                # Tentar limpar cache Redis diretamente se disponível
+                try:
+                    import redis
+                    redis_url = os.getenv('REDIS_URL')
+                    if redis_url:
+                        r = redis.from_url(redis_url)
+                        r.flushdb()  # Limpar todo o banco Redis
+                        print("Cache Redis limpo completamente")
+                except Exception as redis_error:
+                    print(f"Redis não disponível ou erro: {redis_error}")
+                    
+        except Exception as e:
+            print(f"Erro ao limpar cache geral: {e}")
+        
         try:
             limpar_sessoes_expiradas()
-            print("DEBUG: Sessões expiradas limpas")
         except Exception as e:
-            print(f"DEBUG: Erro ao limpar sessões expiradas: {e}")
+            print(f"Erro ao limpar sessões expiradas: {e}")
         
-        # 3. Resposta segura
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
-        # Headers anti-cache
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
-        print("DEBUG: Logout concluído com sucesso")
         return response
-        
     except Exception as e:
-        print(f"DEBUG: Erro no logout: {e}")
-        # Mesmo com erro, invalidar token
+        print(f"Erro no logout: {e}")
+        # Mesmo com erro, tentar limpar o que for possível
         try:
             response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
             response.delete_cookie('session_token')
@@ -302,23 +344,8 @@ def api_logout():
         except Exception:
             return jsonify({"error": str(e)}), 500
 
-@server.route("/api/auth/clear-cache", methods=["POST"])
-def api_clear_cache():
-    """Rota de emergência para limpar cache - apenas para debug"""
-    try:
-        from models import clear_all_user_data, force_clear_user_context
-        
-        # Limpeza completa
-        clear_all_user_data()
-        force_clear_user_context()
-        
-        return jsonify({"message": "Cache limpo com sucesso"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @server.route("/api/auth/usuario-atual", methods=["GET"])
 def api_usuario_atual():
-
     try:
         usuario = get_usuario_atual()
         if usuario:
@@ -326,6 +353,23 @@ def api_usuario_atual():
         else:
             return jsonify({"error": "Nenhum usuário logado"}), 401
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/emergency/clear-cache", methods=["POST"])
+def api_emergency_clear_cache():
+    """Endpoint de emergência para limpar todo o cache - SEGURANÇA CRÍTICA"""
+    try:
+        from models import emergency_cache_clear, force_user_isolation
+        
+        # Limpeza de emergência completa
+        emergency_cache_clear()
+        force_user_isolation()
+        
+        print("EMERGENCY: Limpeza de emergência executada")
+        return jsonify({"message": "Cache limpo com sucesso", "timestamp": datetime.now().isoformat()}), 200
+        
+    except Exception as e:
+        print(f"EMERGENCY: Erro na limpeza de emergência: {e}")
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/auth/debug-bancos", methods=["GET"])
