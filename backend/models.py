@@ -1086,6 +1086,7 @@ def invalidar_todas_sessoes() -> None:
         except Exception:
             pass
 def get_usuario_atual():
+    """Obtém usuário atual SEM CACHE DE SESSÃO - SEGURANÇA CRÍTICA"""
     print("DEBUG: get_usuario_atual chamada")
    
     try:
@@ -1094,23 +1095,14 @@ def get_usuario_atual():
         request = None
         g = None
    
-    if g is not None:
-        try:
-            cached_user = getattr(g, "_usuario_atual_cached")
-            print(f"DEBUG: get_usuario_atual: Usuário em cache: {cached_user}")
-            return cached_user
-        except Exception:
-            pass
+    # SEM CACHE DE SESSÃO - Buscar sempre do banco
+    # REMOVIDO: Cache do Flask g para evitar vazamento entre usuários
+    
     try:
         token = request.cookies.get('session_token') if request else None
         print(f"DEBUG: get_usuario_atual: Token encontrado: {bool(token)}")
         if not token:
             print("DEBUG: get_usuario_atual: Nenhum token encontrado")
-            if g is not None:
-                try:
-                    setattr(g, "_usuario_atual_cached", None)
-                except Exception:
-                    pass
             return None
         _create_sessions_table_if_needed()
         if _is_postgres():
@@ -1121,11 +1113,7 @@ def get_usuario_atual():
                     row = c.fetchone()
                     if not row:
                         print("DEBUG: get_usuario_atual: Token não encontrado no banco")
-                        if g is not None:
-                            try:
-                                setattr(g, "_usuario_atual_cached", None)
-                            except Exception:
-                                pass
+                        # SEM CACHE - Não cachear nada
                         return None
                     username, expira_em = row
                     print(f"DEBUG: get_usuario_atual: Token encontrado para usuário {username}, expira em {expira_em}")
@@ -1135,17 +1123,9 @@ def get_usuario_atual():
                             c.execute('DELETE FROM public.sessoes WHERE token = %s', (token,))
                         except Exception:
                             pass
-                        if g is not None:
-                            try:
-                                setattr(g, "_usuario_atual_cached", None)
-                            except Exception:
-                                pass
+                        # SEM CACHE - Não cachear nada
                         return None
-                    if g is not None:
-                        try:
-                            setattr(g, "_usuario_atual_cached", username)
-                        except Exception:
-                            pass
+                    # SEM CACHE - Não cachear o usuário em Flask g (CRÍTICO)
                     print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
                     return username
             finally:
@@ -1161,11 +1141,7 @@ def get_usuario_atual():
                 row = c.fetchone()
                 if not row:
                     print("DEBUG: get_usuario_atual: Token não encontrado no banco SQLite")
-                    if g is not None:
-                        try:
-                            setattr(g, "_usuario_atual_cached", None)
-                        except Exception:
-                            pass
+                    # SEM CACHE - Não cachear nada
                     return None
                 username, expira_em = row
                 print(f"DEBUG: get_usuario_atual: Token encontrado para usuário {username}, expira em {expira_em}")
@@ -1176,17 +1152,9 @@ def get_usuario_atual():
                         conn.commit()
                     except Exception:
                         pass
-                    if g is not None:
-                        try:
-                            setattr(g, "_usuario_atual_cached", None)
-                        except Exception:
-                            pass
+                    # SEM CACHE - Não cachear nada
                     return None
-                if g is not None:
-                    try:
-                        setattr(g, "_usuario_atual_cached", username)
-                    except Exception:
-                        pass
+                # SEM CACHE - Não cachear o usuário em Flask g (CRÍTICO)
                 print(f"DEBUG: get_usuario_atual: Retornando usuário {username}")
                 return username
             finally:
@@ -1320,29 +1288,11 @@ def _cache_key(usuario, func_name, *args):
     return f"finmas:{usuario}:{func_name}:{hash(str(args))}"
 
 def cache_internal_data(timeout=300):
-    """Decorator para cache de dados internos (só em produção)"""
+    """Decorator DESABILITADO - SEM CACHE - SEGURANÇA CRÍTICA"""
     def decorator(func):
         def wrapper(*args, **kwargs):
-            if not _is_production():
-                return func(*args, **kwargs)  # Local: sem cache
-            
-            usuario = get_usuario_atual()
-            if not usuario:
-                return func(*args, **kwargs)
-            
-            cache_key = _cache_key(usuario, func.__name__, args, kwargs)
-            if not cache_key:
-                return func(*args, **kwargs)
-            
-            # Verificar cache
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return cached
-            
-            # Executar função e cachear resultado
-            result = func(*args, **kwargs)
-            cache.set(cache_key, result, timeout=timeout)
-            return result
+            # SEM CACHE - Executar função sempre direto
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
@@ -1477,8 +1427,8 @@ def carregar_ativos():
         print(f" Erro no carregamento dos ativos: {e}")
 
 
-@cache.memoize(timeout=1800)  # Cache de 30 minutos para preços históricos
 def obter_preco_historico(ticker, data, max_retentativas=3):
+    """Obter preço histórico SEM CACHE - SEGURANÇA CRÍTICA"""
 
     def to_float_or_none(valor):
         try:
@@ -2250,8 +2200,8 @@ def _normalize_ticker_for_yf(ticker: str) -> str:
     except Exception:
         return (ticker or "").upper()
 
-@cache.memoize(timeout=300)  # Cache de 5 minutos para preços individuais
 def obter_informacoes_ativo(ticker):
+    """Obter informações do ativo SEM CACHE - SEGURANÇA CRÍTICA"""
 
     try:
        
@@ -2628,8 +2578,8 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         print(f"Erro ao calcular preço com indexador: {e}")
         return preco_inicial
 
-@cache.memoize(timeout=300)  # Cache de 5 minutos para taxa USD/BRL
 def obter_taxa_usd_brl():
+    """Obter taxa USD/BRL SEM CACHE - SEGURANÇA CRÍTICA"""
     """
     Obtém a taxa de câmbio USD/BRL em tempo real
     Retorna o valor de 1 USD em BRL
@@ -3853,8 +3803,8 @@ def obter_carteira_com_metadados_fii():
         print(f"Erro ao obter carteira com metadados: {e}")
         return []
 
-@cache_internal_data(timeout=180)  # 3 minutos de cache (dados mais dinâmicos)
 def obter_carteira():
+    """Obter carteira SEM CACHE - SEGURANÇA CRÍTICA"""
 
     try:
         usuario = get_usuario_atual()
@@ -4279,8 +4229,8 @@ def registrar_movimentacao(data, ticker, nome_completo, quantidade, preco, tipo,
             pass
         return {"success": False, "message": f"Erro ao registrar movimentação: {str(e)}"}
 
-@cache_internal_data(timeout=300)  # 5 minutos de cache
 def obter_movimentacoes(mes=None, ano=None):
+    """Obter movimentações SEM CACHE - SEGURANÇA CRÍTICA"""
 
     try:
         usuario = get_usuario_atual()
@@ -5272,8 +5222,8 @@ def remover_receita(id_registro):
     """Remover receita - wrapper para compatibilidade"""
     return _remover_registro_generico("receitas", id_registro, "controle")
 
-@cache_internal_data(timeout=300)  # 5 minutos de cache
 def carregar_receitas_mes_ano(mes, ano, pessoa=None):
+    """Carregar receitas SEM CACHE - SEGURANÇA CRÍTICA"""
    
     usuario = get_usuario_atual()
     if not usuario:
@@ -5494,8 +5444,8 @@ def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, rec
     conn.commit()
     conn.close()
 
-@cache_internal_data(timeout=300)  # 5 minutos de cache
 def carregar_outros_mes_ano(mes, ano):
+    """Carregar outros gastos SEM CACHE - SEGURANÇA CRÍTICA"""
     
     usuario = get_usuario_atual()
     if not usuario:
@@ -5823,8 +5773,8 @@ def inicializar_bancos_usuario(usuario):
     init_controle_db(usuario)
     init_marmitas_db(usuario)
 
-@cache_internal_data(timeout=300)  # 5 minutos de cache
 def calcular_saldo_mes_ano(mes, ano, pessoa=None):
+    """Calcular saldo SEM CACHE - SEGURANÇA CRÍTICA"""
     
     usuario = get_usuario_atual()
     if not usuario:

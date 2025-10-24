@@ -997,8 +997,8 @@ def api_get_ativo_details(ticker):
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/fii-metadata/<ticker>", methods=["GET"])
-@cache.cached(timeout=3600, query_string=True)  # Cache de 1 hora
 def api_get_fii_metadata(ticker):
+    """API de metadados FII SEM CACHE - SEGURANÇA CRÍTICA"""
 
     try:
         ticker = ticker.strip().upper()
@@ -1221,33 +1221,25 @@ def serve_frontend(path):
 
 @server.route("/api/carteira", methods=["GET"])
 def api_get_carteira():
-    
+    """API de carteira SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         refresh = request.args.get('refresh') in ('1', 'true', 'True')
    
         usuario_atual = get_usuario_atual()
+        
+        if not usuario_atual:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+            
         print(f"DEBUG - Carteira: Usuário atual = {usuario_atual}")
        
         if refresh:
             try:
                 atualizar_precos_indicadores_carteira()
-                if usuario_atual and cache:
-                    cache.delete(f"carteira:{usuario_atual}")
-                    cache.delete(f"carteira_insights:{usuario_atual}")
             except Exception as _:
                 pass
 
-        cache_key = f"carteira:{usuario_atual}" if (usuario_atual and not refresh) else None
-        if cache_key and cache:
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return jsonify(cached)
+        # SEM CACHE - Buscar sempre direto do banco
         carteira = obter_carteira()
-        if cache_key and cache:
-            try:
-                cache.set(cache_key, carteira, timeout=600)  # 10 minutos
-            except Exception:
-                pass
         return jsonify(carteira)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1323,15 +1315,11 @@ def api_refresh_indexadores():
 
 @server.route("/api/carteira/insights", methods=["GET"])
 def api_carteira_insights():
+    """API de insights SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         usuario_atual = get_usuario_atual()
         if not usuario_atual:
             return jsonify({"error": "Não autenticado"}), 401
-        cache_key = f"carteira_insights:{usuario_atual}"
-        if cache:
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return jsonify(cached)
 
         itens = obter_carteira() or []
         total_investido = float(sum((it.get('valor_total') or 0.0) for it in itens)) if itens else 0.0
@@ -1459,11 +1447,7 @@ def api_carteira_insights():
             }
         }
 
-        if cache:
-            try:
-                cache.set(cache_key, payload, timeout=900)  # 15 minutos
-            except Exception:
-                pass
+        # SEM CACHE - Retornar dados direto do banco
         return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1855,24 +1839,17 @@ def api_atualizar_ativo(id):
 
 @server.route("/api/carteira/movimentacoes", methods=["GET"])
 def api_get_movimentacoes():
-
+    """API de movimentações SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         mes = request.args.get('mes', type=int)
         ano = request.args.get('ano', type=int)
         
         usuario_atual = get_usuario_atual()
-        cache_key = None
-        if cache and usuario_atual:
-            cache_key = f"movimentacoes:{usuario_atual}:{mes or ''}:{ano or ''}"
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return jsonify(cached)
+        if not usuario_atual:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+        
+        # SEM CACHE - Buscar sempre direto do banco
         movimentacoes = obter_movimentacoes(mes, ano)
-        if cache and cache_key:
-            try:
-                cache.set(cache_key, movimentacoes, timeout=600)  # 10 minutos
-            except Exception:
-                pass
         return jsonify(movimentacoes)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2036,15 +2013,9 @@ def api_teste_indexador():
 
 @server.route("/api/tesouro/titulos", methods=["GET"])
 def api_tesouro_titulos():
+    """API de Tesouro Direto SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
-        # Cache curto para evitar excesso de chamadas
-        try:
-            if cache:
-                cached = cache.get("tesouro_titulos")
-                if cached is not None:
-                    return jsonify(cached)
-        except Exception:
-            pass
+        # SEM CACHE - Buscar sempre dados atualizados
 
         url = "https://www.tesourodireto.com.br/json/consulta/PrecoTaxaTitulo.json"
         headers = {
@@ -2158,11 +2129,7 @@ def api_tesouro_titulos():
                 titulos.append(item)
 
         payload = {"titulos": titulos}
-        try:
-            if cache:
-                cache.set("tesouro_titulos", payload, timeout=60)
-        except Exception:
-            pass
+        # SEM CACHE - Retornar dados sempre atualizados
         return jsonify(payload)
     except Exception as e:
         try:
@@ -2176,31 +2143,14 @@ def api_tesouro_titulos():
 
 @server.route("/api/tesouro-direto/titulos", methods=["GET"])
 def api_tesouro_direto_titulos():
-    """
-    Nova API para títulos do Tesouro Direto usando tesouro-direto-br
-    """
+    """API de Tesouro Direto SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
-        # Cache para evitar chamadas excessivas
-        try:
-            if cache:
-                cached = cache.get("tesouro_direto_titulos")
-                if cached is not None:
-                    return jsonify(cached)
-        except Exception:
-            pass
-
-        # Importar e usar a nova API
+        # SEM CACHE - Buscar sempre dados atualizados
         from tesouro_direto_api import obter_titulos_tesouro_direto
         
         resultado = obter_titulos_tesouro_direto()
         
-        # Cache por 1 hora (dados são atualizados apenas em dias úteis)
-        try:
-            if cache:
-                cache.set("tesouro_direto_titulos", resultado, timeout=3600)
-        except Exception:
-            pass
-            
+        # SEM CACHE - Retornar dados sempre atualizados
         return jsonify(resultado)
         
     except Exception as e:
@@ -2464,41 +2414,31 @@ def api_get_proventos_recebidos():
 
 @server.route("/api/marmitas", methods=["GET"])
 def api_get_marmitas():
-  
+    """API de marmitas SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         mes = request.args.get('mes', type=int)
         ano = request.args.get('ano', type=int)
         
         usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+            
         mes_key = str(mes).zfill(2) if mes else ''
         ano_key = str(ano) if ano else ''
-        cache_key = None
-        if cache and usuario:
-            cache_key = f"marmitas:{usuario}:{mes_key}:{ano_key}"
-            cached = cache.get(cache_key)
-            if cached is not None:
-                registros = cached
-            else:
-                registros = consultar_marmitas(mes_key or None, ano_key or None)
-        else:
-            registros = consultar_marmitas(mes_key or None, ano_key or None)
         
-
+        # SEM CACHE - Buscar sempre direto do banco
+        registros = consultar_marmitas(mes_key or None, ano_key or None)
+        
         marmitas = []
         for registro in registros:
             marmitas.append({
                 'id': registro[0],
-                
                 'data': str(registro[1])[:10] if registro and len(str(registro[1])) >= 10 else str(registro[1]),
                 'valor': float(registro[2]) if registro[2] else 0,
                 'comprou': bool(registro[3])
             })
         
-        if cache and cache_key:
-            try:
-                cache.set(cache_key, registros, timeout=30)
-            except Exception:
-                pass
+        # SEM CACHE - Retornar dados direto do banco
         return jsonify(marmitas)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2566,17 +2506,15 @@ def api_remover_marmita(id):
 
 @server.route("/api/marmitas/gastos-mensais", methods=["GET"])
 def api_get_gastos_mensais():
-
+    """API de gastos mensais SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         periodo = request.args.get('periodo', '6m')
         
         usuario = get_usuario_atual()
-        cache_key = None
-        if cache and usuario:
-            cache_key = f"marmitas_gastos:{usuario}:{periodo}"
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return jsonify(cached)
+        if not usuario:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+        
+        # SEM CACHE - Buscar sempre direto do banco
         df_gastos = gastos_mensais(periodo)
         
         gastos = []
@@ -2586,11 +2524,7 @@ def api_get_gastos_mensais():
                 'valor': float(row['valor'])
             })
         
-        if cache and cache_key:
-            try:
-                cache.set(cache_key, gastos, timeout=30)
-            except Exception:
-                pass
+        # SEM CACHE - Retornar dados direto do banco
         return jsonify(gastos)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2670,19 +2604,12 @@ def api_receitas():
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
             usuario = get_usuario_atual()
-            cache_key = None
-            if cache and usuario:
-                cache_key = f"receitas:{usuario}:{mes or ''}:{ano or ''}"
-                cached = cache.get(cache_key)
-                if cached is not None:
-                    return jsonify(cached)
+            if not usuario:
+                return jsonify({"error": "Usuário não autenticado"}), 401
+            
+            # SEM CACHE - Buscar sempre direto do banco
             receitas = carregar_receitas_mes_ano(mes, ano)
             payload = receitas.to_dict('records') if not receitas.empty else []
-            if cache and cache_key:
-                try:
-                    cache.set(cache_key, payload, timeout=30)
-                except Exception:
-                    pass
             return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2762,17 +2689,10 @@ def api_outros():
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
             usuario = get_usuario_atual()
-            if cache and usuario:
-                key = f"outros:{usuario}:{mes or ''}:{ano or ''}"
-                cached = cache.get(key)
-                if cached is not None:
-                    return jsonify(cached)
-                outros = carregar_outros_mes_ano(mes, ano)
-                try:
-                    cache.set(key, outros, timeout=30)
-                except Exception:
-                    pass
-                return jsonify(outros)
+            if not usuario:
+                return jsonify({"error": "Usuário não autenticado"}), 401
+            
+            # SEM CACHE - Buscar sempre direto do banco
             outros = carregar_outros_mes_ano(mes, ano)
             return jsonify(outros)
     except Exception as e:
@@ -2780,23 +2700,17 @@ def api_outros():
 
 @server.route("/api/controle/saldo", methods=["GET"])
 def api_saldo():
-
+    """API de saldo SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         mes = request.args.get('mes', type=str)
         ano = request.args.get('ano', type=str)
         
         usuario = get_usuario_atual()
-        if cache and usuario:
-            key = f"saldo:{usuario}:{mes or ''}:{ano or ''}"
-            cached = cache.get(key)
-            if cached is not None:
-                return jsonify({"saldo": cached})
+        if not usuario:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+        
+        # SEM CACHE - Buscar sempre direto do banco
         saldo = calcular_saldo_mes_ano(mes, ano)
-        if cache and usuario:
-            try:
-                cache.set(key, saldo, timeout=30)
-            except Exception:
-                pass
         return jsonify({"saldo": saldo})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2913,18 +2827,16 @@ def api_evolucao_receitas():
 
 @server.route("/api/controle/receitas-despesas", methods=["GET"])
 def api_receitas_despesas():
-   
+    """API de receitas/despesas SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
         mes = request.args.get('mes', type=str)
         ano = request.args.get('ano', type=str)
         
-       
         usuario = get_usuario_atual()
-        if cache and usuario:
-            key = f"receitas_despesas:{usuario}:{mes or ''}:{ano or ''}"
-            cached = cache.get(key)
-            if cached is not None:
-                return jsonify(cached)
+        if not usuario:
+            return jsonify({"error": "Usuário não autenticado"}), 401
+        
+        # SEM CACHE - Buscar sempre direto do banco
         df_receita = carregar_receitas_mes_ano(mes, ano)
         df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano))
         
@@ -2938,32 +2850,16 @@ def api_receitas_despesas():
             "receitas": float(total_receita),
             "despesas": float(despesas)
         }
-        if cache and usuario:
-            try:
-                cache.set(key, payload, timeout=30)
-            except Exception:
-                pass
+        
+        # SEM CACHE - Retornar dados direto do banco
         return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/home/resumo", methods=["GET"])
 def api_home_resumo():
-
+    """API de resumo home SEM CACHE - SEGURANÇA CRÍTICA"""
     try:
-       
-        def _cache_key():
-            try:
-                user = get_usuario_atual() or 'anon'
-            except Exception:
-                user = 'anon'
-            mes_q = request.args.get('mes', type=str) or ''
-            ano_q = request.args.get('ano', type=str) or ''
-            return f"home_resumo:{user}:{mes_q}:{ano_q}"
-        if cache:
-            cached_payload = cache.get(_cache_key())
-            if cached_payload is not None:
-                return jsonify(cached_payload)
         mes = request.args.get('mes', type=str)
         ano = request.args.get('ano', type=str)
        
@@ -3097,14 +2993,7 @@ def api_home_resumo():
             'total_despesas': total_outros + total_marmitas
         }
         
-
-        
-
-        try:
-            if cache:
-                cache.set(_cache_key(), resumo, timeout=60)
-        except Exception:
-            pass
+        # SEM CACHE - Retornar dados direto do banco
         return jsonify(resumo)
     except Exception as e:
         print(f"Erro na API home/resumo: {str(e)}")
