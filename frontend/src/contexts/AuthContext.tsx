@@ -47,18 +47,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (response.data.username) {
         setUser(response.data.username)
       } else {
-        // Se não há usuário, limpar todos os caches
         setUser(null)
-        queryClient.clear()
-        queryClient.invalidateQueries()
-        queryClient.removeQueries()
       }
     } catch (error) {
-      // Em caso de erro, garantir limpeza completa
+   
       setUser(null)
-      queryClient.clear()
-      queryClient.invalidateQueries()
-      queryClient.removeQueries()
     } finally {
       setLoading(false)
     }
@@ -66,31 +59,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const login = async (username: string, password: string) => {
     try {
-    
-      queryClient.clear()
-      queryClient.invalidateQueries()
-      queryClient.removeQueries()
-      
-
       const response = await api.post('/auth/login', {
         username,
         senha: password
       })
       
       if (response.data.username) {
-     
-        queryClient.clear()
-        
-
         setUser(response.data.username)
       } else {
         throw new Error('Erro no login')
       }
     } catch (error: any) {
-    
-      queryClient.clear()
-      setUser(null)
-      
       if (error.response?.data?.error) {
         throw new Error(error.response.data.error)
       }
@@ -183,52 +162,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = async () => {
     try {
-      // 1. Fazer logout no backend
       await api.post('/auth/logout')
-      
-      // 2. Limpar estado do usuário
       setUser(null)
       
-      // 3. Limpeza completa de todos os caches
-      // Limpar todo o cache do React Query
+      // Invalidar todo o cache do React Query para forçar recarregamento
       queryClient.clear()
       
-      // Invalidar todas as queries específicas
-      queryClient.invalidateQueries()
-      
-      // Remover todas as queries do cache
-      queryClient.removeQueries()
-      
-      // Limpar cache do localStorage/sessionStorage se houver
-      try {
-        localStorage.removeItem('user')
-        localStorage.removeItem('carteira')
-        localStorage.removeItem('controle')
-        localStorage.removeItem('marmitas')
-        sessionStorage.clear()
-      } catch (e) {
-        // Falha silenciosa se não houver storage
-      }
-      
-      // 4. Navegar para login
+      // Navegar para a tela de login sem recarregar a página
       navigate('/login', { replace: true })
-      
     } catch (error) {
       console.error('Erro ao fazer logout:', error)
-      
-      // Mesmo com erro, fazer limpeza completa
+      // Mesmo com erro, limpar o estado local
       setUser(null)
       queryClient.clear()
-      queryClient.invalidateQueries()
-      queryClient.removeQueries()
-      
-      try {
-        localStorage.clear()
-        sessionStorage.clear()
-      } catch (e) {
-        // Falha silenciosa
-      }
-      
       navigate('/login', { replace: true })
     }
   }

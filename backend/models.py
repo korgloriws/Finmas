@@ -985,6 +985,15 @@ def set_usuario_atual(username):
     global USUARIO_ATUAL
     with SESSION_LOCK:
         USUARIO_ATUAL = username
+        
+        # Limpar cache do Flask g para garantir dados frescos
+        try:
+            from flask import g
+            if hasattr(g, "_usuario_atual_cached"):
+                delattr(g, "_usuario_atual_cached")
+            print(f"DEBUG: Cache Flask g limpo para usuário: {username}")
+        except Exception as e:
+            print(f"DEBUG: Erro ao limpar Flask g: {e}")
 
 def _create_sessions_table_if_needed():
     if _is_postgres():
@@ -1333,45 +1342,104 @@ def invalidate_user_cache(usuario):
         return  # Local: não precisa invalidar
     
     try:
-        print(f"🔄 Iniciando limpeza de cache para usuário: {usuario}")
-        
-        # 1. Limpar cache específico do usuário usando padrões
-        cache_patterns = [
-            f"finmas:{usuario}:*",
-            f"controle_completo:{usuario}:*",
-            f"carteira_insights:{usuario}",
-            f"home_resumo:{usuario}:*",
-            f"receitas_despesas:{usuario}:*"
+        # Invalidar cache específico do controle
+        cache_keys_to_clear = [
+            f"finmas:{usuario}:carregar_receitas_mes_ano:*",
+            f"finmas:{usuario}:carregar_outros_mes_ano:*", 
+            f"finmas:{usuario}:calcular_saldo_mes_ano:*",
+            f"controle_completo:{usuario}:*"
         ]
         
-        for pattern in cache_patterns:
+        for pattern in cache_keys_to_clear:
             try:
-                # Tentar diferentes métodos de limpeza
                 cache.delete_memoized_pattern(pattern)
-                print(f"✅ Padrão limpo: {pattern}")
-            except Exception as e:
-                print(f"⚠️ Erro ao limpar padrão {pattern}: {e}")
-        
-        # 2. Limpar cache geral se necessário
-        try:
-            cache.clear()
-            print("✅ Cache geral limpo")
-        except Exception as e:
-            print(f"⚠️ Erro ao limpar cache geral: {e}")
-            
-        # 3. Limpar cache específico do Flask-Caching
-        try:
-            if hasattr(cache, 'clear'):
-                cache.clear()
-                print("✅ Cache Flask-Caching limpo")
-        except Exception as e:
-            print(f"⚠️ Erro ao limpar Flask-Caching: {e}")
-            
-        print(f"✅ Limpeza de cache concluída para usuário: {usuario}")
+            except Exception:
+                pass
                 
+    except Exception:
+        pass  # Falha silenciosa
+
+def clear_all_user_data():
+    """Limpa TODOS os dados de usuário - função crítica para logout"""
+    try:
+        # 1. Limpar global_state
+        global global_state
+        global_state.clear()
+        global_state["df_ativos"] = None
+        global_state["carregando"] = False
+        print("DEBUG: global_state limpo")
+        
+        # 2. Limpar cache Flask g
+        try:
+            from flask import g
+            if hasattr(g, "_usuario_atual_cached"):
+                delattr(g, "_usuario_atual_cached")
+            print("DEBUG: Cache Flask g limpo")
+        except Exception as e:
+            print(f"DEBUG: Erro ao limpar Flask g: {e}")
+        
+        # 3. Limpar cache Redis/Flask-Caching
+        if cache:
+            try:
+                cache.clear()
+                print("DEBUG: Cache Flask-Caching limpo")
+            except Exception as e:
+                print(f"DEBUG: Erro ao limpar cache Flask-Caching: {e}")
+        
+        # 4. Limpar Redis diretamente se disponível
+        try:
+            import redis
+            redis_url = os.getenv('REDIS_URL')
+            if redis_url:
+                r = redis.from_url(redis_url)
+                r.flushdb()
+                print("DEBUG: Redis limpo completamente")
+        except Exception as redis_error:
+            print(f"DEBUG: Redis não disponível: {redis_error}")
+        
+        # 5. Limpar variáveis globais
+        global USUARIO_ATUAL
+        USUARIO_ATUAL = None
+        print("DEBUG: USUARIO_ATUAL limpo")
+        
+        print("DEBUG: Limpeza completa de dados de usuário realizada")
+        
     except Exception as e:
-        print(f"❌ Erro geral na limpeza de cache: {e}")
-        # Falha silenciosa para não quebrar o logout
+        print(f"DEBUG: Erro na limpeza completa: {e}")
+        # Mesmo com erro, tentar limpar o básico
+        try:
+            global global_state
+            global_state.clear()
+            global_state["df_ativos"] = None
+            global_state["carregando"] = False
+        except Exception:
+            pass
+
+def force_clear_user_context():
+    """Força limpeza do contexto do usuário - função de emergência"""
+    try:
+        # Limpar global_state
+        global global_state
+        global_state.clear()
+        global_state["df_ativos"] = None
+        global_state["carregando"] = False
+        
+        # Limpar variáveis globais
+        global USUARIO_ATUAL
+        USUARIO_ATUAL = None
+        
+        # Limpar cache Flask g
+        try:
+            from flask import g
+            if hasattr(g, "_usuario_atual_cached"):
+                delattr(g, "_usuario_atual_cached")
+        except Exception:
+            pass
+        
+        print("DEBUG: Contexto do usuário forçadamente limpo")
+        
+    except Exception as e:
+        print(f"DEBUG: Erro na limpeza forçada: {e}")
 
 def invalidate_controle_cache(usuario, mes=None, ano=None):
     """Invalida cache específico do controle financeiro"""

@@ -27,7 +27,7 @@ from models import (
     set_usuario_atual, get_usuario_atual, inicializar_bancos_usuario, criar_sessao, invalidar_sessao,
 
     verificar_resposta_seguranca, alterar_senha_direta, atualizar_pergunta_seguranca,
-    invalidar_todas_sessoes,
+    invalidar_todas_sessoes, clear_all_user_data, force_clear_user_context,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -201,15 +201,16 @@ def api_login():
                 pass
             
 
-            set_usuario_atual(username)
-            
-            # Limpar cache de usuários anteriores para evitar dados residuais
+            # LIMPEZA PREVENTIVA: Limpar dados de usuários anteriores
             try:
-                if cache:
-                    cache.clear()
-                    print(f"Cache limpo no login para usuário: {username}")
+                from models import clear_all_user_data
+                clear_all_user_data()
+                print(f"DEBUG: Limpeza preventiva realizada para usuário: {username}")
             except Exception as e:
-                print(f"Erro ao limpar cache no login: {e}")
+                print(f"DEBUG: Erro na limpeza preventiva: {e}")
+            
+            set_usuario_atual(username)
+            print(f"DEBUG: Usuário atual definido: {username}")
            
             session_token = criar_sessao(username, duracao_segundos=3600)
            
@@ -263,56 +264,36 @@ def api_login():
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
     try:
-        from models import limpar_sessoes_expiradas, SESSION_LOCK, invalidate_user_cache
+        from models import limpar_sessoes_expiradas, SESSION_LOCK, clear_all_user_data
         import threading
         
         usuario_atual = get_usuario_atual()
+        print(f"DEBUG: Logout iniciado para usuário: {usuario_atual}")
         
+        # 1. Invalidar sessão
         try:
             token = request.cookies.get('session_token')
             if token:
                 invalidar_sessao(token)
+                print("DEBUG: Sessão invalidada")
         except Exception as e:
-            print(f"Erro ao invalidar sessão: {e}")
+            print(f"DEBUG: Erro ao invalidar sessão: {e}")
         
-        if usuario_atual:
-            try:
-                invalidate_user_cache(usuario_atual)
-                print(f"Cache limpo para usuário: {usuario_atual}")
-            except Exception as e:
-                print(f"Erro ao limpar cache do usuário {usuario_atual}: {e}")
-        
-        # Limpeza mais agressiva do cache
+        # 2. LIMPEZA COMPLETA DE TODOS OS DADOS (CRÍTICO)
         try:
-            if cache:
-                # Limpar cache geral
-                cache.clear()
-                print("Cache geral limpo")
-                
-                # Limpar cache específico do Flask-Caching
-                if hasattr(cache, 'clear'):
-                    cache.clear()
-                    print("Cache Flask-Caching limpo")
-                
-                # Tentar limpar cache Redis diretamente se disponível
-                try:
-                    import redis
-                    redis_url = os.getenv('REDIS_URL')
-                    if redis_url:
-                        r = redis.from_url(redis_url)
-                        r.flushdb()  # Limpar todo o banco Redis
-                        print("Cache Redis limpo completamente")
-                except Exception as redis_error:
-                    print(f"Redis não disponível ou erro: {redis_error}")
-                    
+            clear_all_user_data()
+            print("DEBUG: Limpeza completa de dados realizada")
         except Exception as e:
-            print(f"Erro ao limpar cache geral: {e}")
+            print(f"DEBUG: Erro na limpeza completa: {e}")
         
+        # 3. Limpar sessões expiradas
         try:
             limpar_sessoes_expiradas()
+            print("DEBUG: Sessões expiradas limpas")
         except Exception as e:
-            print(f"Erro ao limpar sessões expiradas: {e}")
+            print(f"DEBUG: Erro ao limpar sessões expiradas: {e}")
         
+        # 4. Criar resposta com headers anti-cache
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
@@ -330,6 +311,20 @@ def api_logout():
             return response
         except Exception:
             return jsonify({"error": str(e)}), 500
+
+@server.route("/api/auth/clear-cache", methods=["POST"])
+def api_clear_cache():
+    """Rota de emergência para limpar cache - apenas para debug"""
+    try:
+        from models import clear_all_user_data, force_clear_user_context
+        
+        # Limpeza completa
+        clear_all_user_data()
+        force_clear_user_context()
+        
+        return jsonify({"message": "Cache limpo com sucesso"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @server.route("/api/auth/usuario-atual", methods=["GET"])
 def api_usuario_atual():
