@@ -1333,22 +1333,45 @@ def invalidate_user_cache(usuario):
         return  # Local: não precisa invalidar
     
     try:
-        # Invalidar cache específico do controle
-        cache_keys_to_clear = [
-            f"finmas:{usuario}:carregar_receitas_mes_ano:*",
-            f"finmas:{usuario}:carregar_outros_mes_ano:*", 
-            f"finmas:{usuario}:calcular_saldo_mes_ano:*",
-            f"controle_completo:{usuario}:*"
+        print(f"🔄 Iniciando limpeza de cache para usuário: {usuario}")
+        
+        # 1. Limpar cache específico do usuário usando padrões
+        cache_patterns = [
+            f"finmas:{usuario}:*",
+            f"controle_completo:{usuario}:*",
+            f"carteira_insights:{usuario}",
+            f"home_resumo:{usuario}:*",
+            f"receitas_despesas:{usuario}:*"
         ]
         
-        for pattern in cache_keys_to_clear:
+        for pattern in cache_patterns:
             try:
+                # Tentar diferentes métodos de limpeza
                 cache.delete_memoized_pattern(pattern)
-            except Exception:
-                pass
+                print(f"✅ Padrão limpo: {pattern}")
+            except Exception as e:
+                print(f"⚠️ Erro ao limpar padrão {pattern}: {e}")
+        
+        # 2. Limpar cache geral se necessário
+        try:
+            cache.clear()
+            print("✅ Cache geral limpo")
+        except Exception as e:
+            print(f"⚠️ Erro ao limpar cache geral: {e}")
+            
+        # 3. Limpar cache específico do Flask-Caching
+        try:
+            if hasattr(cache, 'clear'):
+                cache.clear()
+                print("✅ Cache Flask-Caching limpo")
+        except Exception as e:
+            print(f"⚠️ Erro ao limpar Flask-Caching: {e}")
+            
+        print(f"✅ Limpeza de cache concluída para usuário: {usuario}")
                 
-    except Exception:
-        pass  # Falha silenciosa
+    except Exception as e:
+        print(f"❌ Erro geral na limpeza de cache: {e}")
+        # Falha silenciosa para não quebrar o logout
 
 def invalidate_controle_cache(usuario, mes=None, ano=None):
     """Invalida cache específico do controle financeiro"""

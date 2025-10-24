@@ -202,6 +202,14 @@ def api_login():
             
 
             set_usuario_atual(username)
+            
+            # Limpar cache de usuários anteriores para evitar dados residuais
+            try:
+                if cache:
+                    cache.clear()
+                    print(f"Cache limpo no login para usuário: {username}")
+            except Exception as e:
+                print(f"Erro ao limpar cache no login: {e}")
            
             session_token = criar_sessao(username, duracao_segundos=3600)
            
@@ -274,10 +282,29 @@ def api_logout():
             except Exception as e:
                 print(f"Erro ao limpar cache do usuário {usuario_atual}: {e}")
         
+        # Limpeza mais agressiva do cache
         try:
             if cache:
+                # Limpar cache geral
                 cache.clear()
                 print("Cache geral limpo")
+                
+                # Limpar cache específico do Flask-Caching
+                if hasattr(cache, 'clear'):
+                    cache.clear()
+                    print("Cache Flask-Caching limpo")
+                
+                # Tentar limpar cache Redis diretamente se disponível
+                try:
+                    import redis
+                    redis_url = os.getenv('REDIS_URL')
+                    if redis_url:
+                        r = redis.from_url(redis_url)
+                        r.flushdb()  # Limpar todo o banco Redis
+                        print("Cache Redis limpo completamente")
+                except Exception as redis_error:
+                    print(f"Redis não disponível ou erro: {redis_error}")
+                    
         except Exception as e:
             print(f"Erro ao limpar cache geral: {e}")
         

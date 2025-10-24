@@ -66,28 +66,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const login = async (username: string, password: string) => {
     try {
-      // 1. Limpar qualquer cache residual antes do login
+    
       queryClient.clear()
       queryClient.invalidateQueries()
       queryClient.removeQueries()
       
-      // 2. Fazer login
+
       const response = await api.post('/auth/login', {
         username,
         senha: password
       })
       
       if (response.data.username) {
-        // 3. Limpar caches novamente após login bem-sucedido
+     
         queryClient.clear()
         
-        // 4. Definir novo usuário
+
         setUser(response.data.username)
       } else {
         throw new Error('Erro no login')
       }
     } catch (error: any) {
-      // Em caso de erro, garantir limpeza
+    
       queryClient.clear()
       setUser(null)
       
