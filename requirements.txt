@@ -1,0 +1,15 @@
+pandas
+yfinance
+Flask
+flask-cors
+flask-caching
+bcrypt
+gunicorn
+psycopg[binary]
+flask-compress
+cloudscraper
+reportlab
+numpy
+beautifulsoup4
+tesouro-direto-br
+mercados
