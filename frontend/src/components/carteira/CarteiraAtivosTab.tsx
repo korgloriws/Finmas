@@ -713,14 +713,19 @@ export default function CarteiraAtivosTab({
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
 
-  const handleB3Import = async (ativos: B3Ativo[]) => {
+  const handleB3Import = async (ativos: B3Ativo[], sobrescrever: boolean = true) => {
     try {
      
       const compras = ativos.map(ativo => {
 
-        const precoUnitario = ativo.tipo.includes('Renda Fixa') || ativo.tipo === 'Tesouro Direto' 
-          ? ativo.valorTotal  
-          : ativo.precoMedio 
+        const precoUnitario = ativo.precoMedio  
+
+        console.log(`DEBUG - Ativo ${ativo.ticker}:`, {
+          tipo: ativo.tipo,
+          precoMedio: ativo.precoMedio,
+          valorTotal: ativo.valorTotal,
+          precoUnitario: precoUnitario
+        }) 
 
         return {
           ticker: ativo.ticker,
@@ -731,7 +736,8 @@ export default function CarteiraAtivosTab({
           vencimento: ativo.vencimento || '',
           indexador: ativo.indexador || '',
           indexador_pct: 0,
-          isento_ir: false
+          isento_ir: false,
+          sobrescrever: sobrescrever
         }
       })
 
@@ -747,11 +753,13 @@ export default function CarteiraAtivosTab({
           vencimento: compra.vencimento,
           indexador: compra.indexador,
           indexador_pct: compra.indexador_pct,
-          isento_ir: compra.isento_ir
+          isento_ir: compra.isento_ir,
+          sobrescrever: compra.sobrescrever
         })
       }
 
-      alert(`${ativos.length} ativos importados com sucesso! Os valores históricos da B3 foram preservados.`)
+      const modoTexto = sobrescrever ? "sobrescritos" : "somados"
+      alert(`${ativos.length} ativos importados com sucesso! Os valores históricos da B3 foram preservados. Ativos duplicados foram ${modoTexto}.`)
     } catch (error) {
       console.error('Erro ao importar ativos:', error)
       alert('Erro ao importar ativos. Tente novamente.')

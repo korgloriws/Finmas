@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { X, Save, Building2, Calendar, Percent, DollarSign, AlertCircle } from 'lucide-react'
@@ -8,9 +8,25 @@ interface RendaFixaFormModalProps {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
+  initialData?: {
+    ticker?: string
+    nome_completo?: string
+    quantidade?: number
+    preco_atual?: number
+    preco_medio?: number
+    valor_total?: number
+    indexador?: string
+    indexador_pct?: number
+    data_aplicacao?: string
+    vencimento?: string
+    isento_ir?: boolean
+    liquidez_diaria?: boolean
+    tipo?: string
+  } | null
+  editingMode?: boolean
 }
 
-export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFixaFormModalProps) {
+export default function RendaFixaFormModal({ open, onClose, onSuccess, initialData, editingMode = false }: RendaFixaFormModalProps) {
   const [formData, setFormData] = useState({
     nome: '',
     emissor: '',
@@ -31,6 +47,81 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFi
 
   const queryClient = useQueryClient()
 
+  // Preencher dados quando RF inicialData ou quando o modal abrir em modo edição
+  useEffect(() => {
+    if (open && initialData && editingMode) {
+      const nomeCompleto = initialData.nome_completo || initialData.ticker || ''
+      // Tentar extrair nome e emissor do nome completo
+      const partes = nomeCompleto.split(' - ')
+      const nome = partes[0] || nomeCompleto
+      const emissor = partes.length > 1 ? partes.slice(1).join(' - ') : ''
+      
+      // Determinar tipo baseado no tipo ou nome
+      const tipoStr = (initialData.tipo || '').toLowerCase()
+      let tipo = 'CDB'
+      if (tipoStr.includes('lci')) tipo = 'LCI'
+      else if (tipoStr.includes('lca')) tipo = 'LCA'
+      else if (tipoStr.includes('debênture') || tipoStr.includes('debenture')) tipo = 'Debênture'
+      else if (tipoStr.includes('tesouro')) tipo = 'Tesouro'
+      
+      // Indexador
+      const indexador = (initialData.indexador || 'CDI') as '' | 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | 'CDI+' | 'IPCA+'
+      
+      // Determinar taxa percentual vs taxa fixa
+      let taxa_percentual: number | string = 100
+      let taxa_fixa: number | string = 0
+      
+      if (initialData.indexador_pct) {
+        const pct = initialData.indexador_pct
+        if (indexador === 'CDI' || indexador === 'IPCA') {
+          taxa_percentual = pct
+        } else if (indexador === 'CDI+' || indexador === 'IPCA+' || indexador === 'PREFIXADO' || indexador === 'SELIC') {
+          taxa_fixa = pct
+        }
+      }
+      
+      // Calcular preço unitário: usar preco_medio, depois preco_atual, depois valor_total / quantidade
+      const quantidade = initialData.quantidade || 1
+      let preco = initialData.preco_medio || initialData.preco_atual || ''
+      if (!preco && initialData.valor_total && quantidade > 0) {
+        preco = initialData.valor_total / quantidade
+      }
+      
+      setFormData({
+        nome,
+        emissor,
+        tipo,
+        indexador,
+        taxa_percentual,
+        taxa_fixa,
+        quantidade,
+        preco: preco || '',
+        data_inicio: initialData.data_aplicacao ? initialData.data_aplicacao.split('T')[0] : '',
+        vencimento: initialData.vencimento ? initialData.vencimento.split('T')[0] : '',
+        liquidez_diaria: initialData.liquidez_diaria || false,
+        isento_ir: initialData.isento_ir || false,
+        observacao: ''
+      })
+    } else if (open && !editingMode) {
+      // Resetar formulário quando abrir para adicionar novo
+      setFormData({
+        nome: '',
+        emissor: '',
+        tipo: 'CDB',
+        indexador: 'CDI',
+        taxa_percentual: 100,
+        taxa_fixa: 0,
+        quantidade: '',
+        preco: '',
+        data_inicio: '',
+        vencimento: '',
+        liquidez_diaria: false,
+        isento_ir: false,
+        observacao: ''
+      })
+    }
+  }, [open, initialData, editingMode])
+
   const addDirectMutation = useMutation({
     mutationFn: async () => {
       const quantidadeNum = Number(formData.quantidade)
@@ -45,8 +136,13 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFi
         indexador_pct = isNaN(taxaFixaNum) ? undefined : taxaFixaNum
       }
 
+      // Usar o ticker original se estiver editando, senão usar o nome
+      const ticker = editingMode && initialData?.ticker 
+        ? initialData.ticker 
+        : (formData.nome || '').toUpperCase()
+
       return carteiraService.adicionarAtivo(
-        (formData.nome || '').toUpperCase(),
+        ticker,
         isNaN(quantidadeNum) ? 0 : quantidadeNum,
         'Renda Fixa',
         isNaN(precoNum) ? 1.0 : precoNum,
@@ -57,6 +153,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFi
         formData.vencimento || undefined,
         formData.isento_ir || undefined,
         formData.liquidez_diaria || undefined,
+        editingMode // sobrescrever=true quando estiver em modo de edição
       )
     },
     onSuccess: () => {
@@ -147,10 +244,13 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFi
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">
-                  Novo Produto de Renda Fixa
+                  {editingMode ? 'Editar Produto de Renda Fixa' : 'Novo Produto de Renda Fixa'}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Preencha os dados do produto e adicionaremos diretamente à carteira
+                  {editingMode 
+                    ? 'Edite os dados do produto e ele será substituído completamente na carteira'
+                    : 'Preencha os dados do produto e adicionaremos diretamente à carteira'
+                  }
                 </p>
               </div>
             </div>
@@ -507,14 +607,14 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess }: RendaFi
               type="submit"
               disabled={isLoading}
               className="px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={'Adicionar produto à carteira'}
+              title={editingMode ? 'Salvar alterações' : 'Adicionar produto à carteira'}
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Adicionar
+              {editingMode ? 'Salvar' : 'Adicionar'}
             </button>
           </div>
         </form>

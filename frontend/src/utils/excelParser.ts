@@ -19,6 +19,7 @@ export interface B3ImportResult {
   ativos: B3Ativo[]
   erros: string[]
   totalAtivos: number
+  abasProcessadas?: string[]
 }
 
 export class B3ExcelParser {
@@ -40,24 +41,26 @@ export class B3ExcelParser {
       const arrayBuffer = await arquivo.arrayBuffer()
       this.workbook = XLSX.read(arrayBuffer, { type: 'array' })
       
-      // Verificar se tem as abas necessárias
-      const abasNecessarias = ['Acoes', 'Fundo de Investimento', 'Renda Fixa', 'Tesouro Direto']
+      // Verificar quais abas estão disponíveis (todas são opcionais)
+      const abasPossiveis = ['Acoes', 'Fundo de Investimento', 'Renda Fixa', 'Tesouro Direto']
       const abasDisponiveis = this.workbook.SheetNames
       
-      const abasFaltando = abasNecessarias.filter(aba => !abasDisponiveis.includes(aba))
-      if (abasFaltando.length > 0) {
-        this.errors.push(`Abas necessárias não encontradas: ${abasFaltando.join(', ')}`)
+      // Verificar se pelo menos uma aba válida existe
+      const abasValidas = abasPossiveis.filter(aba => abasDisponiveis.includes(aba))
+      if (abasValidas.length === 0) {
+        this.errors.push(`Nenhuma aba válida encontrada. Abas esperadas: ${abasPossiveis.join(', ')}. Abas encontradas: ${abasDisponiveis.join(', ')}`)
         return this.criarResultadoErro()
       }
 
-      // Processar cada aba
-      const ativos = await this.processarAbas()
+     
+      const ativos = await this.processarAbas(abasValidas)
       
       return {
         sucesso: this.errors.length === 0,
         ativos,
         erros: this.errors,
-        totalAtivos: ativos.length
+        totalAtivos: ativos.length,
+        abasProcessadas: abasValidas
       }
       
     } catch (error) {
@@ -67,27 +70,32 @@ export class B3ExcelParser {
   }
 
   /**
-   * Processa todas as abas do relatório
+   * Processa apenas as abas válidas do relatório
    */
-  private async processarAbas(): Promise<B3Ativo[]> {
+  private async processarAbas(abasValidas: string[]): Promise<B3Ativo[]> {
     const ativos: B3Ativo[] = []
     
     try {
-      // Aba Ações - ações e BDRs
-      const acoesAtivos = this.processarAbaAcoes()
-      ativos.push(...acoesAtivos)
+      // Processar apenas as abas que existem no arquivo
+      if (abasValidas.includes('Acoes')) {
+        const acoesAtivos = this.processarAbaAcoes()
+        ativos.push(...acoesAtivos)
+      }
       
-      // Aba Fundo de Investimento - FIIs
-      const fiisAtivos = this.processarAbaFIIs()
-      ativos.push(...fiisAtivos)
+      if (abasValidas.includes('Fundo de Investimento')) {
+        const fiisAtivos = this.processarAbaFIIs()
+        ativos.push(...fiisAtivos)
+      }
       
-      // Aba Renda Fixa - CDBs, LCIs, LCAs, etc.
-      const rendaFixaAtivos = this.processarAbaRendaFixa()
-      ativos.push(...rendaFixaAtivos)
+      if (abasValidas.includes('Renda Fixa')) {
+        const rendaFixaAtivos = this.processarAbaRendaFixa()
+        ativos.push(...rendaFixaAtivos)
+      }
       
-      // Aba Tesouro Direto - títulos do tesouro
-      const tesouroAtivos = this.processarAbaTesouro()
-      ativos.push(...tesouroAtivos)
+      if (abasValidas.includes('Tesouro Direto')) {
+        const tesouroAtivos = this.processarAbaTesouro()
+        ativos.push(...tesouroAtivos)
+      }
       
       // Consolidar ativos duplicados
       return this.consolidarAtivos(ativos)
@@ -165,9 +173,7 @@ export class B3ExcelParser {
     }
   }
 
-  /**
-   * Processa aba "Fundo de Investimento" - FIIs
-   */
+
   private processarAbaFIIs(): B3Ativo[] {
     try {
       const sheet = this.workbook!.Sheets['Fundo de Investimento']
@@ -546,7 +552,8 @@ export class B3ExcelParser {
       sucesso: false,
       ativos: [],
       erros: this.errors,
-      totalAtivos: 0
+      totalAtivos: 0,
+      abasProcessadas: []
     }
   }
 }

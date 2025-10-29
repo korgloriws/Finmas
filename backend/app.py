@@ -1612,7 +1612,7 @@ def api_adicionar_ativo():
         ticker = data.get('ticker')
         quantidade = data.get('quantidade')
         tipo = data.get('tipo')
-        preco_inicial = data.get('preco_inicial')
+        preco_inicial = data.get('preco_inicial') or data.get('preco')
         nome_personalizado = data.get('nome_personalizado')
         indexador = data.get('indexador')  # 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | None
         indexador_pct = data.get('indexador_pct')  # percentual (ex.: 110) ou taxa fixa (% a.a.)
@@ -1620,6 +1620,7 @@ def api_adicionar_ativo():
         vencimento = data.get('vencimento')  # 'YYYY-MM-DD'
         isento_ir = data.get('isento_ir')  # bool
         liquidez_diaria = data.get('liquidez_diaria')  # bool
+        sobrescrever = data.get('sobrescrever', False)  # bool - se True, sobrescreve ativo existente
         
         if not ticker or not quantidade:
             return jsonify({"error": "Ticker e quantidade são obrigatórios"}), 400
@@ -1656,7 +1657,7 @@ def api_adicionar_ativo():
 
         resultado = adicionar_ativo_carteira(
             ticker, quantidade, tipo, preco_inicial, nome_personalizado,
-            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria
+            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, sobrescrever
         )
         # invalidar cache simples
         try:

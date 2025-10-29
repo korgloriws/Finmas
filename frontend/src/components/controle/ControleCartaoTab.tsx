@@ -51,7 +51,7 @@ export default function ControleCartaoTab({
 }: ControleCartaoTabProps) {
   
   const [inputNome, setInputNome] = useState('')
-  const [inputBandeira, setInputBandeira] = useState('')
+  const [inputBandeira, setInputBandeira] = useState('visa')
   const [inputLimite, setInputLimite] = useState('')
   const [inputVencimento, setInputVencimento] = useState('')
   const [inputCor, setInputCor] = useState('#1A1F71')
@@ -108,6 +108,10 @@ export default function ControleCartaoTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
       limparFormularioCartao()
+    },
+    onError: (error) => {
+      console.error('Erro ao adicionar cartão:', error)
+      alert(`Erro ao adicionar cartão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
     },
   })
 
@@ -254,12 +258,18 @@ export default function ControleCartaoTab({
 
   // Handlers
   const handleAdicionarCartao = useCallback(() => {
-    if (!inputNome || !inputLimite || !inputVencimento) return
+    if (!inputNome || !inputLimite || !inputVencimento || !inputBandeira) {
+      alert('Preencha todos os campos obrigatórios: Nome, Limite, Vencimento e Bandeira')
+      return
+    }
 
     const limite = parseFloat(inputLimite.replace(',', '.'))
     const vencimento = parseInt(inputVencimento)
     
-    if (!isFinite(limite) || limite <= 0 || !isFinite(vencimento) || vencimento < 1 || vencimento > 31) return
+    if (!isFinite(limite) || limite <= 0 || !isFinite(vencimento) || vencimento < 1 || vencimento > 31) {
+      alert('Valores inválidos. Verifique o limite (deve ser maior que zero) e o vencimento (entre 1 e 31)')
+      return
+    }
 
     if (editandoCartao && editingCartaoId) {
       atualizarCartaoMutation.mutate({

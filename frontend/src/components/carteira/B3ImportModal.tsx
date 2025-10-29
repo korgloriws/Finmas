@@ -14,7 +14,7 @@ import { formatCurrency } from '../../utils/formatters'
 interface B3ImportModalProps {
   isOpen: boolean
   onClose: () => void
-  onImport: (ativos: B3Ativo[]) => void
+  onImport: (ativos: B3Ativo[], sobrescrever?: boolean) => void
 }
 
 export default function B3ImportModal({ isOpen, onClose, onImport }: B3ImportModalProps) {
@@ -22,6 +22,7 @@ export default function B3ImportModal({ isOpen, onClose, onImport }: B3ImportMod
   const [resultado, setResultado] = useState<B3ImportResult | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [previewAtivos, setPreviewAtivos] = useState<B3Ativo[]>([])
+  const [sobrescreverDuplicados, setSobrescreverDuplicados] = useState(true) // Padrão: sobrescrever
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,7 +63,7 @@ export default function B3ImportModal({ isOpen, onClose, onImport }: B3ImportMod
 
   const handleImport = () => {
     if (resultado?.sucesso && previewAtivos.length > 0) {
-      onImport(previewAtivos)
+      onImport(previewAtivos, sobrescreverDuplicados)
       handleClose()
     }
   }
@@ -220,6 +221,11 @@ export default function B3ImportModal({ isOpen, onClose, onImport }: B3ImportMod
                             : 'Erro ao processar arquivo'
                           }
                         </p>
+                        {resultado.sucesso && resultado.abasProcessadas && resultado.abasProcessadas.length > 0 && (
+                          <p className="text-sm text-green-700 mt-1">
+                            Abas processadas: {resultado.abasProcessadas.join(', ')}
+                          </p>
+                        )}
                         {resultado.erros.length > 0 && (
                           <div className="mt-2">
                             <p className="text-sm text-red-700 font-medium">Erros encontrados:</p>
@@ -252,6 +258,32 @@ export default function B3ImportModal({ isOpen, onClose, onImport }: B3ImportMod
                             >
                               Adicionar à Carteira
                             </button>
+                          </div>
+                        </div>
+
+                        {/* Opção de Sobrescrita */}
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <div className="flex items-center h-5">
+                              <input
+                                id="sobrescrever-duplicados"
+                                type="checkbox"
+                                checked={sobrescreverDuplicados}
+                                onChange={(e) => setSobrescreverDuplicados(e.target.checked)}
+                                className="w-4 h-4 text-primary bg-background border-border rounded focus:ring-primary focus:ring-2"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label htmlFor="sobrescrever-duplicados" className="text-sm font-medium text-blue-800 cursor-pointer">
+                                Sobrescrever ativos duplicados
+                              </label>
+                              <p className="text-xs text-blue-600 mt-1">
+                                {sobrescreverDuplicados 
+                                  ? "Ativos existentes serão substituídos pelos novos dados do relatório B3"
+                                  : "Ativos existentes terão suas quantidades somadas aos novos dados"
+                                }
+                              </p>
+                            </div>
                           </div>
                         </div>
 
