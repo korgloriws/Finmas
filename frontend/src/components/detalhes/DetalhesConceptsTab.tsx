@@ -95,6 +95,7 @@ interface DetalhesConceptsTabProps {
   bazinRatePct: number
   setBazinRatePct: (value: number) => void
   bazinCeilingPrice: number | null
+  historico?: Array<Record<string, any>> | null
 }
 
 export default function DetalhesConceptsTab({
@@ -114,8 +115,45 @@ export default function DetalhesConceptsTab({
   dividends12m,
   bazinRatePct,
   setBazinRatePct,
-  bazinCeilingPrice
+  bazinCeilingPrice,
+  historico
 }: DetalhesConceptsTabProps) {
+  
+  const fearGreed = (() => {
+    try {
+      const series = Array.isArray(historico) ? historico : []
+      if (series.length < 20) return null
+      const closes: number[] = series
+        .map(r => Number(r.Close ?? (r as any).close))
+        .filter(v => isFinite(v))
+      if (closes.length < 20) return null
+      const last = closes[closes.length - 1]
+      const sma = (arr: number[], win: number) => {
+        if (arr.length < win) return NaN
+        let sum = 0
+        for (let i = arr.length - win; i < arr.length; i++) sum += arr[i]
+        return sum / win
+      }
+      const sma50 = sma(closes, 50)
+      const sma200 = sma(closes, 200)
+      const maxN = Math.max(...closes.slice(-Math.min(closes.length, 252)))
+      const minN = Math.min(...closes.slice(-Math.min(closes.length, 252)))
+      const range = maxN - minN || 1
+
+      const compMomentumShort = isFinite(sma50) ? Math.max(0, Math.min(100, 50 + ((last - sma50) / sma50) * 400)) : 50
+      const compMomentumLong = isFinite(sma200) ? Math.max(0, Math.min(100, 50 + ((last - sma200) / sma200) * 300)) : 50
+      const compDistanceFromTop = Math.max(0, Math.min(100, ((last - minN) / range) * 100))
+      const components = [
+        { key: 'Momentum curto (vs SMA50)', value: Math.round(compMomentumShort) },
+        { key: 'Momentum longo (vs SMA200)', value: Math.round(compMomentumLong) },
+        { key: 'Distância do topo 12m', value: Math.round(compDistanceFromTop) },
+      ]
+      const score = Math.round(components.reduce((s, c) => s + c.value, 0) / components.length)
+      return { score, components }
+    } catch {
+      return null
+    }
+  })()
   return (
     <motion.div
       key="concepts"
@@ -235,6 +273,95 @@ export default function DetalhesConceptsTab({
             <MetricCard title="Preço Teto (Bazin)" value={formatCurrency(bazinCeilingPrice)} icon={DollarSign} color="green" />
             <MetricCard title="Preço Atual" value={formatCurrency(info.currentPrice)} icon={DollarSign} color="purple" />
             <MetricCard title="Margem vs Atual" value={bazinCeilingPrice!=null&&info.currentPrice? `${(((bazinCeilingPrice-info.currentPrice)/info.currentPrice)*100).toFixed(2)}%` : '-'} icon={TrendingUp} color="orange" />
+          </div>
+        </div>
+      </InfoSection>
+
+      {/* Fear & Greed - Gauge com ponteiro (responsivo) */}
+      <InfoSection title="Fear & Greed (Heurístico)" icon={TrendingUp} color="indigo">
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground leading-relaxed">
+            Termômetro de sentimento baseado em preço atual vs médias móveis (SMA50/200) e distância do topo recente. Escala 0 (medo) a 100 (ganância).
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {/* Gauge semicircular com ponteiro */}
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 flex flex-col items-center">
+              {(() => {
+                const score = Math.max(0, Math.min(100, fearGreed?.score ?? 0))
+                const angle = -90 + (score / 100) * 180 // -90 a +90
+                const needleColor = score < 35 ? '#ef4444' : score < 65 ? '#f59e0b' : '#10b981'
+                return (
+                  <svg
+                    viewBox="0 0 240 160"
+                    width="100%"
+                    className="w-full max-w-[520px]"
+                    preserveAspectRatio="xMidYMid meet"
+                    style={{ overflow: 'visible' }}
+                  >
+                    {/* Arco de fundo */}
+                    <path d="M30,140 A90,90 0 0,1 210,140" fill="none" stroke="#e5e7eb" strokeWidth="18" strokeLinecap="round" />
+                    {/* Arco colorido em faixas (medo→ganância) */}
+                    <defs>
+                      <linearGradient id="fg-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ef4444" />
+                        <stop offset="50%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#10b981" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M30,140 A90,90 0 0,1 210,140" fill="none" stroke="url(#fg-gradient)" strokeWidth="12" strokeLinecap="round" />
+                    {/* Ponteiro */}
+                    <g transform={`rotate(${angle} 120 140)`}>
+                      <line x1="120" y1="140" x2="120" y2="44" stroke={needleColor} strokeWidth="4" strokeLinecap="round" />
+                      <circle cx="120" cy="140" r="6" fill={needleColor} />
+                    </g>
+                  </svg>
+                )
+              })()}
+            </div>
+
+            {/* Texto e componentes explicativos */}
+            <div className="space-y-4">
+              <div className="bg-card border border-border rounded-lg p-4">
+                {(() => {
+                  const s = Math.max(0, Math.min(100, fearGreed?.score ?? 0))
+                  const badge = s < 25 ? { text: 'Medo', cls: 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' } :
+                               s < 50 ? { text: 'Cautela', cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' } :
+                               s < 75 ? { text: 'Ganância moderada', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300' } :
+                                         { text: 'Ganância elevada', cls: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' }
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-base font-semibold text-foreground">Leitura do índice</h4>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${badge.cls}`}>{badge.text}</span>
+                      </div>
+                      <div className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                        Interpretação rápida: valores mais baixos sugerem ambiente de medo (possíveis descontos), enquanto valores altos indicam maior euforia (risco de preços esticados). Use em conjunto com fundamentos e gestão de risco.
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="px-2 py-1 rounded bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300">0–25 Medo</div>
+                        <div className="px-2 py-1 rounded bg-yellow-50 dark:bg-yellow-900/10 text-yellow-800 dark:text-yellow-300">25–50 Cautela</div>
+                        <div className="px-2 py-1 rounded bg-amber-50 dark:bg-amber-900/10 text-amber-800 dark:text-amber-300">50–75 Ganância moderada</div>
+                        <div className="px-2 py-1 rounded bg-green-50 dark:bg-green-900/10 text-green-800 dark:text-green-300">75–100 Ganância elevada</div>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {(fearGreed?.components || []).map((c, i) => (
+                  <div key={i} className="bg-card border border-border rounded-lg p-4">
+                    <div className="text-xs text-muted-foreground mb-1">{c.key}</div>
+                    <div className="mt-2 h-1.5 rounded bg-muted overflow-hidden">
+                      <div className="h-1.5 bg-indigo-500" style={{ width: `${c.value}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            Para que serve: medir rapidamente o sentimento do mercado sobre o ativo. Útil para calibrar entrada/saída junto a critérios fundamentais (Graham/Bazin), nunca isoladamente.
           </div>
         </div>
       </InfoSection>

@@ -282,7 +282,7 @@ export default function DetalhesPage() {
     return effectiveEPS * base * factor
   }, [effectiveEPS, effectiveG, effectiveY])
 
-  // ===== Renda Fixa: Comparativo SELIC x CDI x IPCA x Ativo =====
+  
   const fiStartDate = useMemo(() => {
     const now = new Date()
     const d = new Date(now)
@@ -630,6 +630,8 @@ export default function DetalhesPage() {
     }))
   }, [historico])
 
+  // Fear & Greed será calculado diretamente na aba Conceitos
+
   const dividendData = useMemo(() => {
     if (!detalhes?.dividends) return []
     
@@ -952,6 +954,7 @@ export default function DetalhesPage() {
                 bazinRatePct={bazinRatePct}
                 setBazinRatePct={setBazinRatePct}
                 bazinCeilingPrice={bazinCeilingPrice}
+                historico={historico}
               />
             )}
           </AnimatePresence>
