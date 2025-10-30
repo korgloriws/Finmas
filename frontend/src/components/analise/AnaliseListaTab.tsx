@@ -119,6 +119,19 @@ function FiltrosAcoes({
             title="Filtra empresas com alavancagem até o limite escolhido"
           />
         </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$)</label>
+          <input
+            type="number"
+            value={filtros.liq_min ?? 100000}
+            onChange={(e) => onFiltroChange('liq_min', parseFloat(e.target.value) || 0)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+            placeholder="100000"
+            aria-label="Liquidez mínima em reais"
+            title="Filtrar por liquidez diária mínima"
+          />
+        </div>
       </div>
       
       <div className="mt-6 flex justify-end">
@@ -241,6 +254,19 @@ function FiltrosBdrs({
             className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
             placeholder="2"
             aria-label="Preço sobre valor patrimonial máximo"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$)</label>
+          <input
+            type="number"
+            value={filtros.liq_min ?? 10000}
+            onChange={(e) => onFiltroChange('liq_min', parseFloat(e.target.value) || 0)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+            placeholder="10000"
+            aria-label="Liquidez mínima em reais"
+            title="Filtrar por liquidez diária mínima"
           />
         </div>
       </div>
@@ -1089,7 +1115,8 @@ export default function AnaliseListaTab() {
     pl_min: 1,
     pl_max: 15,
     pvp_max: 2,
-    net_debt_ebitda_max: 3
+    net_debt_ebitda_max: 3,
+    liq_min: 100000
   })
   
   const [filtrosBdrs, setFiltrosBdrs] = useState<FiltrosAnalise>({
@@ -1098,13 +1125,14 @@ export default function AnaliseListaTab() {
     pl_min: 1,
     pl_max: 15,
     pvp_max: 3,
-    net_debt_ebitda_max: 3
+    net_debt_ebitda_max: 3,
+    liq_min: 10000
   })
 
   const [filtrosFiis, setFiltrosFiis] = useState<FiltrosAnalise>({
     dy_min: 12,
     dy_max: 15,
-    liq_min: 1000000
+    liq_min: 500000
   })
 
  
