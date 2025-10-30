@@ -45,6 +45,7 @@ const CarteiraRelatoriosTab = lazy(() => import('../components/carteira/Carteira
 const CarteiraSimuladorTab = lazy(() => import('../components/carteira/CarteiraSimuladorTab'))
 const AddAtivoModal = lazy(() => import('../components/carteira/AddAtivoModal'))
 const EditAtivoModal = lazy(() => import('../components/carteira/EditAtivoModal'))
+const RendaFixaFormModal = lazy(() => import('../components/carteira/RendaFixaFormModal'))
 
 export default function CarteiraPage() {
   const { user } = useAuth()
@@ -64,6 +65,8 @@ export default function CarteiraPage() {
   const [editPreco, setEditPreco] = useState('')
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [ativoParaEditar, setAtivoParaEditar] = useState<any>(null)
+  const [rendaFixaModalOpen, setRendaFixaModalOpen] = useState(false)
+  const [ativoRendaFixaParaEditar, setAtivoRendaFixaParaEditar] = useState<any>(null)
   const [filtroMes, setFiltroMes] = useState<number>(new Date().getMonth() + 1)
   const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear())
   const [activeTab, setActiveTab] = useState(() => {
@@ -412,8 +415,25 @@ export default function CarteiraPage() {
   const handleEditar = useCallback((id: number) => {
     const ativo = (carteira || []).find((a: any) => a?.id === id)
     if (ativo) {
-      setAtivoParaEditar(ativo)
-      setEditModalOpen(true)
+      // Verificar se é renda fixa
+      const tipoLower = (ativo?.tipo || '').toLowerCase()
+      const isRendaFixa = tipoLower.includes('renda fixa') || 
+                          tipoLower.includes('tesouro') ||
+                          tipoLower.includes('cdb') ||
+                          tipoLower.includes('lci') ||
+                          tipoLower.includes('lca') ||
+                          tipoLower.includes('debênture') ||
+                          tipoLower.includes('debenture')
+      
+      if (isRendaFixa) {
+        // Abrir modal de renda fixa em modo edição
+        setAtivoRendaFixaParaEditar(ativo)
+        setRendaFixaModalOpen(true)
+      } else {
+        // Abrir modal de edição normal para outros ativos
+        setAtivoParaEditar(ativo)
+        setEditModalOpen(true)
+      }
     }
   }, [carteira])
 
@@ -836,6 +856,24 @@ export default function CarteiraPage() {
               setAtivoParaEditar(null)
             }}
             ativo={ativoParaEditar}
+          />
+        </Suspense>
+      )}
+
+      {/* Modal de editar renda fixa */}
+      {rendaFixaModalOpen && (
+        <Suspense fallback={<LoadingSpinner text="Carregando modal..." />}>
+          <RendaFixaFormModal
+            open={rendaFixaModalOpen}
+            onClose={() => {
+              setRendaFixaModalOpen(false)
+              setAtivoRendaFixaParaEditar(null)
+            }}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['carteira'] })
+            }}
+            initialData={ativoRendaFixaParaEditar}
+            editingMode={true}
           />
         </Suspense>
       )}

@@ -200,6 +200,7 @@ export const carteiraService = {
     vencimento?: string,
     isento_ir?: boolean,
     liquidez_diaria?: boolean,
+    sobrescrever?: boolean,
   ): Promise<any> => {
     const normalizedTicker = normalizeTicker(ticker)
     const response = await api.post('/carteira/adicionar', {
@@ -214,6 +215,7 @@ export const carteiraService = {
       vencimento,
       isento_ir,
       liquidez_diaria,
+      sobrescrever,
     })
     return response.data
   },

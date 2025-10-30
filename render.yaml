@@ -53,7 +53,7 @@ databases:
 # Configurações de cache
 cache:
   redis:
-    maxMemory: 256mb
+    maxMemory: 512mb
     maxMemoryPolicy: allkeys-lru
     ttl: 300  # 5 minutos
 

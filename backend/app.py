@@ -134,6 +134,16 @@ except Exception:
 
 
 
+
+@server.route("/health", methods=["GET"]) 
+def health_check():
+    try:
+        return jsonify({"status": "ok"}), 200
+    except Exception:
+        return jsonify({"status": "error"}), 500
+
+
+
 @server.route("/api/auth/registro", methods=["POST"])
 def api_registro():
     
@@ -1077,6 +1087,25 @@ def serve_frontend(path):
         return send_from_directory(server.static_folder, 'index.html')
     return jsonify({"message": "Frontend não construído. Rode npm run build em frontend/"}), 200
 
+# Fallback global para rotas do SPA que gerariam 404 (refresh direto em rotas client-side)
+@server.errorhandler(404)
+def spa_404_fallback(_e):
+    try:
+        # Não interceptar APIs
+        req_path = (request.path or '').lstrip('/')
+        if req_path.startswith('api/'):
+            return jsonify({"error": "Not Found"}), 404
+        # Permitir arquivos PWA conhecidos
+        if req_path in ('sw.js', 'manifest.webmanifest', 'favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png'):
+            return send_from_directory(server.static_folder, req_path)
+        # Devolver index.html para qualquer outra rota (SPA)
+        index_path = os.path.join(server.static_folder, 'index.html')
+        if os.path.exists(index_path):
+            return send_from_directory(server.static_folder, 'index.html')
+    except Exception:
+        pass
+    return jsonify({"error": "Not Found"}), 404
+
 # ==================== APIs DE CARTEIRA ====================
 
 @server.route("/api/carteira", methods=["GET"])
@@ -1620,6 +1649,7 @@ def api_adicionar_ativo():
         vencimento = data.get('vencimento')  # 'YYYY-MM-DD'
         isento_ir = data.get('isento_ir')  # bool
         liquidez_diaria = data.get('liquidez_diaria')  # bool
+        sobrescrever = data.get('sobrescrever', False)  # bool - para sobrescrever ativo existente
         
         if not ticker or not quantidade:
             return jsonify({"error": "Ticker e quantidade são obrigatórios"}), 400
@@ -1656,7 +1686,7 @@ def api_adicionar_ativo():
 
         resultado = adicionar_ativo_carteira(
             ticker, quantidade, tipo, preco_inicial, nome_personalizado,
-            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria
+            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, sobrescrever
         )
         # invalidar cache simples
         try:
