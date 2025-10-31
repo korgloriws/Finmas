@@ -1899,7 +1899,7 @@ export default function HomePage() {
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
-                        // Calcular percentual corretamente: usar a propriedade percentage calculada ou calcular baseado no total
+                       
                         const percentual = data.percentage || (totalInvestido > 0 ? ((data.value / totalInvestido) * 100) : 0);
                         return (
                           <div className="bg-card p-2 rounded-md shadow-lg border border-border text-sm">
