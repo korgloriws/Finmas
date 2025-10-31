@@ -1089,7 +1089,11 @@ def serve_frontend(path):
         return send_from_directory(server.static_folder, 'index.html')
     return jsonify({"message": "Frontend não construído. Rode npm run build em frontend/"}), 200
 
-# Fallback global para rotas do SPA que gerariam 404 (refresh direto em rotas client-side)
+# ==================== TRENDING (PROTÓTIPO/TESTE) ====================
+
+
+
+
 @server.errorhandler(404)
 def spa_404_fallback(_e):
     try:

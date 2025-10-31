@@ -10,30 +10,26 @@ import { formatCurrency } from '../../utils/formatters'
 function InfoSection({ 
   title, 
   icon: Icon, 
-  color, 
   children 
 }: {
   title: string
   icon: any
-  color: string
   children: React.ReactNode
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+    <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
@@ -42,36 +38,35 @@ function InfoSection({
 function MetricCard({ 
   title, 
   value, 
-  icon: Icon, 
-  color 
+  icon: Icon
 }: {
   title: string
   value: string
   icon: any
-  color: string
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border rounded-lg p-4"
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.2 }}
+      className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300"
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-          <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+              <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+            </div>
+            <h3 className="text-sm sm:text-base font-semibold text-muted-foreground leading-tight">{title}</h3>
+          </div>
         </div>
-      </div>
-      <div className="space-y-1">
-        <p className="text-2xl font-bold text-foreground">{value}</p>
+        <div className="space-y-1">
+          <p className="text-xl sm:text-2xl font-bold text-foreground leading-tight">{value}</p>
+        </div>
       </div>
     </motion.div>
   )
@@ -164,7 +159,7 @@ export default function DetalhesConceptsTab({
       className="space-y-6"
     >
       {/* Preço Justo de Graham */}
-      <InfoSection title="Preço Justo de Graham" icon={Target} color="blue">
+      <InfoSection title="Preço Justo de Graham" icon={Target}>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground leading-relaxed">
             Fórmula clássica (adaptada): <strong>V = LPA × (8,5 + 2g) × (4,4 / Y)</strong><br/>
@@ -186,52 +181,52 @@ export default function DetalhesConceptsTab({
           {/* Parâmetros e resultados */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">LPA (EPS)</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">LPA (EPS)</label>
               <input
                 type="text"
                 value={grahamEPSText}
                 onChange={(e)=>setGrahamEPSText(e.target.value)}
                 onKeyDown={(e)=>{ if (e.key==='Enter') commitGrahamEPS() }}
-                className="w-full px-3 py-2 border border-border rounded bg-background text-foreground"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all"
                 placeholder="Ex.: 5.32"
               />
               <div className="text-xs text-muted-foreground mt-1">Pressione Enter para aplicar; padrão: EPS automático.</div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Crescimento (g) %</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">Crescimento (g) %</label>
               <input
                 type="text"
                 value={grahamGText}
                 onChange={(e)=>setGrahamGText(e.target.value)}
                 onKeyDown={(e)=>{ if (e.key==='Enter') commitGrahamG() }}
-                className="w-full px-3 py-2 border border-border rounded bg-background text-foreground"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all"
                 placeholder="Ex.: 10"
               />
               <div className="text-xs text-muted-foreground mt-1">Pressione Enter para aplicar; padrão: crescimento automático.</div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Taxa de juros (Y) %</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">Taxa de juros (Y) %</label>
               <input
                 type="text"
                 value={grahamYText}
                 onChange={(e)=>setGrahamYText(e.target.value)}
                 onKeyDown={(e)=>{ if (e.key==='Enter') commitGrahamY() }}
-                className="w-full px-3 py-2 border border-border rounded bg-background text-foreground"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all"
                 placeholder="Ex.: 15"
               />
               <div className="text-xs text-muted-foreground mt-1">Pressione Enter para aplicar; padrão: taxa automática (SELIC se BR).</div>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <MetricCard title="Preço Justo (Graham)" value={formatCurrency(grahamFairPrice)} icon={DollarSign} color="green" />
-            <MetricCard title="Preço Atual" value={formatCurrency(info.currentPrice)} icon={DollarSign} color="purple" />
-            <MetricCard title="Margem vs Atual" value={grahamFairPrice!=null&&info.currentPrice? `${(((grahamFairPrice-info.currentPrice)/info.currentPrice)*100).toFixed(2)}%` : '-'} icon={TrendingUp} color="orange" />
+            <MetricCard title="Preço Justo (Graham)" value={formatCurrency(grahamFairPrice)} icon={DollarSign} />
+            <MetricCard title="Preço Atual" value={formatCurrency(info.currentPrice)} icon={DollarSign} />
+            <MetricCard title="Margem vs Atual" value={grahamFairPrice!=null&&info.currentPrice? `${(((grahamFairPrice-info.currentPrice)/info.currentPrice)*100).toFixed(2)}%` : '-'} icon={TrendingUp} />
           </div>
         </div>
       </InfoSection>
 
       {/* Método Bazin */}
-      <InfoSection title="Método Bazin (Teto por Dividendos)" icon={DollarSign} color="green">
+      <InfoSection title="Método Bazin (Teto por Dividendos)" icon={DollarSign}>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground leading-relaxed">
             Fórmula: <strong>Preço Teto = Dividendos dos últimos 12 meses / (Taxa de DY desejada)</strong>.<br/>
@@ -251,41 +246,48 @@ export default function DetalhesConceptsTab({
           {/* Parâmetros e resultados */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Dividendos 12m</label>
-              <div className="px-3 py-2 border border-border rounded bg-background text-foreground">
+              <label className="block text-sm font-medium mb-1 text-foreground">Dividendos 12m</label>
+              <div className="px-3 py-2 border border-border rounded-lg bg-background text-foreground">
                 {formatCurrency(dividends12m)}
               </div>
               <div className="text-xs text-muted-foreground mt-1">Se indisponível, usa dividendRate anual do yfinance.</div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Taxa DY desejada (%)</label>
-              <input type="number" value={bazinRatePct} onChange={(e)=>setBazinRatePct(parseFloat(e.target.value)||0)} className="w-full px-3 py-2 border border-border rounded bg-background text-foreground" placeholder="Ex.: 8" title="Taxa mínima desejada de DY em %"/>
+              <label className="block text-sm font-medium mb-1 text-foreground">Taxa DY desejada (%)</label>
+              <input 
+                type="number" 
+                value={bazinRatePct} 
+                onChange={(e)=>setBazinRatePct(parseFloat(e.target.value)||0)} 
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all" 
+                placeholder="Ex.: 8" 
+                title="Taxa mínima desejada de DY em %"
+              />
               <div className="text-xs text-muted-foreground mt-1">Ajuste conforme seu objetivo (ex.: 8% a.a.).</div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Preço Teto (Bazin)</label>
-              <div className="px-3 py-2 border border-border rounded bg-background text-foreground">
+              <label className="block text-sm font-medium mb-1 text-foreground">Preço Teto (Bazin)</label>
+              <div className="px-3 py-2 border border-border rounded-lg bg-background text-foreground">
                 {formatCurrency(bazinCeilingPrice)}
               </div>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <MetricCard title="Preço Teto (Bazin)" value={formatCurrency(bazinCeilingPrice)} icon={DollarSign} color="green" />
-            <MetricCard title="Preço Atual" value={formatCurrency(info.currentPrice)} icon={DollarSign} color="purple" />
-            <MetricCard title="Margem vs Atual" value={bazinCeilingPrice!=null&&info.currentPrice? `${(((bazinCeilingPrice-info.currentPrice)/info.currentPrice)*100).toFixed(2)}%` : '-'} icon={TrendingUp} color="orange" />
+            <MetricCard title="Preço Teto (Bazin)" value={formatCurrency(bazinCeilingPrice)} icon={DollarSign} />
+            <MetricCard title="Preço Atual" value={formatCurrency(info.currentPrice)} icon={DollarSign} />
+            <MetricCard title="Margem vs Atual" value={bazinCeilingPrice!=null&&info.currentPrice? `${(((bazinCeilingPrice-info.currentPrice)/info.currentPrice)*100).toFixed(2)}%` : '-'} icon={TrendingUp} />
           </div>
         </div>
       </InfoSection>
 
       {/* Fear & Greed - Gauge com ponteiro (responsivo) */}
-      <InfoSection title="Fear & Greed (Heurístico)" icon={TrendingUp} color="indigo">
+      <InfoSection title="Fear & Greed (Heurístico)" icon={TrendingUp}>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground leading-relaxed">
             Termômetro de sentimento baseado em preço atual vs médias móveis (SMA50/200) e distância do topo recente. Escala 0 (medo) a 100 (ganância).
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
             {/* Gauge semicircular com ponteiro */}
-            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 flex flex-col items-center">
+            <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col items-center">
               {(() => {
                 const score = Math.max(0, Math.min(100, fearGreed?.score ?? 0))
                 const angle = -90 + (score / 100) * 180 // -90 a +90
@@ -321,7 +323,7 @@ export default function DetalhesConceptsTab({
 
             {/* Texto e componentes explicativos */}
             <div className="space-y-4">
-              <div className="bg-card border border-border rounded-lg p-4">
+              <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4">
                 {(() => {
                   const s = Math.max(0, Math.min(100, fearGreed?.score ?? 0))
                   const badge = s < 25 ? { text: 'Medo', cls: 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' } :
@@ -349,10 +351,10 @@ export default function DetalhesConceptsTab({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {(fearGreed?.components || []).map((c, i) => (
-                  <div key={i} className="bg-card border border-border rounded-lg p-4">
+                  <div key={i} className="relative overflow-hidden bg-card border border-border rounded-xl p-4">
                     <div className="text-xs text-muted-foreground mb-1">{c.key}</div>
                     <div className="mt-2 h-1.5 rounded bg-muted overflow-hidden">
-                      <div className="h-1.5 bg-indigo-500" style={{ width: `${c.value}%` }} />
+                      <div className="h-1.5 bg-primary" style={{ width: `${c.value}%` }} />
                     </div>
                   </div>
                 ))}

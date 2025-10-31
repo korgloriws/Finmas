@@ -16,30 +16,26 @@ import { formatCurrency, formatPercentage, formatNumber } from '../../utils/form
 function InfoSection({ 
   title, 
   icon: Icon, 
-  color, 
   children 
 }: {
   title: string
   icon: any
-  color: string
   children: React.ReactNode
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+    <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
@@ -57,9 +53,9 @@ function InfoRow({
   if (!value || value === '-') return null
 
   return (
-    <div className="flex items-center justify-between py-1">
+    <div className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 text-primary/70" />
         <span>{label}</span>
       </div>
       <span className="text-sm font-medium text-foreground">
@@ -87,9 +83,9 @@ export default function DetalhesFundamentalsTab({
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <InfoSection title="Resultados e Crescimento" icon={TrendingUp} color="green">
-          <div className="space-y-1">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <InfoSection title="Resultados e Crescimento" icon={TrendingUp}>
+          <div className="space-y-0.5">
             <InfoRow label="Receita Total" value={formatCurrency(info.totalRevenue)} icon={DollarSign} />
             <InfoRow label="Lucro Líquido" value={formatCurrency(info.netIncomeToCommon)} icon={DollarSign} />
             <InfoRow label="EBITDA" value={formatCurrency(info.ebitda)} icon={DollarSign} />
@@ -100,8 +96,8 @@ export default function DetalhesFundamentalsTab({
           </div>
         </InfoSection>
 
-        <InfoSection title="Endividamento" icon={TrendingDown} color="red">
-          <div className="space-y-1">
+        <InfoSection title="Endividamento" icon={TrendingDown}>
+          <div className="space-y-0.5">
             <InfoRow label="Dívida Líquida" value={formatCurrency(info.netDebt)} icon={AlertTriangle} />
             <InfoRow label="Dívida Líquida/EBITDA" value={info.netDebtToEbitda != null ? formatNumber(info.netDebtToEbitda) : '-'} icon={AlertTriangle} />
             <InfoRow label="Dívida/Ativos" value={formatPercentage(info.debtToAssets ? info.debtToAssets * 100 : null)} icon={AlertTriangle} />
@@ -113,8 +109,8 @@ export default function DetalhesFundamentalsTab({
           </div>
         </InfoSection>
 
-        <InfoSection title="Dividendos" icon={DollarSign} color="purple">
-          <div className="space-y-1">
+        <InfoSection title="Dividendos" icon={DollarSign}>
+          <div className="space-y-0.5">
             <InfoRow label="Último Dividendo" value={formatCurrency(info.lastDiv)} icon={DollarSign} />
             <InfoRow label="Dividendos por Ação" value={formatCurrency(info.dividendRate)} icon={DollarSign} />
             <InfoRow label="Payout Ratio" value={formatPercentage(info.payoutRatio ? info.payoutRatio * 100 : null)} icon={PieChart} />
@@ -126,8 +122,8 @@ export default function DetalhesFundamentalsTab({
           </div>
         </InfoSection>
 
-        <InfoSection title="Eficiência Operacional" icon={Activity} color="blue">
-          <div className="space-y-1">
+        <InfoSection title="Eficiência Operacional" icon={Activity}>
+          <div className="space-y-0.5">
             <InfoRow label="Margem Bruta" value={formatPercentage(info.grossMargins ? info.grossMargins * 100 : null)} icon={TrendingUp} />
             <InfoRow label="Margem Operacional" value={formatPercentage(info.operatingMargins ? info.operatingMargins * 100 : null)} icon={TrendingUp} />
             <InfoRow label="Margem Líquida" value={formatPercentage(info.profitMargins ? info.profitMargins * 100 : null)} icon={TrendingUp} />

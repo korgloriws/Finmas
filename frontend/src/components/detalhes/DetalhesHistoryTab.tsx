@@ -12,30 +12,26 @@ import {
 function InfoSection({ 
   title, 
   icon: Icon, 
-  color, 
   children 
 }: {
   title: string
   icon: any
-  color: string
   children: React.ReactNode
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+    <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
@@ -53,9 +49,9 @@ function InfoRow({
   if (!value || value === '-') return null
 
   return (
-    <div className="flex items-center justify-between py-1">
+    <div className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 text-primary/70" />
         <span>{label}</span>
       </div>
       <span className="text-sm font-medium text-foreground">
@@ -64,10 +60,11 @@ function InfoRow({
             href={value} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-primary hover:underline"
+            className="text-primary hover:underline flex items-center gap-1"
             title="Abrir link"
           >
-            <ExternalLink className="w-4 h-4" />
+            <span>Website</span>
+            <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
           </a>
         ) : (
           value
@@ -93,7 +90,7 @@ export default function DetalhesHistoryTab({
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      <InfoSection title="História e Atuação" icon={FileText} color="indigo">
+      <InfoSection title="História e Atuação" icon={FileText}>
         <div className="space-y-3">
           <div className="text-sm leading-relaxed text-foreground/90">
             {(info.longBusinessSummary && String(info.longBusinessSummary).trim())
@@ -112,8 +109,8 @@ export default function DetalhesHistoryTab({
         </div>
       </InfoSection>
 
-      <InfoSection title="Diretoria e Contatos (se disponível)" icon={Users} color="blue">
-        <div className="space-y-1">
+      <InfoSection title="Diretoria e Contatos (se disponível)" icon={Users}>
+        <div className="space-y-0.5">
           <InfoRow label="Cidade" value={info.city} icon={Globe} />
           <InfoRow label="Estado" value={info.state} icon={Globe} />
           <InfoRow label="Código Postal" value={info.zip} icon={FileText} />

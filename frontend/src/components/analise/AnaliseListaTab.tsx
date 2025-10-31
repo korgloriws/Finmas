@@ -1194,10 +1194,10 @@ export default function AnaliseListaTab() {
         
         await Promise.all(promises)
         
-        // Atualizar o estado após cada batch para mostrar progressivamente
+      
         setFiiMetadataMap(prev => ({ ...prev, ...newMetadataMap }))
         
-        // Delay entre batches para não sobrecarregar o servidor
+        
         if (i + batchSize < ativosFiis.length) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }

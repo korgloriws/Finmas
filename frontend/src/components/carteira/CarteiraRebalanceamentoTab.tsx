@@ -284,6 +284,29 @@ function TargetsForm({ defaultTargets, onSave, onChange }: {
   )
 }
 
+// Componente customizado para labels do gráfico de pizza
+const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
+  const RADIAN = Math.PI / 180
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="hsl(var(--foreground))"
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontSize={12}
+      fontWeight={500}
+      className="fill-foreground"
+    >
+      {`${name}: ${(percent * 100).toFixed(0)}%`}
+    </text>
+  )
+}
+
 // Componente para gráfico da distribuição ideal
 function IdealDistributionChart({ targets }: { targets: Record<string, number> }) {
   const chartData = Object.entries(targets)
@@ -294,7 +317,7 @@ function IdealDistributionChart({ targets }: { targets: Record<string, number> }
 
   if (chartData.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground">
+      <div className="h-80 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Defina tipos e pesos para visualizar a distribuição ideal</p>
@@ -304,7 +327,7 @@ function IdealDistributionChart({ targets }: { targets: Record<string, number> }
   }
 
   return (
-    <div className="h-64">
+    <div className="h-80 w-full overflow-visible">
       <ResponsiveContainer width="100%" height="100%">
         <RechartsPieChart>
           <Pie
@@ -313,14 +336,27 @@ function IdealDistributionChart({ targets }: { targets: Record<string, number> }
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={80}
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+            outerRadius={70}
+            innerRadius={0}
+            paddingAngle={2}
+            label={CustomLabel}
+            labelLine={false}
           >
             {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(v: number, n: string) => [`${v.toFixed(2)}%`, n]} />
+          <Tooltip 
+            formatter={(v: number, n: string) => [`${v.toFixed(2)}%`, n]}
+            contentStyle={{ 
+              backgroundColor: 'hsl(var(--card))', 
+              border: '1px solid hsl(var(--border))', 
+              borderRadius: '8px',
+              color: 'hsl(var(--foreground))'
+            }}
+            itemStyle={{ color: 'hsl(var(--foreground))' }}
+            labelStyle={{ color: 'hsl(var(--foreground))' }}
+          />
         </RechartsPieChart>
       </ResponsiveContainer>
     </div>
@@ -331,7 +367,7 @@ function IdealDistributionChart({ targets }: { targets: Record<string, number> }
 function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
   if (!carteira || carteira.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground">
+      <div className="h-80 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Nenhum ativo na carteira</p>
@@ -352,7 +388,7 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
 
   if (chartData.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground">
+      <div className="h-80 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Nenhum valor encontrado</p>
@@ -364,7 +400,7 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
   const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F43F5E']
 
   return (
-    <div className="h-64">
+    <div className="h-80 w-full overflow-visible">
       <ResponsiveContainer width="100%" height="100%">
         <RechartsPieChart>
           <Pie
@@ -373,8 +409,11 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={80}
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+            outerRadius={70}
+            innerRadius={0}
+            paddingAngle={2}
+            label={CustomLabel}
+            labelLine={false}
           >
             {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
@@ -388,6 +427,8 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
               borderRadius: '8px',
               color: 'hsl(var(--foreground))'
             }}
+            itemStyle={{ color: 'hsl(var(--foreground))' }}
+            labelStyle={{ color: 'hsl(var(--foreground))' }}
           />
         </RechartsPieChart>
       </ResponsiveContainer>
@@ -702,21 +743,25 @@ export default function CarteiraRebalanceamentoTab({
       {/* Gráficos e Cálculos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico da Proporção Ideal */}
-        <div className="bg-muted/30 rounded-lg p-6">
+        <div className="bg-muted/30 rounded-lg p-6 overflow-visible">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <PieChart className="w-5 h-5 text-purple-600" />
             Proporção Ideal
           </h3>
-          <IdealDistributionChart targets={idealTargets} />
+          <div className="overflow-visible">
+            <IdealDistributionChart targets={idealTargets} />
+          </div>
         </div>
 
         {/* Gráfico da Carteira Atual */}
-        <div className="bg-muted/30 rounded-lg p-6">
+        <div className="bg-muted/30 rounded-lg p-6 overflow-visible">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <PieChart className="w-5 h-5 text-blue-600" />
             Carteira Atual
           </h3>
-          <CurrentDistributionChart carteira={carteira} />
+          <div className="overflow-visible">
+            <CurrentDistributionChart carteira={carteira} />
+          </div>
         </div>
       </div>
 

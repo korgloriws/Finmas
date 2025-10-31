@@ -35,31 +35,26 @@ function LoadingSpinner({ text }: { text: string }) {
 function InfoSection({ 
   title, 
   icon: Icon, 
-  color, 
   children 
 }: {
   title: string
   icon: any
-  color: string
   children: React.ReactNode
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-    yellow: 'text-yellow-600 dark:text-yellow-400',
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+    <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
@@ -108,27 +103,30 @@ export default function DetalhesComparisonTab({
       className="space-y-6"
     >
       {/* Input para comparação */}
-      <InfoSection title="Comparação com Outros Ativos" icon={Zap} color="yellow">
+      <InfoSection title="Comparação com Outros Ativos" icon={Zap}>
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <label className="font-medium flex items-center gap-2">
-              <Zap className="w-5 h-5 text-yellow-500" />
-              Comparar com outros ativos:
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <label className="font-medium flex items-center gap-2 text-foreground text-sm sm:text-base shrink-0">
+              <span className="hidden sm:inline">Comparar com outros ativos:</span>
+              <span className="sm:hidden">Comparar:</span>
             </label>
-            <div className="flex-1 max-w-md">
+            <div className="flex-1 min-w-0">
               <input
                 type="text"
-                placeholder="Digite tickers separados por vírgula (ex: PETR4, ITUB4, VALE3)"
+                placeholder="Ex: PETR4, ITUB4, VALE3"
                 ref={compararInputRef}
                 onKeyDown={handleCompararKeyDown}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2.5 sm:py-2 text-base sm:text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all placeholder:text-muted-foreground"
               />
+              <p className="text-xs text-muted-foreground mt-1 sm:hidden">
+                Digite tickers separados por vírgula
+              </p>
             </div>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleComparar}
-              className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              className="px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm sm:text-base shrink-0"
             >
               Comparar
             </motion.button>
@@ -142,15 +140,15 @@ export default function DetalhesComparisonTab({
               <table className="w-full min-w-[900px]">
                 <thead className="bg-muted/30">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium">Ticker</th>
-                    <th className="px-4 py-3 text-left font-medium">Nome</th>
-                    <th className="px-4 py-3 text-left font-medium">Preço Atual</th>
-                    <th className="px-4 py-3 text-left font-medium">P/L</th>
-                    <th className="px-4 py-3 text-left font-medium">P/VP</th>
-                    <th className="px-4 py-3 text-left font-medium">DY</th>
-                    <th className="px-4 py-3 text-left font-medium">ROE</th>
-                    <th className="px-4 py-3 text-left font-medium">Setor</th>
-                    <th className="px-4 py-3 text-left font-medium">País</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">Ticker</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">Nome</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">Preço Atual</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">P/L</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">P/VP</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">DY</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">ROE</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">Setor</th>
+                    <th className="px-4 py-3 text-left font-medium text-foreground">País</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -165,12 +163,12 @@ export default function DetalhesComparisonTab({
                       <td className="px-4 py-3 min-w-[120px]">
                         <TickerWithLogo ticker={ativo.ticker} size="sm" />
                       </td>
-                      <td className="px-4 py-3">{ativo.nome || '-'}</td>
-                      <td className="px-4 py-3 font-semibold">{formatCurrency(ativo.preco_atual)}</td>
-                      <td className="px-4 py-3">{formatNumber(ativo.pl)}</td>
-                      <td className="px-4 py-3">{formatNumber(ativo.pvp)}</td>
-                      <td className="px-4 py-3 text-green-600 font-medium">{formatDividendYield(ativo.dy)}</td>
-                      <td className="px-4 py-3">{formatPercentage(ativo.roe ? ativo.roe * 100 : null)}</td>
+                      <td className="px-4 py-3 text-foreground">{ativo.nome || '-'}</td>
+                      <td className="px-4 py-3 font-semibold text-foreground">{formatCurrency(ativo.preco_atual)}</td>
+                      <td className="px-4 py-3 text-foreground">{formatNumber(ativo.pl)}</td>
+                      <td className="px-4 py-3 text-foreground">{formatNumber(ativo.pvp)}</td>
+                      <td className="px-4 py-3 text-primary font-medium">{formatDividendYield(ativo.dy)}</td>
+                      <td className="px-4 py-3 text-foreground">{formatPercentage(ativo.roe ? ativo.roe * 100 : null)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{ativo.setor || '-'}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{ativo.pais || '-'}</td>
                     </motion.tr>
@@ -182,8 +180,8 @@ export default function DetalhesComparisonTab({
 
           {/* Gráficos de comparação */}
           {comparisonData.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <InfoSection title="Comparação de Preços" icon={DollarSign} color="green">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-6">
+              <InfoSection title="Comparação de Preços" icon={DollarSign}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsBarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -198,12 +196,12 @@ export default function DetalhesComparisonTab({
                       }}
                       formatter={(value: number) => [formatCurrency(value), 'Preço']}
                     />
-                    <Bar dataKey="preco" fill="#10b981" />
+                    <Bar dataKey="preco" fill="hsl(var(--primary))" />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               </InfoSection>
 
-              <InfoSection title="Comparação de P/L" icon={Target} color="blue">
+              <InfoSection title="Comparação de P/L" icon={Target}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsBarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -218,12 +216,12 @@ export default function DetalhesComparisonTab({
                       }}
                       formatter={(value: number) => [value.toFixed(2), 'P/L']}
                     />
-                    <Bar dataKey="pl" fill="#3b82f6" />
+                    <Bar dataKey="pl" fill="hsl(var(--primary))" />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               </InfoSection>
 
-              <InfoSection title="Comparação de P/VP" icon={FileText} color="indigo">
+              <InfoSection title="Comparação de P/VP" icon={FileText}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsBarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -238,12 +236,12 @@ export default function DetalhesComparisonTab({
                       }}
                       formatter={(value: number) => [value.toFixed(2), 'P/VP']}
                     />
-                    <Bar dataKey="pvp" fill="#8b5cf6" />
+                    <Bar dataKey="pvp" fill="hsl(var(--primary))" />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               </InfoSection>
 
-              <InfoSection title="Comparação de Dividend Yield" icon={TrendingUp} color="purple">
+              <InfoSection title="Comparação de Dividend Yield" icon={TrendingUp}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsBarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -258,12 +256,12 @@ export default function DetalhesComparisonTab({
                       }}
                       formatter={(value: number) => [`${value.toFixed(2)}%`, 'DY']}
                     />
-                    <Bar dataKey="dy" fill="#a855f7" />
+                    <Bar dataKey="dy" fill="hsl(var(--primary))" />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               </InfoSection>
 
-              <InfoSection title="Comparação de ROE" icon={Activity} color="orange">
+              <InfoSection title="Comparação de ROE" icon={Activity}>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsBarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -278,7 +276,7 @@ export default function DetalhesComparisonTab({
                       }}
                       formatter={(value: number) => [`${value.toFixed(2)}%`, 'ROE']}
                     />
-                    <Bar dataKey="roe" fill="#f59e0b" />
+                    <Bar dataKey="roe" fill="hsl(var(--primary))" />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               </InfoSection>

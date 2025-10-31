@@ -26,7 +26,6 @@ function MetricCard({
   value, 
   subtitle, 
   icon: Icon, 
-  color, 
   trend, 
   loading 
 }: {
@@ -34,47 +33,59 @@ function MetricCard({
   value: string
   subtitle?: string
   icon: any
-  color: string
   trend?: { value: number; isPositive: boolean }
   loading?: boolean
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border rounded-lg p-4"
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.2 }}
+      className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300"
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-          <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        </div>
-        {trend && !loading && (
-          <div className={`flex items-center gap-1 text-xs ${
-            trend.isPositive ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {trend.isPositive ? (
-              <TrendingUp className="w-3 h-3" />
-            ) : (
-              <TrendingDown className="w-3 h-3" />
-            )}
-            {Math.abs(trend.value).toFixed(2)}%
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-3">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
           </div>
-        )}
-      </div>
-      <div className="space-y-1">
-        <p className="text-2xl font-bold text-foreground">{value}</p>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        )}
+          {trend && !loading && (
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1 }}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                trend.isPositive 
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}
+            >
+              {trend.isPositive ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              <span>{Math.abs(trend.value).toFixed(2)}%</span>
+            </motion.div>
+          )}
+        </div>
+        
+        <div className="space-y-1">
+          <h3 className="text-sm sm:text-base font-semibold text-muted-foreground leading-tight">{title}</h3>
+          {loading ? (
+            <div className="animate-pulse">
+              <div className="h-6 bg-muted rounded w-24"></div>
+            </div>
+          ) : (
+            <p className="text-xl sm:text-2xl font-bold text-foreground leading-tight">{value}</p>
+          )}
+          {subtitle && (
+            <p className="text-xs sm:text-sm text-muted-foreground leading-tight">{subtitle}</p>
+          )}
+        </div>
       </div>
     </motion.div>
   )
@@ -84,29 +95,26 @@ function MetricCard({
 function InfoSection({ 
   title, 
   icon: Icon, 
-  color, 
   children 
 }: {
   title: string
   icon: any
-  color: string
   children: React.ReactNode
 }) {
-  const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className={`w-5 h-5 ${colorClasses[color as keyof typeof colorClasses]}`} />
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+    <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+      {/* Background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
@@ -124,9 +132,9 @@ function InfoRow({
   if (!value || value === '-') return null
 
   return (
-    <div className="flex items-center justify-between py-1">
+    <div className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 text-primary/70" />
         <span>{label}</span>
       </div>
       <span className="text-sm font-medium text-foreground">
@@ -135,7 +143,7 @@ function InfoRow({
             href={value} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
             title="Abrir link"
           >
             <ExternalLink className="w-4 h-4" />
@@ -200,22 +208,26 @@ export default function DetalhesVisaoGeralTab({
       className="space-y-6"
     >
       {/* Header do ativo */}
-      <div className="flex items-center gap-4 p-6 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl border border-primary/20 flex-wrap">
-        {logoUrl ? (
-          <img 
-            src={logoUrl} 
-            alt={ticker} 
-            className="w-16 h-16 rounded-lg object-contain border-2 border-border bg-white p-2 shadow-md"
-          />
-        ) : (
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md">
-            {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold text-foreground min-w-0 break-words">{info.longName}</h2>
-            <motion.span
+      <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
+        {/* Background pattern */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+        
+        <div className="relative z-10 flex items-center gap-4 flex-wrap">
+          {logoUrl ? (
+            <img 
+              src={logoUrl} 
+              alt={ticker} 
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg sm:rounded-xl object-contain border-2 border-border bg-white p-2 shadow-md"
+            />
+          ) : (
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-md">
+              {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap mb-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground min-w-0 break-words">{info.longName}</h2>
+              <motion.span
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.2 }}
@@ -231,10 +243,11 @@ export default function DetalhesVisaoGeralTab({
               ) : (
                 <XCircle className="w-3.5 h-3.5" />
               )}
-              <span className="hidden sm:inline whitespace-nowrap">
-                {strategyDetails.meets ? 'Dentro da estratégia' : 'Fora da estratégia'}
-              </span>
-            </motion.span>
+                  <span className="hidden sm:inline whitespace-nowrap">
+                    {strategyDetails.meets ? 'Dentro da estratégia' : 'Fora da estratégia'}
+                  </span>
+                </motion.span>
+            </div>
             <div className="w-full mt-2 flex items-center gap-1 sm:gap-2 text-xs text-muted-foreground flex-wrap">
               <span className="hidden md:inline">Critérios:</span>
               {strategyDetails.criteria.map((c, idx) => (
@@ -301,43 +314,52 @@ export default function DetalhesVisaoGeralTab({
                 </span>
               )}
             </div>
-          </div>
-          <p className="text-lg text-muted-foreground">{info.symbol}</p>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-sm text-muted-foreground">
-            {info.sector && <span className="flex items-center gap-1"><Building2 className="w-4 h-4" />{info.sector}</span>}
-            {info.country && <span className="flex items-center gap-1"><Globe className="w-4 h-4" />{info.country}</span>}
-            {info.website && (
+            <p className="text-base sm:text-lg text-muted-foreground mt-1">{info.symbol}</p>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 text-xs sm:text-sm text-muted-foreground">
+              {info.sector && (
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/50">
+                  <Building2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>{info.sector}</span>
+                </span>
+              )}
+              {info.country && (
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/50">
+                  <Globe className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>{info.country}</span>
+                </span>
+              )}
+              {info.website && (
+                <a 
+                  href={info.website} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>Website</span>
+                </a>
+              )}
               <a 
-                href={info.website} 
+                href={`https://www.google.com/search?q=${encodeURIComponent(ticker)}`}
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-primary hover:underline"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                title="Pesquisar no Google"
               >
-                <ExternalLink className="w-4 h-4" />
-                Website
+                <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span>Google</span>
               </a>
-            )}
-            <a 
-              href={`https://www.google.com/search?q=${encodeURIComponent(ticker)}`}
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-primary hover:underline"
-              title="Pesquisar no Google"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Google
-            </a>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Métricas principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard
           title="Preço Atual"
           value={formatCurrency(info.currentPrice)}
           icon={DollarSign}
-          color="green"
           trend={historico && historico.length > 1 ? {
             value: calcularVariacao(historico[historico.length - 1].Close, historico[historico.length - 2].Close),
             isPositive: historico[historico.length - 1].Close > historico[historico.length - 2].Close
@@ -349,34 +371,30 @@ export default function DetalhesVisaoGeralTab({
           value={formatNumber(info.trailingPE)}
           subtitle="Price/Earnings"
           icon={Target}
-          color="blue"
         />
         <MetricCard
           title="P/VP"
           value={formatNumber(info.priceToBook)}
           subtitle="Price/Book Value"
           icon={FileText}
-          color="indigo"
         />
         <MetricCard
           title="Dividend Yield"
           value={formatDividendYield(info.dividendYield)}
           icon={TrendingUp}
-          color="purple"
         />
         <MetricCard
           title="ROE"
           value={formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)}
           subtitle="Return on Equity"
           icon={Activity}
-          color="orange"
         />
       </div>
 
       {/* Informações da empresa / FII */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <InfoSection title="Informações Gerais" icon={Building2} color="blue">
-          <div className="space-y-1">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <InfoSection title="Informações Gerais" icon={Building2}>
+          <div className="space-y-0.5">
             <InfoRow label="Nome Completo" value={info.longName} icon={FileText} />
             <InfoRow label="Ticker" value={info.symbol} icon={Award} />
             <InfoRow label="País" value={info.country} icon={Globe} />
@@ -397,8 +415,8 @@ export default function DetalhesVisaoGeralTab({
           </div>
         </InfoSection>
 
-        <InfoSection title="Indicadores de Mercado" icon={TrendingUp} color="green">
-          <div className="space-y-1">
+        <InfoSection title="Indicadores de Mercado" icon={TrendingUp}>
+          <div className="space-y-0.5">
             <InfoRow label="Market Cap" value={formatCurrency(info.marketCap)} icon={DollarSign} />
             <InfoRow label="Enterprise Value (EV)" value={formatCurrency(enterpriseValue)} icon={DollarSign} />
             <InfoRow label="EBIT (estimado)" value={formatCurrency(ebitComputed)} icon={Target} />
@@ -416,7 +434,7 @@ export default function DetalhesVisaoGeralTab({
       {/* Seção de Portfólio para FIIs */}
       {tipoAtivo === 'FII' && fiiMetadata?.portfolio && (
         <div className="mt-8">
-          <InfoSection title="Portfólio do FII" icon={Building2} color="blue">
+          <InfoSection title="Portfólio do FII" icon={Building2}>
             <PortfolioFIIComponent portfolio={fiiMetadata.portfolio} />
           </InfoSection>
         </div>

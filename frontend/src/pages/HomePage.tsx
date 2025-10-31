@@ -39,7 +39,7 @@ import {
   ChevronRight,
   Settings
 } from 'lucide-react'
-// Importação direta dos gráficos (mais confiável)
+
 import { 
   AreaChart, 
   Area, 
@@ -73,15 +73,15 @@ export default function HomePage() {
   })
   const [abrirConfigMeta, setAbrirConfigMeta] = useState(false)
 
-  // Estados para modal de distribuição da carteira
+
   const [modalAberto, setModalAberto] = useState(false)
   const [modalTitulo, setModalTitulo] = useState('')
   const [modalAtivos, setModalAtivos] = useState<any[]>([])
   const [modalTipo, setModalTipo] = useState<'tipo' | 'ativo' | 'top'>('tipo')
 
-  // Função para abrir modal com dados específicos
+
   const abrirModalPorTipo = async (tipo: string) => {
-    // Se for FII, buscar dados com metadados
+
     if (tipo.toLowerCase().includes('fii')) {
       try {
         const response = await fetch('/api/carteira/com-metadados-fii')
@@ -93,7 +93,7 @@ export default function HomePage() {
         setModalAberto(true)
       } catch (error) {
         console.error('Erro ao buscar metadados de FIIs:', error)
-        // Fallback para dados normais
+      
         const ativosDoTipo = carteira?.filter(ativo => ativo.tipo === tipo) || []
         setModalTitulo(`Ativos - ${tipo}`)
         setModalAtivos(ativosDoTipo)
@@ -109,7 +109,7 @@ export default function HomePage() {
     }
   }
 
-  // Carregamento prioritário - dados essenciais primeiro
+  
   const { data: carteira, isLoading: loadingCarteira, isFetching: isFetchingCarteira } = useQuery({
     queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
@@ -121,7 +121,7 @@ export default function HomePage() {
     refetchIntervalInBackground: true, 
   })
 
-  // Resumo home - carregamento sob demanda (só quando necessário)
+
   const { data: resumoHome, isLoading: loadingResumo } = useQuery({
     queryKey: ['home-resumo', user, mesAtual, anoAtual],
     queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
@@ -135,7 +135,7 @@ export default function HomePage() {
   const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')
   const [gastosPeriodo, setGastosPeriodo] = useState<'1m' | '3m' | '6m'>('1m')
   
-  // Estados para monitorar atualizações automáticas
+
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
   const isFirstLoad = useRef(true)
 
@@ -1492,7 +1492,7 @@ export default function HomePage() {
         })
       }
       
-      // Baseado no saldo
+     
       if (saldoCalculado < 0) {
         actions.push({
           to: "/controle",
@@ -1503,7 +1503,7 @@ export default function HomePage() {
         })
       }
       
-      // Baseado na diversificação
+   
       const concentracao = getConcentracaoAtivos()
       if (concentracao.maxAtivo > 20 || concentracao.maxSetor > 40) {
         actions.push({
@@ -1515,7 +1515,7 @@ export default function HomePage() {
         })
       }
       
-      // Funcionalidades educativas sempre disponíveis
+   
       actions.push({
         to: "/juros-compostos",
         icon: Calculator,
@@ -1899,15 +1899,25 @@ export default function HomePage() {
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
+                        // Calcular percentual corretamente: usar a propriedade percentage calculada ou calcular baseado no total
+                        const percentual = data.percentage || (totalInvestido > 0 ? ((data.value / totalInvestido) * 100) : 0);
                         return (
                           <div className="bg-card p-2 rounded-md shadow-lg border border-border text-sm">
                             <p className="font-semibold text-foreground">{data.name}</p>
-                            <p className="text-foreground">{formatCurrency(data.value)} ({`${(data.percent * 100).toFixed(1)}%`})</p>
+                            <p className="text-foreground">{formatCurrency(data.value)} ({`${Number(percentual).toFixed(1)}%`})</p>
                           </div>
                         );
                       }
                       return null;
                     }}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))', 
+                      borderRadius: '8px',
+                      color: 'hsl(var(--foreground))'
+                    }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
                   />
                   <Legend 
                     wrapperStyle={{ 
