@@ -4,7 +4,6 @@ import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
 import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
-import ThemeColorPicker from './ThemeColorPicker'
 
 interface LayoutProps {
   children: ReactNode
@@ -148,7 +147,6 @@ export default function Layout({ children }: LayoutProps) {
           })}
         </nav>
         <div className="p-4 border-t border-border space-y-2">
-          <ThemeColorPicker />
           <button
             onClick={toggleTheme}
             className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -220,7 +218,6 @@ export default function Layout({ children }: LayoutProps) {
               })}
             </nav>
             <div className="pt-2 border-t border-border space-y-2">
-              <ThemeColorPicker />
               <button
                 onClick={toggleTheme}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
