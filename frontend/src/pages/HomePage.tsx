@@ -114,9 +114,11 @@ export default function HomePage() {
     queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
     retry: 3,
-    refetchOnWindowFocus: true, 
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
     enabled: !!user,
-    staleTime: 2 * 60 * 1000, 
+    staleTime: 0,
     refetchInterval: 3 * 60 * 1000, 
     refetchIntervalInBackground: true, 
   })
@@ -126,9 +128,11 @@ export default function HomePage() {
     queryKey: ['home-resumo', user, mesAtual, anoAtual],
     queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
     retry: 3,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
     enabled: !!user && !!carteira, // Só carrega depois da carteira
-    staleTime: 3 * 60 * 1000, // 3 minutos
+    staleTime: 0,
   })
 
 
@@ -163,6 +167,9 @@ export default function HomePage() {
             fontSize: '12px',
           },
         })
+        // Invalida carteira com usuário atual
+        const u = (typeof window !== 'undefined' && window.localStorage.getItem('finmas_user')) || undefined
+        queryClient.invalidateQueries({ queryKey: ['carteira', u] })
         queryClient.invalidateQueries({ queryKey: ['carteira'] })
         setUltimaAtualizacao(new Date())
       }
@@ -242,9 +249,11 @@ export default function HomePage() {
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
-    refetchOnWindowFocus: true, 
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
     enabled: !!user && !!carteira, 
-    staleTime: 3 * 60 * 1000, 
+    staleTime: 0, 
     refetchInterval: 5 * 60 * 1000, 
     refetchIntervalInBackground: true, 
   })

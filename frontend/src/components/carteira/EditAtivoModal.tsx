@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react'
 import { carteiraService, ativoService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface EditAtivoModalProps {
   open: boolean
@@ -29,6 +30,7 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
   const [carregandoPreco, setCarregandoPreco] = useState(false)
 
   const queryClient = useQueryClient()
+  const { user } = useAuth()
 
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
                              ticker.includes('DEB') || ticker.includes('TESOURO') || ativo.ticker.includes('renda fixa')
           
           if (isRendaFixa) {
-            // Para renda fixa, usar preço atual do ativo como fallback
+            
             setPrecoAtual({
               preco: ativo.preco_atual,
               data: new Date().toISOString().split('T')[0],
@@ -149,6 +151,10 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
       })
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
+      // Backfill
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })

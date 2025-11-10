@@ -4,6 +4,7 @@ import { carteiraService, ativoService, listasService } from '../../services/api
 import { normalizeTicker } from '../../utils/tickerUtils'
 import { X, ChevronLeft, ChevronRight, ShieldCheck, Calendar, Percent, DollarSign, Layers, Plus } from 'lucide-react'
 import RendaFixaFormModal from './RendaFixaFormModal'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface AddAtivoModalProps {
   open: boolean
@@ -35,6 +36,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
   const [carregandoPreco, setCarregandoPreco] = useState(false)
 
   const queryClient = useQueryClient()
+  const { user } = useAuth()
 
 
   const { data: tiposApi } = useQuery({
@@ -318,6 +320,11 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
       )
     },
     onSuccess: () => {
+      // Padronizar com a queryKey usada na CarteiraPage (['carteira', user])
+      queryClient.invalidateQueries({ queryKey: ['carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
+      // Backfill para qualquer chave sem user (segurança)
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })

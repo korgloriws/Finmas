@@ -36,6 +36,8 @@ interface CarteiraGraficosTabProps {
     ivvb11: (number | null)[]
     ifix: (number | null)[]
     ipca: (number | null)[]
+    cdi?: (number | null)[]
+    carteira_price?: (number | null)[]
   } | null
   filtroPeriodo: string
   setFiltroPeriodo: (value: string) => void
@@ -170,6 +172,11 @@ export default function CarteiraGraficosTab({
     return series || []
   }, [historicoCarteira, indiceRef])
 
+  // Série de retorno por preço (exclui aportes/retiradas), rebased (já vem como índice base 100)
+  const carteiraRetornoSeries = useMemo(() => {
+    return (historicoCarteira?.carteira_price || historicoCarteira?.carteira || []) as Array<number | null>
+  }, [historicoCarteira])
+
   const indiceValorSeries = useMemo(() => {
     if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
     return (indiceSeries || []).map((v) => {
@@ -177,6 +184,16 @@ export default function CarteiraGraficosTab({
       return initialWealth * (Number(v) / 100)
     })
   }, [historicoCarteira, indiceSeries, initialWealth])
+
+  // Série de valor (R$) construída a partir do retorno por preço (sem aportes)
+  const carteiraValorPrecoSeries = useMemo(() => {
+    if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
+    const baseSeries = carteiraRetornoSeries || []
+    return baseSeries.map((v) => {
+      if (v == null || isNaN(Number(v))) return null
+      return initialWealth * (Number(v) / 100)
+    })
+  }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
 
   const comparativoResumo = useMemo(() => {
     const carteiraArr = historicoCarteira?.carteira_valor || []
@@ -305,17 +322,21 @@ export default function CarteiraGraficosTab({
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (%)</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (%) — preço (sem aportes)</div>
                     <div className={`text-base md:text-lg font-bold ${
-                      (historicoCarteira.carteira_valor?.[historicoCarteira.carteira_valor.length - 1] || 0) > (historicoCarteira.carteira_valor?.[0] || 0) 
-                        ? 'text-green-600' 
-                        : 'text-red-600'
+                      (() => {
+                        const s = carteiraRetornoSeries || []
+                        const first = s.find(v => typeof v === 'number') as number | undefined
+                        const last = [...s].reverse().find(v => typeof v === 'number') as number | undefined
+                        return (first && last && last >= first) ? 'text-green-600' : 'text-red-600'
+                      })()
                     }`}>
                       {(() => {
-                        const inicial = historicoCarteira.carteira_valor?.[0] || 0
-                        const atual = historicoCarteira.carteira_valor?.[historicoCarteira.carteira_valor.length - 1] || 0
-                        if (inicial === 0) return '0%'
-                        const crescimento = ((atual - inicial) / inicial) * 100
+                        const s = carteiraRetornoSeries || []
+                        const first = s.find(v => typeof v === 'number') as number | undefined
+                        const last = [...s].reverse().find(v => typeof v === 'number') as number | undefined
+                        if (!first || !last) return '0%'
+                        const crescimento = ((last / first) - 1) * 100
                         return `${crescimento > 0 ? '+' : ''}${crescimento.toFixed(2)}%`
                       })()}
                     </div>
@@ -357,7 +378,7 @@ export default function CarteiraGraficosTab({
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={historicoCarteira.datas.map((d, i) => ({
                         data: d,
-                        carteira_valor: historicoCarteira.carteira_valor?.[i] ?? null,
+                        carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
                         indice_valor: indiceValorSeries?.[i] ?? null,
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -380,18 +401,53 @@ export default function CarteiraGraficosTab({
                             fontSize: '12px'
                           }}
                           formatter={(value: any, name: string) => {
-                            const label = name === 'carteira_valor' ? 'Carteira' : `${indiceRef.toUpperCase()} simulado`
+                            const label = name === 'carteira_valor' ? 'Carteira (preço)' : `${indiceRef.toUpperCase()} simulado`
                             return [formatCurrency(value), label]
                           }}
                           labelFormatter={(label) => `Data: ${label}`}
                         />
                         <Legend />
-                        <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira" />
+                        <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
                         <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} simulado`} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
+
+              {/* Gráfico de Retorno (%) sem aportes */}
+              <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
+                <div className="text-xs md:text-sm text-muted-foreground mb-2">Retorno (%) — preço (exclui aportes/retiradas)</div>
+                <div className="h-56 sm:h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={historicoCarteira.datas.map((d, i) => ({
+                      data: d,
+                      carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
+                      indice_idx: (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null,
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v: any) => (typeof v === 'number' ? `${(v - 100).toFixed(0)}%` : '')} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: 'hsl(var(--foreground))',
+                          fontSize: '12px'
+                        }}
+                        formatter={(value: any, name: string) => {
+                          const label = name === 'carteira_idx' ? 'Carteira (preço)' : `${indiceRef.toUpperCase()} (índice)`
+                          return [`${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`, label]
+                        }}
+                        labelFormatter={(label) => `Data: ${label}`}
+                      />
+                      <Legend />
+                      <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
+                      <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} (índice)`} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
               </>
             ) : (
             <div className="h-64 flex items-center justify-center text-muted-foreground">

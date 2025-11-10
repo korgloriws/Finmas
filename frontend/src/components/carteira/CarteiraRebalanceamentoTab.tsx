@@ -160,6 +160,8 @@ function TargetsForm({ defaultTargets, onSave, onChange }: {
       setNovoTipo('')
       onChange(newTargets)
       queryClient.invalidateQueries({ queryKey: ['tipos-ativos'] })
+      const u = (typeof window !== 'undefined' && window.localStorage.getItem('finmas_user')) || undefined
+      queryClient.invalidateQueries({ queryKey: ['carteira', u] })
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       // toast.success('Tipo criado com sucesso')
     } catch (e: any) {

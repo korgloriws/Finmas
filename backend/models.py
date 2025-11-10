@@ -2368,21 +2368,39 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         if not preco_inicial or not indexador or not indexador_pct:
             return preco_inicial
         
-        # Converter data de adição para datetime
+        # Converter data de adição para datetime (aceitar múltiplos formatos)
         from datetime import datetime
+        data_adicao_dt = None
         try:
-            data_adicao_dt = datetime.strptime(data_adicao, "%Y-%m-%d %H:%M:%S")
-        except:
-            # Se não conseguir parsear, usar data atual
+            if isinstance(data_adicao, str):
+                s = data_adicao.strip()
+                # Remover sufixo 'Z' se presente e tentar múltiplos formatos comuns
+                s_clean = s.replace('Z', '')
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+                    try:
+                        data_adicao_dt = datetime.strptime(s_clean, fmt)
+                        break
+                    except Exception:
+                        pass
+                if data_adicao_dt is None:
+                    try:
+                        data_adicao_dt = datetime.fromisoformat(s_clean)
+                    except Exception:
+                        pass
+            elif isinstance(data_adicao, datetime):
+                data_adicao_dt = data_adicao
+        except Exception:
+            data_adicao_dt = None
+        if data_adicao_dt is None:
+            # Como último recurso, considerar hoje menos um dia para evitar zero dias
             data_adicao_dt = datetime.now()
         
         # Calcular dias desde a adição
-        dias_desde_adicao = (datetime.now() - data_adicao_dt).days
-        
-        if dias_desde_adicao <= 0:
+        dias_totais = max((datetime.now() - data_adicao_dt).days, 0)
+        if dias_totais <= 0:
             return preco_inicial
         
-        print(f"DEBUG: Calculando valorização para {indexador} desde {data_adicao} ({dias_desde_adicao} dias)")
+        print(f"DEBUG: Calculando valorização para {indexador} desde {data_adicao} ({dias_totais} dias)")
         
         # Aplicar percentual do indexador (ex: 110% = 1.1)
         fator_percentual = indexador_pct / 100
@@ -2398,9 +2416,11 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             # Aplicar taxa anual com percentual do indexador
             taxa_anual_indexada = taxa_anual * fator_percentual
             taxa_diaria = (1 + taxa_anual_indexada / 100) ** (1/252) - 1
-            fator_correcao = (1 + taxa_diaria) ** dias_desde_adicao
+            # Aproximação de dias úteis (252 por ano)
+            dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
+            fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
             
-            print(f"DEBUG: {indexador} taxa={taxa_anual}% | indexada={taxa_anual_indexada}% | diaria={taxa_diaria:.8f} | fator={fator_correcao:.6f}")
+            print(f"DEBUG: {indexador} taxa={taxa_anual}% | indexada={taxa_anual_indexada}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
             
         elif indexador == "CDI+":
             # CDI+: CDI atual + taxa fixa prefixada
@@ -2409,14 +2429,15 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             taxa_total_anual = taxa_cdi_atual + taxa_fixa_anual
             
             taxa_diaria = (1 + taxa_total_anual / 100) ** (1/252) - 1
-            fator_correcao = (1 + taxa_diaria) ** dias_desde_adicao
+            dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
+            fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
             
-            print(f"DEBUG: CDI+ CDI={taxa_cdi_atual}% + fixa={taxa_fixa_anual}% = {taxa_total_anual}% | diaria={taxa_diaria:.8f} | fator={fator_correcao:.6f}")
+            print(f"DEBUG: CDI+ CDI={taxa_cdi_atual}% + fixa={taxa_fixa_anual}% = {taxa_total_anual}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA":
             # Para IPCA: usar IPCA atual mensal
             ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
-            meses_desde_adicao = dias_desde_adicao / 30.44
+            meses_desde_adicao = dias_totais / 30.44
             taxa_mensal_indexada = ipca_atual_mensal * fator_percentual
             fator_correcao = (1 + taxa_mensal_indexada / 100) ** meses_desde_adicao
             
@@ -2427,7 +2448,7 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
             taxa_fixa_mensal = (indexador_pct or 0) / 12  
             taxa_mensal_total = ipca_atual_mensal + taxa_fixa_mensal
-            meses_desde_adicao = dias_desde_adicao / 30.44
+            meses_desde_adicao = dias_totais / 30.44
             fator_correcao = (1 + taxa_mensal_total / 100) ** meses_desde_adicao
             
             print(f"DEBUG: IPCA+ IPCA={ipca_atual_mensal}% + fixa_mensal={taxa_fixa_mensal}% = {taxa_mensal_total}% | meses={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
@@ -2436,7 +2457,7 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
 
             taxa_anual_decimal = (indexador_pct or 0) / 100.0
             taxa_diaria = (1 + taxa_anual_decimal) ** (1/365) - 1
-            fator_correcao = (1 + taxa_diaria) ** dias_desde_adicao
+            fator_correcao = (1 + taxa_diaria) ** dias_totais
             
             print(f"DEBUG: PREFIXADO anual={indexador_pct}% | diaria={taxa_diaria:.8f} | fator={fator_correcao:.6f}")
             
@@ -2461,7 +2482,7 @@ def obter_taxa_usd_brl():
     Retorna o valor de 1 USD em BRL
     """
     try:
-        print("🔄 Buscando taxa USD/BRL...")
+        print(" Buscando taxa USD/BRL...")
         
         # Buscar taxa USD/BRL usando yfinance
         usd_brl = yf.Ticker("BRL=X")
@@ -2469,17 +2490,17 @@ def obter_taxa_usd_brl():
         
         if info and 'currentPrice' in info and info['currentPrice']:
             taxa = float(info['currentPrice'])
-            print(f"✅ Taxa USD/BRL obtida: {taxa:.4f}")
+            print(f" Taxa USD/BRL obtida: {taxa:.4f}")
             return taxa
         else:
             # Fallback: usar histórico mais recente
             hist = usd_brl.history(period="1d")
             if not hist.empty:
                 taxa = float(hist['Close'].iloc[-1])
-                print(f"✅ Taxa USD/BRL (histórico): {taxa:.4f}")
+                print(f" Taxa USD/BRL (histórico): {taxa:.4f}")
                 return taxa
             else:
-                print("⚠️ Não foi possível obter taxa USD/BRL, usando taxa padrão")
+                print(" Não foi possível obter taxa USD/BRL, usando taxa padrão")
                 return 5.20  # Taxa padrão de fallback
                 
     except Exception as e:
@@ -4374,7 +4395,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
     try:
         usuario = get_usuario_atual()
         if not usuario:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
 
         if _is_postgres():
             conn = _pg_conn_for_user(usuario)
@@ -4400,7 +4421,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             movimentos = cursor.fetchall()
 
         if not movimentos:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
 
 
         datas_mov = [datetime.strptime(m[0][:10], '%Y-%m-%d') for m in movimentos]
@@ -4627,6 +4648,44 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         }
         datas_labels, series_dict = reduce_by_granularity(datas_labels, series_dict, gran)
 
+        # Construir série de retorno por preço (exclui aportes/retiradas)
+        # Método: mantém alocação do início do subperíodo e calcula retorno do subperíodo
+        # carteia_price_base começa em 100 e multiplica por (V_curr/V_prev) usando quantidades no início do subperíodo
+        carteira_price_base = []
+        if pontos:
+            base_val = 100.0
+            carteira_price_base.append(base_val)
+            for i in range(1, len(pontos)):
+                prev_pt = pontos[i-1]
+                cur_pt = pontos[i]
+                V_prev = 0.0
+                V_cur = 0.0
+                for tk in tickers:
+                    q_prev = quantity_until(tk, prev_pt)
+                    if q_prev <= 0:
+                        continue
+                    p_prev = price_on_or_before(ticker_to_hist.get(tk), prev_pt)
+                    p_cur = price_on_or_before(ticker_to_hist.get(tk), cur_pt)
+                    if p_prev is None or p_cur is None:
+                        continue
+                    V_prev += q_prev * p_prev
+                    V_cur += q_prev * p_cur
+                if V_prev and V_prev > 0:
+                    sub_return = V_cur / V_prev
+                    base_val = base_val * sub_return
+                # Se não há V_prev, mantém base
+                carteira_price_base.append(base_val)
+        # Ajustar carteira_price_base à mesma granularidade e labels
+        if gran == 'semanal':
+            labels_full = [pt.strftime('%Y-%m-%d') for pt in pontos]
+        else:
+            labels_full = [pt.strftime('%Y-%m') for pt in pontos]
+        # Mapear labels_full -> carteira_price_base e reduzir por gran (mesmo filtro já foi aplicado acima para outras séries)
+        # Como reduce_by_granularity pode ter reduzido datas_labels, precisamos alinhar
+        carteira_price_series = []
+        label_to_price = {labels_full[i]: carteira_price_base[i] for i in range(len(labels_full))} if pontos else {}
+        for lab in datas_labels:
+            carteira_price_series.append(label_to_price.get(lab, None))
 
         carteira_rebased = rebase(series_dict['carteira'])
         ibov_rebased = rebase(series_dict['ibov'])
@@ -4644,10 +4703,11 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             "ipca": ipca_rebased,
             "cdi": cdi_rebased,
             "carteira_valor": series_dict['carteira'],
+            "carteira_price": carteira_price_series,
         }
     except Exception as e:
         print(f"Erro em obter_historico_carteira_comparado: {e}")
-        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "carteira_valor": []}
+        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
 
 
 # ==================== FUNÇÕES DE CONTROLE FINANCEIRO ====================
@@ -6202,7 +6262,8 @@ def marcar_cartao_como_pago(cartao_id, mes_pagamento, ano_pagamento):
                 nome_cartao, limite = cartao
                 
 
-                total_compras = calcular_total_compras_cartao(cartao_id)
+                # Somar somente as compras do mês/ano informados
+                total_compras = calcular_total_compras_cartao(cartao_id, mes_pagamento, ano_pagamento)
                 
 
                 cursor.execute("""
@@ -6241,8 +6302,8 @@ def marcar_cartao_como_pago(cartao_id, mes_pagamento, ano_pagamento):
             
             nome_cartao, limite = cartao
             
-            # Calcular total de compras não pagas (todas as compras do cartão)
-            total_compras = calcular_total_compras_cartao(cartao_id)
+            # Calcular total de compras do mês/ano informados
+            total_compras = calcular_total_compras_cartao(cartao_id, mes_pagamento, ano_pagamento)
             
             # Marcar cartão como pago
             cursor.execute("""
@@ -6278,13 +6339,19 @@ def desmarcar_cartao_como_pago(cartao_id):
         conn = _pg_conn_for_user(usuario)
         try:
             with conn.cursor() as cursor:
-                # Buscar dados do cartão
-                cursor.execute("SELECT nome FROM cartoes_cadastrados WHERE id = %s", [cartao_id])
-                cartao = cursor.fetchone()
-                if not cartao:
+                # Buscar dados do cartão incluindo mês/ano de pagamento atual
+                cursor.execute("SELECT nome, mes_pagamento, ano_pagamento FROM cartoes_cadastrados WHERE id = %s", [cartao_id])
+                row = cursor.fetchone()
+                if not row:
                     return False
-                
-                nome_cartao = cartao[0]
+                nome_cartao, mes_pg, ano_pg = row
+                # Montar a data alvo do lançamento do pagamento (primeiro dia do mês)
+                data_alvo = None
+                if mes_pg and ano_pg:
+                    try:
+                        data_alvo = f"{int(ano_pg):04d}-{int(mes_pg):02d}-01"
+                    except Exception:
+                        data_alvo = None
                 
                 # Desmarcar cartão como pago
                 cursor.execute("""
@@ -6293,11 +6360,12 @@ def desmarcar_cartao_como_pago(cartao_id):
                     WHERE id = %s
                 """, [cartao_id])
                 
-                # Remover despesa correspondente
-                cursor.execute("""
-                    DELETE FROM outros_gastos 
-                    WHERE nome = %s AND categoria = 'cartao'
-                """, [f"Pagamento {nome_cartao}"])
+                # Remover somente a despesa correspondente ao mês/ano do pagamento registrado
+                if data_alvo:
+                    cursor.execute("""
+                        DELETE FROM outros_gastos 
+                        WHERE nome = %s AND categoria = 'cartao' AND data = %s
+                    """, [f"Pagamento {nome_cartao}", data_alvo])
                 
                 conn.commit()
                 return True
@@ -6309,13 +6377,18 @@ def desmarcar_cartao_como_pago(cartao_id):
         try:
             cursor = conn.cursor()
             
-            # Buscar dados do cartão
-            cursor.execute("SELECT nome FROM cartoes_cadastrados WHERE id = ?", [cartao_id])
-            cartao = cursor.fetchone()
-            if not cartao:
+            # Buscar dados do cartão incluindo mês/ano de pagamento atual
+            cursor.execute("SELECT nome, mes_pagamento, ano_pagamento FROM cartoes_cadastrados WHERE id = ?", [cartao_id])
+            row = cursor.fetchone()
+            if not row:
                 return False
-            
-            nome_cartao = cartao[0]
+            nome_cartao, mes_pg, ano_pg = row
+            data_alvo = None
+            if mes_pg and ano_pg:
+                try:
+                    data_alvo = f"{int(ano_pg):04d}-{int(mes_pg):02d}-01"
+                except Exception:
+                    data_alvo = None
             
             # Desmarcar cartão como pago
             cursor.execute("""
@@ -6324,16 +6397,57 @@ def desmarcar_cartao_como_pago(cartao_id):
                 WHERE id = ?
             """, [cartao_id])
             
-            # Remover despesa correspondente
-            cursor.execute("""
-                DELETE FROM outros_gastos 
-                WHERE nome = ? AND categoria = 'cartao'
-            """, [f"Pagamento {nome_cartao}"])
+            # Remover somente a despesa correspondente ao mês/ano do pagamento registrado
+            if data_alvo:
+                cursor.execute("""
+                    DELETE FROM outros_gastos 
+                    WHERE nome = ? AND categoria = 'cartao' AND data = ?
+                """, [f"Pagamento {nome_cartao}", data_alvo])
             
             conn.commit()
             return True
         finally:
             conn.close()
+
+# ==================== ROTINA DE ROLLOVER DE MÊS PARA CARTÕES ====================
+def resetar_status_cartoes_novo_mes():
+    """
+    Se o mês virou, resetar o status 'pago' dos cartões para permitir novo pagamento,
+    sem remover as despesas lançadas em meses anteriores.
+    """
+    usuario = get_usuario_atual()
+    if not usuario:
+        return
+    hoje = datetime.now()
+    mes_atual = hoje.month
+    ano_atual = hoje.year
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE cartoes_cadastrados
+                    SET pago = FALSE, mes_pagamento = NULL, ano_pagamento = NULL, data_pagamento = NULL
+                    WHERE pago = TRUE AND (mes_pagamento IS DISTINCT FROM %s OR ano_pagamento IS DISTINCT FROM %s)
+                """, (mes_atual, ano_atual))
+                # Nenhuma remoção em outros_gastos aqui (não devemos afetar meses anteriores)
+                conn.commit()
+        finally:
+            conn.close()
+        return
+    # SQLite
+    db_path = get_db_path(usuario, "controle")
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE cartoes_cadastrados
+            SET pago = 0, mes_pagamento = NULL, ano_pagamento = NULL, data_pagamento = NULL
+            WHERE pago = 1 AND (mes_pagamento != ? OR ano_pagamento != ?)
+        """, (mes_atual, ano_atual))
+        conn.commit()
+    finally:
+        conn.close()
 
 # ==================== FUNÇÕES DE SIMULAÇÃO DE CHOQUES ====================
 

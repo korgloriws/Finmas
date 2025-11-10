@@ -19,7 +19,7 @@ from models import (
     
     adicionar_cartao_cadastrado, listar_cartoes_cadastrados, atualizar_cartao_cadastrado, remover_cartao_cadastrado,
     adicionar_compra_cartao, listar_compras_cartao, atualizar_compra_cartao, remover_compra_cartao, calcular_total_compras_cartao,
-    marcar_cartao_como_pago, desmarcar_cartao_como_pago,
+    marcar_cartao_como_pago, desmarcar_cartao_como_pago, resetar_status_cartoes_novo_mes,
 
     consultar_marmitas, adicionar_marmita, atualizar_marmita, remover_marmita, gastos_mensais,
 
@@ -645,7 +645,7 @@ def api_get_ativo_details(ticker):
         info = acao.info or {}
         historico = acao.history(period="max")
         dividends = acao.dividends if hasattr(acao, 'dividends') else None
-        # ==================== MÉTRICAS DERIVADAS: Dívida Líquida/EBITDA ====================
+        # ==================== MÉTRICAS DERIVADAS E FUNDAMENTOS ====================
         try:
             total_debt = None
             total_cash = None
@@ -761,6 +761,226 @@ def api_get_ativo_details(ticker):
                 info['netDebt'] = net_debt
             if net_debt_to_ebitda is not None:
                 info['netDebtToEbitda'] = net_debt_to_ebitda
+        except Exception:
+            pass
+        
+        # Derivações adicionais (quando existirem campos no info ou nas demonstrações)
+        try:
+            # Bases
+            market_cap = None
+            try:
+                mc = info.get('marketCap')
+                market_cap = float(mc) if mc is not None else None
+            except Exception:
+                market_cap = None
+            enterprise_value = None
+            try:
+                ev = info.get('enterpriseValue')
+                enterprise_value = float(ev) if ev is not None else None
+            except Exception:
+                enterprise_value = None
+            total_assets = info.get('totalAssets')
+            total_current_assets = info.get('totalCurrentAssets')
+            total_current_liab = info.get('totalCurrentLiabilities')
+            total_liab = info.get('totalLiab')
+            equity = info.get('totalStockholderEquity')
+            price_to_sales = info.get('priceToSalesTrailing12Months')
+            payout_ratio = info.get('payoutRatio')
+            gross_margins = info.get('grossMargins')
+            operating_margins = info.get('operatingMargins')
+            profit_margins = info.get('profitMargins')
+            ebitda_margins = info.get('ebitdaMargins')
+            roic = info.get('returnOnInvestedCapital')
+            roa = info.get('returnOnAssets')
+            last_div = info.get('lastDividendValue') or info.get('lastDividend') or info.get('lastDividendDate')
+            dividend_rate = info.get('dividendRate')
+            # já computado acima: ebitda_val, net_debt
+            # EBIT: usar operatingIncome se existir; se não, tentar ebitda - D&A
+            ebit = None
+            try:
+                if info.get('ebit') is not None:
+                    ebit = float(info.get('ebit'))
+            except Exception:
+                ebit = None
+            if ebit is None:
+                try:
+                    if info.get('operatingIncome') is not None:
+                        ebit = float(info.get('operatingIncome'))
+                except Exception:
+                    ebit = None
+            if ebit is None:
+                try:
+                    da = info.get('depreciationAndAmortization')
+                    if ebitda_val is not None and da is not None:
+                        ebit = float(ebitda_val) - float(da)
+                except Exception:
+                    pass
+            if ebit is not None:
+                info['ebit'] = ebit
+            
+            # EV/EBITDA e EV/EBIT
+            ev_ebitda = None
+            try:
+                ev_to_ebitda_info = info.get('enterpriseToEbitda')
+                if ev_to_ebitda_info is not None:
+                    ev_ebitda = float(ev_to_ebitda_info)
+                elif enterprise_value is not None and ebitda_val and float(ebitda_val) != 0.0:
+                    ev_ebitda = float(enterprise_value) / float(ebitda_val)
+            except Exception:
+                ev_ebitda = None
+            if ev_ebitda is not None:
+                info['evToEbitda'] = ev_ebitda
+            ev_ebit = None
+            try:
+                if enterprise_value is not None and ebit and float(ebit) != 0.0:
+                    ev_ebit = float(enterprise_value) / float(ebit)
+            except Exception:
+                ev_ebit = None
+            if ev_ebit is not None:
+                info['evToEbit'] = ev_ebit
+            
+            # P/EBITDA e P/EBIT
+            p_ebitda = None
+            try:
+                if market_cap is not None and ebitda_val and float(ebitda_val) != 0.0:
+                    p_ebitda = float(market_cap) / float(ebitda_val)
+            except Exception:
+                p_ebitda = None
+            if p_ebitda is not None:
+                info['pToEbitda'] = p_ebitda
+            p_ebit = None
+            try:
+                if market_cap is not None and ebit and float(ebit) != 0.0:
+                    p_ebit = float(market_cap) / float(ebit)
+            except Exception:
+                p_ebit = None
+            if p_ebit is not None:
+                info['pToEbit'] = p_ebit
+            
+            # P/Ativo
+            p_to_assets = None
+            try:
+                if market_cap is not None and total_assets and float(total_assets) != 0.0:
+                    p_to_assets = float(market_cap) / float(total_assets)
+            except Exception:
+                p_to_assets = None
+            if p_to_assets is not None:
+                info['pToAssets'] = p_to_assets
+            
+            # P/Capital de Giro (Ativo Circulante - Passivo Circulante)
+            p_to_working_capital = None
+            try:
+                if (market_cap is not None and total_current_assets is not None and total_current_liab is not None):
+                    wc = float(total_current_assets) - float(total_current_liab)
+                    if wc != 0.0:
+                        p_to_working_capital = float(market_cap) / wc
+            except Exception:
+                p_to_working_capital = None
+            if p_to_working_capital is not None:
+                info['pToWorkingCapital'] = p_to_working_capital
+                info['pToNetCurrentAssets'] = p_to_working_capital  # alias P/Ativo Circ Líquido
+            
+            # Net Debt / Equity e Net Debt / EBIT
+            try:
+                if info.get('netDebt') is not None and equity and float(equity) != 0.0:
+                    info['netDebtToEquity'] = float(info['netDebt']) / float(equity)
+            except Exception:
+                pass
+            try:
+                if info.get('netDebt') is not None and ebit and float(ebit) != 0.0:
+                    info['netDebtToEbit'] = float(info['netDebt']) / float(ebit)
+            except Exception:
+                pass
+            # Gross debt ratios
+            try:
+                if total_debt is not None and equity and float(equity) != 0.0:
+                    info['grossDebtToEquity'] = float(total_debt) / float(equity)
+            except Exception:
+                pass
+            # Patrimônio/Ativos, Passivos/Ativos
+            try:
+                if equity and total_assets and float(total_assets) != 0.0:
+                    info['equityToAssets'] = float(equity) / float(total_assets)
+            except Exception:
+                pass
+            try:
+                if total_liab and total_assets and float(total_assets) != 0.0:
+                    info['liabilitiesToAssets'] = float(total_liab) / float(total_assets)
+            except Exception:
+                pass
+            # Liquidez Corrente
+            try:
+                if info.get('currentRatio') is None and total_current_assets and total_current_liab and float(total_current_liab) != 0.0:
+                    info['currentRatio'] = float(total_current_assets) / float(total_current_liab)
+            except Exception:
+                pass
+            # Giro de Ativos
+            try:
+                total_revenue = info.get('totalRevenue')
+                if total_revenue and total_assets and float(total_assets) != 0.0:
+                    info['assetTurnover'] = float(total_revenue) / float(total_assets)
+            except Exception:
+                pass
+            # PSR e payout já expostos pelo info, apenas manter nomes
+            if price_to_sales is not None:
+                info['psr'] = price_to_sales
+            if payout_ratio is not None:
+                info['payoutRatio'] = payout_ratio
+            if gross_margins is not None:
+                info['grossMargins'] = gross_margins
+            if operating_margins is not None:
+                info['operatingMargins'] = operating_margins
+            if profit_margins is not None:
+                info['profitMargins'] = profit_margins
+            if ebitda_margins is not None:
+                info['ebitdaMargins'] = ebitda_margins
+            if roic is not None:
+                info['returnOnInvestedCapital'] = roic
+            if roa is not None:
+                info['returnOnAssets'] = roa
+            if last_div is not None:
+                info['lastDiv'] = last_div
+            if dividend_rate is not None:
+                info['dividendRate'] = dividend_rate
+            # CAGRs (tentativa a partir de statements anuais)
+            try:
+                rev_cagr_5 = None
+                earn_cagr_5 = None
+                inc = getattr(acao, 'income_stmt', None)
+                if inc is not None and not inc.empty:
+                    cols = list(inc.columns)
+                    cols_sorted = sorted(cols)  # ordem ascendente
+                    if len(cols_sorted) >= 2:
+                        # Encontrar revenue e net income
+                        rev_keys = ('TotalRevenue', 'Total Revenue')
+                        ni_keys = ('NetIncome', 'Net Income', 'Net Income Common Stockholders')
+                        def get_line(keys):
+                            for k in keys:
+                                if k in inc.index:
+                                    return inc.loc[k, :]
+                            return None
+                        rev_line = get_line(rev_keys)
+                        ni_line = get_line(ni_keys)
+                        def cagr_from_line(line):
+                            if line is None:
+                                return None
+                            try:
+                                start = float(line.iloc[0] or 0.0)
+                                end = float(line.iloc[-1] or 0.0)
+                                n = max(1, len(line)-1)
+                                if start > 0 and end > 0:
+                                    return (end / start) ** (1.0 / n) - 1.0
+                            except Exception:
+                                return None
+                            return None
+                        rev_cagr_5 = cagr_from_line(rev_line)
+                        earn_cagr_5 = cagr_from_line(ni_line)
+                if rev_cagr_5 is not None:
+                    info['revenueCagr5y'] = rev_cagr_5
+                if earn_cagr_5 is not None:
+                    info['earningsCagr5y'] = earn_cagr_5
+            except Exception:
+                pass
         except Exception:
             pass
         
@@ -1118,10 +1338,17 @@ def spa_404_fallback(_e):
 def api_get_carteira():
     
     try:
+        # Proteção contra troca de usuário entre abas: valida o usuário esperado (opcional)
+        try:
+            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
+        except Exception:
+            expected_user = ''
         refresh = request.args.get('refresh') in ('1', 'true', 'True')
    
         usuario_atual = get_usuario_atual()
         print(f"DEBUG - Carteira: Usuário atual = {usuario_atual}")
+        if expected_user and usuario_atual and expected_user != str(usuario_atual).strip().lower():
+            return jsonify({"error": "User mismatch", "current_user": usuario_atual}), 409
        
         if refresh:
             try:
@@ -1173,6 +1400,14 @@ def api_migrar_precos_compra():
 @server.route("/api/carteira/refresh", methods=["POST"])
 def api_refresh_carteira():
     try:
+        # Proteção contra troca de usuário entre abas: valida o usuário esperado (opcional)
+        try:
+            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
+        except Exception:
+            expected_user = ''
+        actual_user = get_usuario_atual()
+        if expected_user and actual_user and expected_user != str(actual_user).strip().lower():
+            return jsonify({"error": "User mismatch", "current_user": actual_user}), 409
         print("DEBUG: Iniciando refresh da carteira...")
         result = atualizar_precos_indicadores_carteira()
         print(f"DEBUG: Resultado do refresh: {result}")
@@ -1197,6 +1432,14 @@ def api_refresh_carteira():
 def api_refresh_indexadores():
   
     try:
+        # Proteção contra troca de usuário entre abas: valida o usuário esperado (opcional)
+        try:
+            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
+        except Exception:
+            expected_user = ''
+        actual_user = get_usuario_atual()
+        if expected_user and actual_user and expected_user != str(actual_user).strip().lower():
+            return jsonify({"error": "User mismatch", "current_user": actual_user}), 409
         print("DEBUG: Iniciando refresh específico de indexadores...")
         result = atualizar_precos_indicadores_carteira()
         print(f"DEBUG: Resultado do refresh de indexadores: {result}")
@@ -3096,6 +3339,11 @@ def api_get_exchange_rate(symbol):
 def api_cartoes_cadastrados():
     try:
         if request.method == "GET":
+            # Rollover mensal: se o mês virou, liberar novamente o status de pagamento
+            try:
+                resetar_status_cartoes_novo_mes()
+            except Exception:
+                pass
             cartoes = listar_cartoes_cadastrados()
             return jsonify(cartoes)
         

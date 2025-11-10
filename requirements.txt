@@ -1,5 +1,6 @@
 pandas
 yfinance
+protobuf>=4.25.3
 Flask
 flask-cors
 flask-caching

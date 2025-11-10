@@ -161,6 +161,12 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       )
     },
     onSuccess: () => {
+      // Invalida com usuário (CarteiraPage usa ['carteira', user])
+      const u = (typeof window !== 'undefined' && window.localStorage.getItem('finmas_user')) || undefined
+      queryClient.invalidateQueries({ queryKey: ['carteira', u] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes', u] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-insights', u] })
+      // Backfill sem usuário
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })

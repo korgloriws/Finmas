@@ -41,6 +41,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     checkCurrentUser()
   }, [])
 
+  // Revalidar usuário em foco/visibilidade e sincronizar entre abas
+  useEffect(() => {
+    const onFocus = () => {
+      checkCurrentUser()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkCurrentUser()
+      }
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'finmas_user') {
+        checkCurrentUser()
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
   const checkCurrentUser = async () => {
     try {
       const response = await api.get('/auth/usuario-atual')
@@ -56,6 +81,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setLoading(false)
     }
   }
+
+  // Sincronizar usuário esperado no localStorage para ser enviado ao backend
+  useEffect(() => {
+    try {
+      if (user) {
+        window.localStorage.setItem('finmas_user', user)
+      } else {
+        window.localStorage.removeItem('finmas_user')
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [user])
 
   const login = async (username: string, password: string) => {
     try {

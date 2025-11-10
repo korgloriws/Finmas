@@ -170,7 +170,11 @@ export default function CarteiraPage() {
     queryKey: ['carteira', user], 
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user, 
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    // Tornar mais responsivo: sempre considerar stale e refetchar ao focar
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
   })
 
   const { data: tiposApi } = useQuery({
@@ -276,7 +280,10 @@ export default function CarteiraPage() {
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     enabled: !!user,
     retry: 3,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: 'always',
   })
 
 
@@ -870,6 +877,7 @@ export default function CarteiraPage() {
               setAtivoRendaFixaParaEditar(null)
             }}
             onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['carteira', user] })
               queryClient.invalidateQueries({ queryKey: ['carteira'] })
             }}
             initialData={ativoRendaFixaParaEditar}

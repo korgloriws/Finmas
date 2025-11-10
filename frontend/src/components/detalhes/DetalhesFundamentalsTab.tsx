@@ -91,8 +91,8 @@ export default function DetalhesFundamentalsTab({
             <InfoRow label="EBITDA" value={formatCurrency(info.ebitda)} icon={DollarSign} />
             <InfoRow label="Lucro por Ação (EPS)" value={formatCurrency(info.trailingEps, '')} icon={Award} />
             <InfoRow label="BVPS" value={formatCurrency(info.bookValue)} icon={FileText} />
-            <InfoRow label="Crescimento Receita (5y)" value={formatPercentage(info.revenueGrowth ? info.revenueGrowth * 100 : null)} icon={TrendingUp} />
-            <InfoRow label="Crescimento Lucro (5y)" value={formatPercentage(info.earningsGrowth ? info.earningsGrowth * 100 : null)} icon={TrendingUp} />
+            <InfoRow label="Crescimento Receita (5y)" value={formatPercentage((info.revenueCagr5y != null ? info.revenueCagr5y * 100 : (info.revenueGrowth != null ? info.revenueGrowth * 100 : null)))} icon={TrendingUp} />
+            <InfoRow label="Crescimento Lucro (5y)" value={formatPercentage((info.earningsCagr5y != null ? info.earningsCagr5y * 100 : (info.earningsGrowth != null ? info.earningsGrowth * 100 : null)))} icon={TrendingUp} />
           </div>
         </InfoSection>
 
@@ -100,12 +100,18 @@ export default function DetalhesFundamentalsTab({
           <div className="space-y-0.5">
             <InfoRow label="Dívida Líquida" value={formatCurrency(info.netDebt)} icon={AlertTriangle} />
             <InfoRow label="Dívida Líquida/EBITDA" value={info.netDebtToEbitda != null ? formatNumber(info.netDebtToEbitda) : '-'} icon={AlertTriangle} />
+            <InfoRow label="Dívida Líquida/EBIT" value={info.netDebtToEbit != null ? formatNumber(info.netDebtToEbit) : '-'} icon={AlertTriangle} />
+            <InfoRow label="Dívida Líquida/Patrimônio" value={info.netDebtToEquity != null ? formatNumber(info.netDebtToEquity) : '-'} icon={AlertTriangle} />
+            <InfoRow label="Dívida Bruta/Patrimônio" value={info.grossDebtToEquity != null ? formatNumber(info.grossDebtToEquity) : '-'} icon={AlertTriangle} />
             <InfoRow label="Dívida/Ativos" value={formatPercentage(info.debtToAssets ? info.debtToAssets * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Capital" value={formatPercentage(info.debtToCapital ? info.debtToCapital * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Fluxo de Caixa" value={formatPercentage(info.debtToCashFlow ? info.debtToCashFlow * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Fluxo de Caixa Livre" value={formatPercentage(info.debtToFreeCashFlow ? info.debtToFreeCashFlow * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/EBIT" value={formatPercentage(info.debtToEbit ? info.debtToEbit * 100 : null)} icon={AlertTriangle} />
             <InfoRow label="Dívida/Lucro Líquido" value={formatPercentage(info.debtToNetIncome ? info.debtToNetIncome * 100 : null)} icon={AlertTriangle} />
+            <InfoRow label="Liquidez Corrente" value={info.currentRatio != null ? formatNumber(info.currentRatio) : '-'} icon={AlertTriangle} />
+            <InfoRow label="Patrimônio/Ativos" value={formatPercentage(info.equityToAssets ? info.equityToAssets * 100 : null)} icon={AlertTriangle} />
+            <InfoRow label="Passivos/Ativos" value={formatPercentage(info.liabilitiesToAssets ? info.liabilitiesToAssets * 100 : null)} icon={AlertTriangle} />
           </div>
         </InfoSection>
 
@@ -127,8 +133,27 @@ export default function DetalhesFundamentalsTab({
             <InfoRow label="Margem Bruta" value={formatPercentage(info.grossMargins ? info.grossMargins * 100 : null)} icon={TrendingUp} />
             <InfoRow label="Margem Operacional" value={formatPercentage(info.operatingMargins ? info.operatingMargins * 100 : null)} icon={TrendingUp} />
             <InfoRow label="Margem Líquida" value={formatPercentage(info.profitMargins ? info.profitMargins * 100 : null)} icon={TrendingUp} />
+            <InfoRow label="Margem EBITDA" value={formatPercentage(info.ebitdaMargins ? info.ebitdaMargins * 100 : null)} icon={TrendingUp} />
             <InfoRow label="ROA" value={formatPercentage(info.returnOnAssets ? info.returnOnAssets * 100 : null)} icon={Activity} />
             <InfoRow label="ROIC" value={formatPercentage(info.returnOnInvestedCapital ? info.returnOnInvestedCapital * 100 : null)} icon={Activity} />
+            <InfoRow label="Giro de Ativos" value={info.assetTurnover != null ? formatNumber(info.assetTurnover) : '-'} icon={Activity} />
+          </div>
+        </InfoSection>
+
+        <InfoSection title="Valuation" icon={FileText}>
+          <div className="space-y-0.5">
+            <InfoRow label="P/L (trailing)" value={info.trailingPE != null ? formatNumber(info.trailingPE) : '-'} icon={FileText} />
+            <InfoRow label="P/Receita (PSR)" value={info.psr != null ? formatNumber(info.psr) : (info.priceToSalesTrailing12Months != null ? formatNumber(info.priceToSalesTrailing12Months) : '-')} icon={FileText} />
+            <InfoRow label="P/VP" value={info.priceToBook != null ? formatNumber(info.priceToBook) : '-'} icon={FileText} />
+            <InfoRow label="EV/EBITDA" value={info.evToEbitda != null ? formatNumber(info.evToEbitda) : '-'} icon={FileText} />
+            <InfoRow label="EV/EBIT" value={info.evToEbit != null ? formatNumber(info.evToEbit) : '-'} icon={FileText} />
+            <InfoRow label="P/EBITDA" value={info.pToEbitda != null ? formatNumber(info.pToEbitda) : '-'} icon={FileText} />
+            <InfoRow label="P/EBIT" value={info.pToEbit != null ? formatNumber(info.pToEbit) : '-'} icon={FileText} />
+            <InfoRow label="P/Ativo" value={info.pToAssets != null ? formatNumber(info.pToAssets) : '-'} icon={FileText} />
+            <InfoRow label="P/Cap. Giro" value={info.pToWorkingCapital != null ? formatNumber(info.pToWorkingCapital) : '-'} icon={FileText} />
+            <InfoRow label="P/Ativo Circ. Líq." value={info.pToNetCurrentAssets != null ? formatNumber(info.pToNetCurrentAssets) : '-'} icon={FileText} />
+            <InfoRow label="Dividend Yield" value={formatPercentage(info.dividendYield != null ? (info.dividendYield < 1 ? info.dividendYield * 100 : info.dividendYield) : null)} icon={PieChart} />
+            <InfoRow label="Payout" value={formatPercentage(info.payoutRatio != null ? info.payoutRatio * 100 : null)} icon={PieChart} />
           </div>
         </InfoSection>
       </div>

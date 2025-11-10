@@ -15,7 +15,17 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-
+    try {
+      const expectedUser = typeof window !== 'undefined'
+        ? (window.localStorage.getItem('finmas_user') || '')
+        : ''
+      if (expectedUser) {
+        config.headers = config.headers || {}
+        config.headers['X-User-Expected'] = expectedUser
+      }
+    } catch {
+      /* ignore */
+    }
     return config
   },
   (error) => {
@@ -277,6 +287,7 @@ export const carteiraService = {
     ipca: (number|null)[]
     cdi: (number|null)[]
     carteira_valor: number[]
+    carteira_price?: (number|null)[]
   }> => {
     const response = await api.get(`/carteira/historico?periodo=${periodo}`)
     return response.data
