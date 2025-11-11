@@ -372,8 +372,34 @@ export default function HomePage() {
   }
 
 
+  // Calcular valor inicial da carteira para conversão de carteira_price para R$
+  const initialWealth = useMemo(() => {
+    const arr = historicoCarteira?.carteira_valor || []
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i]
+      if (typeof v === 'number' && !isNaN(v)) return v
+    }
+    return 0
+  }, [historicoCarteira])
+
+  // Série de retorno por preço (exclui aportes/retiradas), rebased (já vem como índice base 100)
+  const carteiraRetornoSeries = useMemo(() => {
+    return (historicoCarteira?.carteira_price || historicoCarteira?.carteira || []) as Array<number | null>
+  }, [historicoCarteira])
+
+  // Série de valor (R$) construída a partir do retorno por preço (sem aportes)
+  const carteiraValorPrecoSeries = useMemo(() => {
+    if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
+    const baseSeries = carteiraRetornoSeries || []
+    return baseSeries.map((v) => {
+      if (v == null || isNaN(Number(v))) return null
+      return initialWealth * (Number(v) / 100)
+    })
+  }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
+
   const carteiraTrend = useMemo(() => {
-    const arr = historicoCarteira?.carteira_valor as Array<number | null> | undefined
+    // Usar carteiraValorPrecoSeries (sem aportes) em vez de carteira_valor (com aportes)
+    const arr = carteiraValorPrecoSeries as Array<number | null> | undefined
     if (!arr || arr.length < 2) return undefined
  
     let cur: number | undefined
@@ -387,7 +413,7 @@ export default function HomePage() {
     }
     if (cur === undefined || prevVal === undefined) return undefined
     return calcTrend(cur, prevVal)
-  }, [historicoCarteira])
+  }, [carteiraValorPrecoSeries])
 
   
   const totalReceitasAnterior = useMemo(() => {
@@ -990,17 +1016,18 @@ export default function HomePage() {
 
   // Componente Performance vs Meta
   const PerformanceVsMetaCard = ({ delay = 0 }: { delay?: number }) => {
-    // Calcular performance da carteira vs IBOV
+    // Calcular performance da carteira vs IBOV usando carteira_price (sem aportes)
     const performanceCarteira = useMemo(() => {
-      if (!historicoCarteira?.carteira_valor || historicoCarteira.carteira_valor.length < 2) return null
+      const s = carteiraRetornoSeries || []
+      if (s.length < 2) return null
       
-      const valores = historicoCarteira.carteira_valor.filter(v => v !== null) as number[]
+      const valores = s.filter(v => typeof v === 'number' && v !== null) as number[]
       if (valores.length < 2) return null
       
       const primeiro = valores[0]
       const ultimo = valores[valores.length - 1]
       return ((ultimo - primeiro) / primeiro) * 100
-    }, [historicoCarteira])
+    }, [carteiraRetornoSeries])
 
     const performanceIBOV = useMemo(() => {
       if (!historicoCarteira?.ibov || historicoCarteira.ibov.length < 2) return null
@@ -1801,18 +1828,37 @@ export default function HomePage() {
             ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
               <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96">
                 <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={(historicoCarteira?.datas || []).map((d: string, i: number) => ({
-                  data: d,
-                  carteira: historicoCarteira?.carteira?.[i] ?? null,
-                  ibov: historicoCarteira?.ibov?.[i] ?? null,
-                  ivvb11: historicoCarteira?.ivvb11?.[i] ?? null,
-                  ifix: historicoCarteira?.ifix?.[i] ?? null,
-                  ipca: historicoCarteira?.ipca?.[i] ?? null,
-                  cdi: historicoCarteira?.cdi?.[i] ?? null,
-                }))}>
+                <AreaChart data={(historicoCarteira?.datas || []).map((d: string, i: number) => {
+                  // Converter índices para R$ usando initialWealth
+                  const indiceSeries = (historicoCarteira?.ibov || []) as Array<number | null>
+                  const ibovValor = indiceSeries[i] != null && initialWealth > 0 
+                    ? initialWealth * (Number(indiceSeries[i]) / 100) 
+                    : null
+                  
+                  return {
+                    data: d,
+                    carteira: carteiraValorPrecoSeries?.[i] ?? null, // Usar série de preço (sem aportes)
+                    ibov: ibovValor,
+                    ivvb11: historicoCarteira?.ivvb11?.[i] != null && initialWealth > 0 
+                      ? initialWealth * (Number(historicoCarteira.ivvb11[i]) / 100) 
+                      : null,
+                    ifix: historicoCarteira?.ifix?.[i] != null && initialWealth > 0 
+                      ? initialWealth * (Number(historicoCarteira.ifix[i]) / 100) 
+                      : null,
+                    ipca: historicoCarteira?.ipca?.[i] != null && initialWealth > 0 
+                      ? initialWealth * (Number(historicoCarteira.ipca[i]) / 100) 
+                      : null,
+                    cdi: historicoCarteira?.cdi?.[i] != null && initialWealth > 0 
+                      ? initialWealth * (Number(historicoCarteira.cdi[i]) / 100) 
+                      : null,
+                  }
+                })}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    tickFormatter={(value) => formatCurrency(value, '')}
+                  />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: 'hsl(var(--card))', 
@@ -1820,8 +1866,14 @@ export default function HomePage() {
                       borderRadius: '8px',
                       color: 'hsl(var(--foreground))'
                     }}
+                    formatter={(value: any, name: string) => {
+                      const label = name === 'carteira' ? 'Carteira (preço)' : name
+                      return [formatCurrency(value), label]
+                    }}
+                    labelFormatter={(label) => `Data: ${label}`}
                   />
-                  <Area type="monotone" dataKey="carteira" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.12} strokeWidth={2} name="Carteira" />
+                  <Legend />
+                  <Area type="monotone" dataKey="carteira" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.12} strokeWidth={2} name="Carteira (preço)" />
                   <Area type="monotone" dataKey="ibov" stroke="#22c55e" fill="#22c55e" fillOpacity={0.08} strokeWidth={1.5} name="Ibovespa" />
                   <Area type="monotone" dataKey="ivvb11" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.08} strokeWidth={1.5} name="IVVB11" />
                   <Area type="monotone" dataKey="ifix" stroke="#a855f7" fill="#a855f7" fillOpacity={0.08} strokeWidth={1.5} name="IFIX" />
