@@ -1805,9 +1805,7 @@ export default function GuiaMercadoPage() {
             )}
 
             {activeTab === 'tesouro-direto' && (
-              <GuiaTesouroDiretoTab
-                googleUrl={googleUrl}
-              />
+              <GuiaTesouroDiretoTab />
             )}
           </div>
         </div>

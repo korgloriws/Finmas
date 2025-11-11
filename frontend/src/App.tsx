@@ -16,6 +16,7 @@ const ControlePage = lazy(() => import('./pages/ControlePage'))
 const JurosCompostosPage = lazy(() => import('./pages/JurosCompostosPage'))
 const GuiaMercadoPage = lazy(() => import('./pages/GuiaMercadoPage'))
 const ConversorMoedasPage = lazy(() => import('./pages/ConversorMoedasPage'))
+const AgendaDividendosPage = lazy(() => import('./pages/AgendaDividendosPage'))
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 
@@ -105,6 +106,16 @@ function App() {
               <SecurityCheck>
                 <Layout>
                   <Suspense fallback={<LoadingSpinner text="Carregando conversor de moedas..." />}> <ConversorMoedasPage /> </Suspense>
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/agenda-dividendos" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <Suspense fallback={<LoadingSpinner text="Carregando agenda de dividendos..." />}> <AgendaDividendosPage /> </Suspense>
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>

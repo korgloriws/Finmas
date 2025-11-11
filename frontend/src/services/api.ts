@@ -768,4 +768,119 @@ export const simuladorService = {
   },
 }
 
+export const dividendosService = {
+  getAgenda: async (mes?: number, ano?: number, tipos?: string[]): Promise<{
+    mes: number
+    ano: number
+    data_busca: string
+    acoes: { total: number; dividendos: Array<{
+      ticker: string
+      nome: string
+      tipo_ativo: string
+      tipo_provento: string
+      data_com: string
+      data_pagamento: string
+      valor: number
+      fonte: string
+    }>; total_estimado: number }
+    fiis: { total: number; dividendos: Array<{
+      ticker: string
+      nome: string
+      tipo_ativo: string
+      tipo_provento: string
+      data_com: string
+      data_pagamento: string
+      valor: number
+      fonte: string
+    }>; total_estimado: number }
+    bdrs: { total: number; dividendos: Array<{
+      ticker: string
+      nome: string
+      tipo_ativo: string
+      tipo_provento: string
+      data_com: string
+      data_pagamento: string
+      valor: number
+      fonte: string
+    }>; total_estimado: number }
+    erro?: string
+  }> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', mes.toString())
+    if (ano) params.append('ano', ano.toString())
+    if (tipos && tipos.length > 0) params.append('tipos', tipos.join(','))
+    
+    const response = await api.get(`/dividendos/agenda?${params.toString()}`)
+    return response.data
+  },
+  getRanking: async (tipo?: string, mes?: number, ano?: number): Promise<{
+    data_busca: string
+    acoes?: {
+      tipo: string
+      data_busca: string
+      total: number
+      ranking: Array<{
+        posicao: number
+        ticker: string
+        nome: string
+        tipo_ativo: string
+        valor_dividendo?: number
+        dividend_yield?: number
+        fonte: string
+      }>
+      erro?: string
+    }
+    fiis?: {
+      tipo: string
+      data_busca: string
+      total: number
+      ranking: Array<{
+        posicao: number
+        ticker: string
+        nome: string
+        tipo_ativo: string
+        valor_dividendo?: number
+        dividend_yield?: number
+        fonte: string
+      }>
+      erro?: string
+    }
+    bdrs?: {
+      tipo: string
+      data_busca: string
+      total: number
+      ranking: Array<{
+        posicao: number
+        ticker: string
+        nome: string
+        tipo_ativo: string
+        valor_dividendo?: number
+        dividend_yield?: number
+        fonte: string
+      }>
+      erro?: string
+    }
+    tipo?: string
+    total?: number
+    ranking?: Array<{
+      posicao: number
+      ticker: string
+      nome: string
+      tipo_ativo: string
+      valor_dividendo?: number
+      dividend_yield?: number
+      fonte: string
+    }>
+    erro?: string
+  }> => {
+    const params = new URLSearchParams()
+    if (tipo) params.append('tipo', tipo)
+    if (mes) params.append('mes', mes.toString())
+    if (ano) params.append('ano', ano.toString())
+    
+    const response = await api.get(`/dividendos/ranking?${params.toString()}`)
+    return response.data
+  },
+}
+
 export default api 

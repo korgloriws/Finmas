@@ -3722,9 +3722,7 @@ def api_mercados_negociacoes_balcao():
 
 @server.route("/api/mercados/negociacoes-intraday", methods=["GET"])
 def api_mercados_negociacoes_intraday():
-    """
-    API para negociações intraday
-    """
+
     try:
         limite = request.args.get('limite', 100, type=int)
         data_str = request.args.get('data')
@@ -3774,6 +3772,126 @@ def api_mercados_resumo():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@server.route("/api/dividendos/agenda", methods=["GET"])
+def api_agenda_dividendos():
+    """
+    API para buscar agenda de dividendos do mercado completo
+    Parâmetros:
+    - mes: mês (1-12), padrão: mês atual
+    - ano: ano (ex: 2024), padrão: ano atual
+    - tipos: tipos de ativos separados por vírgula (acoes,fiis,bdrs), padrão: todos
+    """
+    mes = None
+    ano = None
+    try:
+        from scraper_agenda_dividendos import buscar_agenda_dividendos
+        
+        # Obter parâmetros
+        mes = request.args.get('mes', type=int)
+        ano = request.args.get('ano', type=int)
+        tipos_str = request.args.get('tipos', 'acoes,fiis,bdrs')
+        
+        print(f"[AGENDA DIVIDENDOS] Recebida requisicao: mes={mes}, ano={ano}, tipos={tipos_str}")
+        
+        # Processar tipos
+        tipos = [t.strip() for t in tipos_str.split(',') if t.strip() in ['acoes', 'fiis', 'bdrs']]
+        if not tipos:
+            tipos = ['acoes', 'fiis', 'bdrs']
+        
+        # Buscar agenda (o scraper retorna todos os tipos, vamos filtrar depois se necessário)
+        print(f"[AGENDA DIVIDENDOS] Chamando buscar_agenda_dividendos...")
+        resultado = buscar_agenda_dividendos(mes=mes, ano=ano, tipo_ativo=None)
+        print(f"[AGENDA DIVIDENDOS] Resultado recebido: acoes={resultado.get('acoes', {}).get('total', 0)}, fiis={resultado.get('fiis', {}).get('total', 0)}, bdrs={resultado.get('bdrs', {}).get('total', 0)}")
+        
+        # Se tipos específicos foram solicitados, filtrar resultado
+        if len(tipos) < 3:
+            if 'acoes' not in tipos:
+                resultado['acoes'] = {'total': 0, 'dividendos': [], 'total_estimado': 0}
+            if 'fiis' not in tipos:
+                resultado['fiis'] = {'total': 0, 'dividendos': [], 'total_estimado': 0}
+            if 'bdrs' not in tipos:
+                resultado['bdrs'] = {'total': 0, 'dividendos': [], 'total_estimado': 0}
+        
+        return jsonify(resultado)
+        
+    except ImportError as e:
+        print(f"[ERRO] Erro de importacao na API de agenda de dividendos: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "erro": f"Erro de importacao: {str(e)}",
+            "mes": mes or datetime.now().month,
+            "ano": ano or datetime.now().year,
+            "acoes": {"total": 0, "dividendos": [], "total_estimado": 0},
+            "fiis": {"total": 0, "dividendos": [], "total_estimado": 0},
+            "bdrs": {"total": 0, "dividendos": [], "total_estimado": 0}
+        }), 500
+    except Exception as e:
+        print(f"[ERRO] Erro na API de agenda de dividendos: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "erro": str(e),
+            "mes": mes or datetime.now().month,
+            "ano": ano or datetime.now().year,
+            "acoes": {"total": 0, "dividendos": [], "total_estimado": 0},
+            "fiis": {"total": 0, "dividendos": [], "total_estimado": 0},
+            "bdrs": {"total": 0, "dividendos": [], "total_estimado": 0}
+        }), 500
+
+@server.route("/api/dividendos/ranking", methods=["GET"])
+def api_ranking_dividendos():
+    """
+    API para buscar ranking de dividendos do mercado completo
+    Parâmetros:
+    - tipo: tipo de ativo (acoes, fiis, bdrs), padrão: todos
+    - mes: mês para filtrar por data-com (1-12), padrão: None (ranking geral)
+    - ano: ano para filtrar por data-com, padrão: None (ranking geral)
+    """
+    try:
+        from scraper_ranking_dividendos import buscar_todos_rankings, buscar_ranking_dividendos
+        
+        tipo = request.args.get('tipo', None)
+        mes = request.args.get('mes', type=int)
+        ano = request.args.get('ano', type=int)
+        
+        print(f"[RANKING DIVIDENDOS] Recebida requisicao: tipo={tipo}, mes={mes}, ano={ano}")
+        
+        if tipo and tipo in ['acoes', 'fiis', 'bdrs']:
+            # Buscar apenas um tipo específico
+            print(f"[RANKING DIVIDENDOS] Chamando buscar_ranking_dividendos para tipo={tipo}, mes={mes}, ano={ano}...")
+            resultado = buscar_ranking_dividendos(tipo, mes=mes, ano=ano)
+            print(f"[RANKING DIVIDENDOS] Resultado recebido: total={resultado.get('total', 0)}")
+            return jsonify(resultado)
+        else:
+            # Buscar todos os tipos
+            print(f"[RANKING DIVIDENDOS] Chamando buscar_todos_rankings com mes={mes}, ano={ano}...")
+            resultado = buscar_todos_rankings(mes=mes, ano=ano)
+            print(f"[RANKING DIVIDENDOS] Resultado recebido: acoes={resultado.get('acoes', {}).get('total', 0)}, fiis={resultado.get('fiis', {}).get('total', 0)}, bdrs={resultado.get('bdrs', {}).get('total', 0)}")
+            return jsonify(resultado)
+        
+    except ImportError as e:
+        print(f"[ERRO] Erro de importacao na API de ranking de dividendos: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "erro": f"Erro de importacao: {str(e)}",
+            "data_busca": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "acoes": {"total": 0, "ranking": []},
+            "fiis": {"total": 0, "ranking": []},
+            "bdrs": {"total": 0, "ranking": []}
+        }), 500
+    except Exception as e:
+        print(f"[ERRO] Erro na API de ranking de dividendos: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "erro": str(e),
+            "data_busca": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "acoes": {"total": 0, "ranking": []},
+            "fiis": {"total": 0, "ranking": []},
+            "bdrs": {"total": 0, "ranking": []}
+        }), 500
 
 if __name__ == "__main__":
     server.run(debug=False, port=5005, host='0.0.0.0') 
