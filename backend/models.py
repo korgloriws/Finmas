@@ -1339,7 +1339,7 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
             historico = acao.history(start=start_date.isoformat(), end=end_date.isoformat())
             
             if historico is None or historico.empty:
-                print(f"❌ Nenhum histórico encontrado para {ticker}")
+                print(f"[ERRO] Nenhum historico encontrado para {ticker}")
                 return None
             
            
@@ -1349,7 +1349,7 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
                 if data_historico <= data_obj:
                     preco_encontrado = to_float_or_none(row.get('Close') or row.get('Adj Close'))
                     if preco_encontrado:
-                        print(f"✅ Preço encontrado: R$ {preco_encontrado:.2f} em {data_historico}")
+                        print(f"[OK] Preco encontrado: R$ {preco_encontrado:.2f} em {data_historico}")
                         return {
                             "preco": preco_encontrado,
                             "data_historico": data_historico.isoformat(),
@@ -1357,14 +1357,14 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
                             "ticker": ticker
                         }
             
-            print(f"❌ Nenhum preço válido encontrado para {ticker} na data {data}")
+            print(f"[ERRO] Nenhum preco valido encontrado para {ticker} na data {data}")
             return None
             
         except Exception as e:
             tentativas += 1
-            print(f"⚠️ Tentativa {tentativas} falhou para {ticker}: {str(e)}")
+            print(f"[AVISO] Tentativa {tentativas} falhou para {ticker}: {str(e)}")
             if tentativas >= max_retentativas:
-                print(f"❌ Falha definitiva ao buscar preço histórico para {ticker}")
+                print(f"[ERRO] Falha definitiva ao buscar preco historico para {ticker}")
                 return None
             time.sleep(1)
     
@@ -1393,7 +1393,7 @@ def obter_preco_atual(ticker, max_retentativas=3):
                 preco_atual = info.get("regularMarketPrice")
             
             if preco_atual and preco_atual > 0:
-                print(f"✅ Preço atual encontrado: R$ {preco_atual:.2f}")
+                print(f"[OK] Preco atual encontrado: R$ {preco_atual:.2f}")
                 return {
                     "preco": float(preco_atual),
                     "data": datetime.now().strftime('%Y-%m-%d'),
@@ -1404,7 +1404,7 @@ def obter_preco_atual(ticker, max_retentativas=3):
             
         except Exception as e:
             tentativas += 1
-            print(f"⚠️ Tentativa {tentativas} falhou para {ticker}: {str(e)}")
+            print(f"[AVISO] Tentativa {tentativas} falhou para {ticker}: {str(e)}")
             if tentativas >= max_retentativas:
                 return None
             time.sleep(1)
@@ -1492,14 +1492,14 @@ def obter_informacoes(ticker, tipo_ativo, max_retentativas=3):
         except Exception as e:
             msg_erro = str(e).lower()
             if "too many requests" in msg_erro or "rate limited" in msg_erro:
-                print(f"⚠️ Rate limit detectado para {ticker}. Aguardando 60s e tentando novamente...")
+                print(f"[AVISO] Rate limit detectado para {ticker}. Aguardando 60s e tentando novamente...")
                 time.sleep(60)
                 tentativas += 1
             else:
                 print(f" Erro ao obter informações para {ticker}: {e}")
                 return None
 
-    print(f"⚠️ Não foi possível obter {ticker} após {max_retentativas} tentativas. Ignorando...")
+    print(f"[AVISO] Nao foi possivel obter {ticker} apos {max_retentativas} tentativas. Ignorando...")
     return None
 def aplicar_filtros_acoes(dados):
 
@@ -2397,6 +2397,18 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         
         # Calcular dias desde a adição
         dias_totais = max((datetime.now() - data_adicao_dt).days, 0)
+        
+        # VALIDAÇÃO CRÍTICA: Verificar se a data não está no futuro
+        if (datetime.now() - data_adicao_dt).days < 0:
+            print(f"[ERRO] Data de adicao esta no futuro: {data_adicao_dt}. Retornando preco inicial.")
+            return preco_inicial
+        
+        # VALIDAÇÃO CRÍTICA: Limitar dias a um máximo razoável (10 anos = 3650 dias)
+        # Se a data for muito antiga, pode gerar cálculos absurdos
+        if dias_totais > 3650:
+            print(f"[AVISO] Data muito antiga ({dias_totais} dias = {dias_totais/365:.1f} anos). Limitando a 10 anos para calculo.")
+            dias_totais = 3650
+        
         if dias_totais <= 0:
             return preco_inicial
         
@@ -2405,6 +2417,7 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         # Aplicar percentual do indexador (ex: 110% = 1.1)
         fator_percentual = indexador_pct / 100
         if fator_percentual <= 0:
+            print(f"[ERRO] Fator percentual invalido: {fator_percentual}")
             return preco_inicial
 
         # USAR A MESMA ABORDAGEM QUE JÁ FUNCIONA NA TELA DE DETALHES
@@ -2467,12 +2480,26 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         
         # Preço final
         preco_final = preco_inicial * fator_correcao
-        print(f"DEBUG: Preço inicial: {preco_inicial}, preço final: {preco_final}")
+        
+        # VALIDAÇÃO CRÍTICA FINAL: Verificar se o preço calculado é válido
+        if preco_final <= 0:
+            print(f"[ERRO] Preco calculado invalido (<= 0): {preco_final}. Retornando preco inicial.")
+            return preco_inicial
+        
+        # Validação do fator: para renda fixa, mesmo com 10 anos, o fator máximo seria ~3.5x (115% CDI)
+        # Mas permitir até 20x para casos extremos (múltiplas aplicações ou períodos muito longos)
+        if not (0.01 <= fator_correcao <= 20.0):
+            print(f"[ERRO] Fator de correcao absurdo: {fator_correcao}. Retornando preco inicial.")
+            return preco_inicial
+        
+        print(f"DEBUG: Preço inicial: {preco_inicial}, fator: {fator_correcao:.6f}, preço final: {preco_final}")
         
         return round(preco_final, 4)
         
     except Exception as e:
-        print(f"Erro ao calcular preço com indexador: {e}")
+        print(f"[ERRO] Erro ao calcular preco com indexador: {e}")
+        import traceback
+        traceback.print_exc()
         return preco_inicial
 
 @cache.memoize(timeout=300)  # Cache de 5 minutos para taxa USD/BRL
@@ -2504,7 +2531,7 @@ def obter_taxa_usd_brl():
                 return 5.20  # Taxa padrão de fallback
                 
     except Exception as e:
-        print(f"❌ Erro ao obter taxa USD/BRL: {e}")
+        print(f"[ERRO] Erro ao obter taxa USD/BRL: {e}")
         return 5.20  # Taxa padrão de fallback
 
 def is_crypto_ticker(ticker):
@@ -2583,7 +2610,7 @@ def obter_precos_batch(tickers):
                         # Verificar se é criptomoeda e converter USD → BRL
                         if is_crypto_ticker(ticker) and taxa_usd_brl:
                             preco_brl = converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl)
-                            print(f"🪙 {ticker}: ${preco_usd:.2f} USD → R$ {preco_brl:.2f} BRL (taxa: {taxa_usd_brl:.4f})")
+                            print(f" {ticker}: ${preco_usd:.2f} USD → R$ {preco_brl:.2f} BRL (taxa: {taxa_usd_brl:.4f})")
                             preco_final = preco_brl
                         else:
                             preco_final = preco_usd
@@ -2596,21 +2623,21 @@ def obter_precos_batch(tickers):
                             'roe': info.get('returnOnEquity', None) if info else None
                         }
                     else:
-                        print(f"⚠️ Não foi possível obter preço para {ticker}")
+                        print(f"[AVISO] Nao foi possivel obter preco para {ticker}")
                             
                 except Exception as e:
-                    print(f"⚠️ Erro ao obter preço para {ticker}: {e}")
+                    print(f"[AVISO] Erro ao obter preco para {ticker}: {e}")
                     continue
             
             # Pequena pausa entre lotes para evitar rate limits
             if i + batch_size < len(tickers):
                 time.sleep(0.5)  # 500ms de pausa entre lotes
         
-        print(f"✅ Batch concluído: {len(precos_totais)} preços obtidos de {len(tickers)} tickers")
+        print(f"[OK] Batch concluido: {len(precos_totais)} precos obtidos de {len(tickers)} tickers")
         return precos_totais
         
     except Exception as e:
-        print(f"❌ Erro no batch de preços: {e}")
+        print(f"[ERRO] Erro no batch de precos: {e}")
         return {}
 
 def atualizar_precos_indicadores_carteira():
@@ -2631,7 +2658,7 @@ def atualizar_precos_indicadores_carteira():
             conn = _pg_conn_for_user(usuario)
             try:
                 with conn.cursor() as c:
-                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data FROM carteira')
+                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio FROM carteira')
                     rows = c.fetchall()
                     
                     # Coletar todos os tickers únicos
@@ -2653,6 +2680,8 @@ def atualizar_precos_indicadores_carteira():
                         _indexador_pct = float(row[6]) if row[6] is not None else None
                         base_preco = float(row[7]) if (len(row) > 7 and row[7] is not None) else None
                         base_data = row[8] if (len(row) > 8) else None
+                        _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
+                        _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
                         
                         if not _ticker:
                             continue
@@ -2662,17 +2691,45 @@ def atualizar_precos_indicadores_carteira():
                             dados_preco = precos_batch[_ticker]
                             if _indexador and _indexador_pct:
                                 print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                                # Preço base
+                                # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
+                                # 1. indexador_base_preco (se configurado explicitamente)
+                                # 2. preco_compra (preço de compra original)
+                                # 3. preco_medio (preço médio ponderado)
+                                # 4. Primeira movimentação (último recurso)
+                                # NUNCA usar preco_atual como base!
                                 if base_preco is not None and base_data:
                                     preco_inicial = base_preco
                                     _data_adicao = base_data
+                                    print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                                elif _preco_compra is not None and _preco_compra > 0:
+                                    preco_inicial = _preco_compra
+                                    print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                                elif _preco_medio is not None and _preco_medio > 0:
+                                    preco_inicial = _preco_medio
+                                    print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                                 else:
+                                    # Último recurso: buscar primeira movimentação
                                     c.execute('SELECT preco FROM movimentacoes WHERE ticker = %s ORDER BY data ASC LIMIT 1', (_ticker,))
                                     mov_row = c.fetchone()
-                                    preco_inicial = float(mov_row[0]) if mov_row else _preco_atual
-                                print(f"DEBUG: Preço inicial encontrado: {preco_inicial}")
+                                    if mov_row and mov_row[0] and float(mov_row[0]) > 0:
+                                        preco_inicial = float(mov_row[0])
+                                        print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
+                                    else:
+                                        # Se não encontrou nada, pular este ativo (não atualizar)
+                                        print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                        continue
+                                
+                                print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
                                 preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
-                                print(f"DEBUG: Preço calculado com indexador: {preco_atual}")
+                                
+                                # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
+                                # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
+                                # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+                                if preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                                    print(f"[ERRO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.2f}x). Mantendo preco atual.")
+                                    preco_atual = _preco_atual  # Manter preço atual se cálculo der absurdo
+                                else:
+                                    print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                                 dy = None; pl = None; pvp = None; roe = None
                             else:
                                 preco_atual = dados_preco.get('preco_atual', _preco_atual)
@@ -2701,7 +2758,7 @@ def atualizar_precos_indicadores_carteira():
             conn = sqlite3.connect(db_path, check_same_thread=False)
             try:
                 cur = conn.cursor()
-                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data FROM carteira')
+                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio FROM carteira')
                 rows = cur.fetchall()
                 
                 # Coletar todos os tickers únicos para SQLite também
@@ -2723,6 +2780,8 @@ def atualizar_precos_indicadores_carteira():
                     _indexador_pct = float(row[6]) if row[6] is not None else None
                     base_preco = float(row[7]) if (len(row) > 7 and row[7] is not None) else None
                     base_data = row[8] if (len(row) > 8) else None
+                    _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
+                    _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
                     
                     if not _ticker:
                         continue
@@ -2734,19 +2793,47 @@ def atualizar_precos_indicadores_carteira():
                         # Se tem indexador configurado, calcular preço baseado no indexador
                         if _indexador and _indexador_pct:
                             print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                        
+                            
+                            # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
+                            # 1. indexador_base_preco (se configurado explicitamente)
+                            # 2. preco_compra (preço de compra original)
+                            # 3. preco_medio (preço médio ponderado)
+                            # 4. Primeira movimentação (último recurso)
+                            # NUNCA usar preco_atual como base!
                             if base_preco is not None and base_data:
                                 preco_inicial = base_preco
                                 _data_adicao = base_data
+                                print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                            elif _preco_compra is not None and _preco_compra > 0:
+                                preco_inicial = _preco_compra
+                                print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                            elif _preco_medio is not None and _preco_medio > 0:
+                                preco_inicial = _preco_medio
+                                print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                             else:
+                                # Último recurso: buscar primeira movimentação
                                 cur.execute('SELECT preco FROM movimentacoes WHERE ticker = ? ORDER BY data ASC LIMIT 1', (_ticker,))
                                 mov_row = cur.fetchone()
-                                preco_inicial = float(mov_row[0]) if mov_row else _preco_atual
+                                if mov_row and mov_row[0] and float(mov_row[0]) > 0:
+                                    preco_inicial = float(mov_row[0])
+                                    print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
+                                else:
+                                    # Se não encontrou nada, pular este ativo (não atualizar)
+                                    print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                    continue
                             
-                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}")
+                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
                             
                             preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
-                            print(f"DEBUG: Preço calculado com indexador: {preco_atual}")
+                            
+                            # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
+                            # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
+                            # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+                            if preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                                print(f"[ERRO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.2f}x). Mantendo preco atual.")
+                                preco_atual = _preco_atual  # Manter preço atual se cálculo der absurdo
+                            else:
+                                print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                             
                             dy = None
                             pl = None 
@@ -2761,7 +2848,7 @@ def atualizar_precos_indicadores_carteira():
                             roe = dados_preco.get('roe')
                     else:
                         # Fallback: se não conseguiu obter em batch, usar preço atual
-                        print(f"⚠️ Preço não encontrado em batch para {_ticker}, mantendo preço atual")
+                        print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
                         preco_atual = _preco_atual
                         dy = None
                         pl = None
@@ -3043,14 +3130,25 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                             mensagem = f"Ativo {info['ticker']} sobrescrito com sucesso (quantidade: {quantidade_val})"
                         else:
                             try:
-                                cursor.execute('SELECT preco_medio FROM carteira WHERE id = %s', (id_existente,))
+                                cursor.execute('SELECT preco_medio, preco_compra, preco_atual FROM carteira WHERE id = %s', (id_existente,))
                                 pm_row = cursor.fetchone()
-                                # Base atual para média: preco_medio se existir, senão preco_compra, senão o preço de compra da operação
-                                preco_medio_atual = float(pm_row[0]) if pm_row and pm_row[0] is not None else float(preco_compra_definitivo or 0)
+                                if pm_row:
+                                    pm_db, pc_db, pa_db = pm_row[0], pm_row[1], pm_row[2]
+                                else:
+                                    pm_db = pc_db = pa_db = None
+                                
+                                if pm_db is not None:
+                                    preco_medio_atual = float(pm_db)
+                                elif pc_db is not None:
+                                    preco_medio_atual = float(pc_db)
+                                elif pa_db is not None:
+                                    preco_medio_atual = float(pa_db)
+                                else:
+                                    preco_medio_atual = float(preco_compra_definitivo or 0)
                             except Exception:
                                 preco_medio_atual = float(preco_compra_definitivo or 0)
                             nova_quantidade = quantidade_existente + quantidade_val
-                            # Média ponderada usando o preço de compra informado/derivado
+                           
                             preco_medio_novo = (
                                 (preco_medio_atual * quantidade_existente) + (float(preco_compra_definitivo or 0) * quantidade_val)
                             ) / (nova_quantidade or 1)
@@ -3165,9 +3263,20 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                     mensagem = f"Ativo {info['ticker']} sobrescrito com sucesso (quantidade: {quantidade_val})"
                 else:
                     try:
-                        cursor.execute('SELECT preco_medio FROM carteira WHERE id = ?', (id_existente,))
+                        cursor.execute('SELECT preco_medio, preco_compra, preco_atual FROM carteira WHERE id = ?', (id_existente,))
                         pm_row = cursor.fetchone()
-                        preco_medio_atual = float(pm_row[0]) if pm_row and pm_row[0] is not None else float(preco_compra_definitivo or 0)
+                        if pm_row:
+                            pm_db, pc_db, pa_db = pm_row[0], pm_row[1], pm_row[2]
+                        else:
+                            pm_db = pc_db = pa_db = None
+                        if pm_db is not None:
+                            preco_medio_atual = float(pm_db)
+                        elif pc_db is not None:
+                            preco_medio_atual = float(pc_db)
+                        elif pa_db is not None:
+                            preco_medio_atual = float(pa_db)
+                        else:
+                            preco_medio_atual = float(preco_compra_definitivo or 0)
                     except Exception:
                         preco_medio_atual = float(preco_compra_definitivo or 0)
                     nova_quantidade = quantidade_existente + quantidade_val
@@ -3299,9 +3408,20 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
                         update_fields.append('preco_compra = %s')
                         update_values.append(float(preco_compra))
                         try:
-                            cursor.execute('SELECT preco_medio FROM carteira WHERE id = %s', (id,))
+                            cursor.execute('SELECT preco_medio, preco_compra, preco_atual FROM carteira WHERE id = %s', (id,))
                             pm_row = cursor.fetchone()
-                            preco_medio_atual = float(pm_row[0]) if pm_row and pm_row[0] is not None else float(preco_compra)
+                            if pm_row:
+                                pm_db, pc_db, pa_db = pm_row[0], pm_row[1], pm_row[2]
+                            else:
+                                pm_db = pc_db = pa_db = None
+                            if pm_db is not None:
+                                preco_medio_atual = float(pm_db)
+                            elif pc_db is not None:
+                                preco_medio_atual = float(pc_db)
+                            elif pa_db is not None:
+                                preco_medio_atual = float(pa_db)
+                            else:
+                                preco_medio_atual = float(preco_compra)
                         except Exception:
                             preco_medio_atual = float(preco_compra)
                         qty_diff = new_qty - current_qty
@@ -3355,9 +3475,20 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
                 update_fields.append('preco_compra = ?')
                 update_values.append(float(preco_compra))
                 try:
-                    cur.execute('SELECT preco_medio FROM carteira WHERE id = ?', (id,))
+                    cur.execute('SELECT preco_medio, preco_compra, preco_atual FROM carteira WHERE id = ?', (id,))
                     pm_row = cur.fetchone()
-                    preco_medio_atual = float(pm_row[0]) if pm_row and pm_row[0] is not None else float(preco_compra)
+                    if pm_row:
+                        pm_db, pc_db, pa_db = pm_row[0], pm_row[1], pm_row[2]
+                    else:
+                        pm_db = pc_db = pa_db = None
+                    if pm_db is not None:
+                        preco_medio_atual = float(pm_db)
+                    elif pc_db is not None:
+                        preco_medio_atual = float(pc_db)
+                    elif pa_db is not None:
+                        preco_medio_atual = float(pa_db)
+                    else:
+                        preco_medio_atual = float(preco_compra)
                 except Exception:
                     preco_medio_atual = float(preco_compra)
                 qty_diff = new_qty - current_qty
