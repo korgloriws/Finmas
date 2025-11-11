@@ -196,7 +196,8 @@ export default function CarteiraGraficosTab({
   }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
 
   const comparativoResumo = useMemo(() => {
-    const carteiraArr = historicoCarteira?.carteira_valor || []
+    // Usar carteiraValorPrecoSeries (sem aportes) em vez de carteira_valor (com aportes)
+    const carteiraArr = carteiraValorPrecoSeries || []
     if (!carteiraArr.length || !indiceValorSeries.length) return null as null | {
       indiceNome: string
       indiceInicial: number
@@ -207,10 +208,10 @@ export default function CarteiraGraficosTab({
       deltaCarteira: number
       gapAbsoluto: number
     }
-    const carteiraInicial = carteiraArr.find((v) => typeof v === 'number') || 0
-    const carteiraFinal = [...carteiraArr].reverse().find((v) => typeof v === 'number') || 0
-    const indiceInicial = indiceValorSeries.find((v) => typeof v === 'number') || 0
-    const indiceFinal = [...indiceValorSeries].reverse().find((v) => typeof v === 'number') || 0
+    const carteiraInicial = carteiraArr.find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
+    const carteiraFinal = [...carteiraArr].reverse().find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
+    const indiceInicial = indiceValorSeries.find((v) => typeof v === 'number' && v !== null) || 0
+    const indiceFinal = [...indiceValorSeries].reverse().find((v) => typeof v === 'number' && v !== null) || 0
     const deltaIndice = (indiceFinal || 0) - (indiceInicial || 0)
     const deltaCarteira = (carteiraFinal || 0) - (carteiraInicial || 0)
     const gapAbsoluto = (carteiraFinal || 0) - (indiceFinal || 0)
@@ -225,7 +226,7 @@ export default function CarteiraGraficosTab({
       deltaCarteira,
       gapAbsoluto,
     }
-  }, [historicoCarteira, indiceValorSeries, indiceRef])
+  }, [historicoCarteira, indiceValorSeries, indiceRef, carteiraValorPrecoSeries, initialWealth])
 
   return (
     <div className="space-y-6">
@@ -295,27 +296,31 @@ export default function CarteiraGraficosTab({
                 {/* Resumo estatístico e comparativo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Inicial</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Inicial (preço)</div>
                     <div className="text-base md:text-lg font-bold text-foreground">
-                      {formatCurrency(historicoCarteira.carteira_valor?.[0] || 0)}
+                      {formatCurrency(carteiraValorPrecoSeries?.[0] || initialWealth || 0)}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Atual</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Atual (preço)</div>
                     <div className="text-base md:text-lg font-bold text-foreground">
-                      {formatCurrency(historicoCarteira.carteira_valor?.[historicoCarteira.carteira_valor.length - 1] || 0)}
+                      {formatCurrency(carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (R$)</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (R$) — preço</div>
                     <div className={`text-base md:text-lg font-bold ${
-                      (historicoCarteira.carteira_valor?.[historicoCarteira.carteira_valor.length - 1] || 0) > (historicoCarteira.carteira_valor?.[0] || 0) 
+                      (() => {
+                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
+                        const atual = carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0
+                        return atual > inicial
+                      })()
                         ? 'text-green-600' 
                         : 'text-red-600'
                     }`}>
                       {(() => {
-                        const inicial = historicoCarteira.carteira_valor?.[0] || 0
-                        const atual = historicoCarteira.carteira_valor?.[historicoCarteira.carteira_valor.length - 1] || 0
+                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
+                        const atual = carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0
                         const diferenca = atual - inicial
                         return `${diferenca >= 0 ? '+' : ''}${formatCurrency(diferenca, '')}`
                       })()}
@@ -354,7 +359,7 @@ export default function CarteiraGraficosTab({
                       </div>
                     </div>
                     <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                      <div className="text-xs md:text-sm text-muted-foreground">Carteira (Final)</div>
+                      <div className="text-xs md:text-sm text-muted-foreground">Carteira (Final) — preço</div>
                       <div className="text-base md:text-lg font-bold text-foreground">
                         {formatCurrency(comparativoResumo.carteiraFinal)}
                       </div>
