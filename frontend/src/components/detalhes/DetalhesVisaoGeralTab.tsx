@@ -180,6 +180,7 @@ interface DetalhesVisaoGeralTabProps {
   enterpriseValue: number | null
   ebitComputed: number | null
   evToEbit: number | null
+  liquidezDiaria: number
 }
 
 export default function DetalhesVisaoGeralTab({
@@ -196,7 +197,8 @@ export default function DetalhesVisaoGeralTab({
   bazinBadge,
   enterpriseValue,
   ebitComputed,
-  evToEbit
+  evToEbit,
+  liquidezDiaria
 }: DetalhesVisaoGeralTabProps) {
   return (
     <motion.div
@@ -208,21 +210,65 @@ export default function DetalhesVisaoGeralTab({
       className="space-y-6"
     >
       {/* Header do ativo */}
-      <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
-        {/* Background pattern */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+      <motion.div 
+        className="relative overflow-hidden bg-card border-2 border-primary/20 rounded-xl sm:rounded-2xl p-6 sm:p-8 hover:shadow-2xl hover:border-primary/40 transition-all duration-500 group"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        whileHover={{ scale: 1.01 }}
+      >
+        {/* Background pattern animado */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent opacity-100 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         
-        <div className="relative z-10 flex items-center gap-4 flex-wrap">
+        {/* Efeito de brilho animado */}
+        <motion.div 
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+          animate={{
+            x: ['-100%', '200%'],
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: 3,
+            ease: 'linear'
+          }}
+        />
+        
+        <div className="relative z-10 flex items-center gap-6 flex-wrap">
           {logoUrl ? (
-            <img 
-              src={logoUrl} 
-              alt={ticker} 
-              className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg sm:rounded-xl object-contain border-2 border-border bg-white p-2 shadow-md"
-            />
+            <motion.div
+              initial={{ rotateY: 90, opacity: 0 }}
+              animate={{ rotateY: 0, opacity: 1 }}
+              transition={{ duration: 0.6, type: 'spring', stiffness: 100 }}
+              whileHover={{ rotateY: 180, scale: 1.1 }}
+              style={{ perspective: 1000 }}
+              className="relative"
+            >
+              <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
+              <motion.img 
+                src={logoUrl} 
+                alt={ticker} 
+                className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl sm:rounded-2xl object-contain border-2 border-primary/30 bg-white p-3 sm:p-4 shadow-xl group-hover:shadow-2xl group-hover:border-primary/50 transition-all duration-500"
+                style={{ transformStyle: 'preserve-3d' }}
+              />
+            </motion.div>
           ) : (
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-md">
-              {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
-            </div>
+            <motion.div
+              initial={{ rotateY: 90, opacity: 0 }}
+              animate={{ rotateY: 0, opacity: 1 }}
+              transition={{ duration: 0.6, type: 'spring', stiffness: 100 }}
+              whileHover={{ rotateY: 180, scale: 1.1 }}
+              style={{ perspective: 1000 }}
+              className="relative"
+            >
+              <div className="absolute inset-0 bg-primary/30 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
+              <motion.div 
+                className="relative w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-primary via-primary/80 to-primary/60 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold text-xl sm:text-2xl shadow-xl group-hover:shadow-2xl transition-all duration-500"
+                style={{ transformStyle: 'preserve-3d' }}
+              >
+                {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
+              </motion.div>
+            </motion.div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap mb-2">
@@ -352,10 +398,10 @@ export default function DetalhesVisaoGeralTab({
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Métricas principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <MetricCard
           title="Preço Atual"
           value={formatCurrency(info.currentPrice)}
@@ -388,6 +434,12 @@ export default function DetalhesVisaoGeralTab({
           value={formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)}
           subtitle="Return on Equity"
           icon={Activity}
+        />
+        <MetricCard
+          title="Liquidez Diária"
+          value={formatCurrency(liquidezDiaria)}
+
+          icon={BarChart3}
         />
       </div>
 

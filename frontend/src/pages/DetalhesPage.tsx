@@ -204,7 +204,9 @@ export default function DetalhesPage() {
 
   const pl = info?.trailingPE ?? null
   const pvp = info?.priceToBook ?? null
-  const liquidezDiaria = info?.averageDailyVolume10Day ?? info?.averageVolume ?? 0
+  const volumeMedio = info?.averageDailyVolume10Day ?? info?.averageVolume ?? 0
+  const precoAtual = info?.currentPrice ?? info?.regularMarketPrice ?? 0
+  const liquidezDiaria = precoAtual * volumeMedio
 
   // EV/EBIT: usar enterpriseValue e melhor proxy de EBIT disponível
   const enterpriseValue: number | null = info?.enterpriseValue ?? null
@@ -890,6 +892,7 @@ export default function DetalhesPage() {
                 enterpriseValue={enterpriseValue}
                 ebitComputed={ebitComputed}
                 evToEbit={evToEbit}
+                liquidezDiaria={liquidezDiaria}
               />
             )}
 

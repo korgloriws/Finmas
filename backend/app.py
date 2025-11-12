@@ -486,7 +486,8 @@ def api_analise_ativos():
                 filtros.get('pl_min', 0),
                 filtros.get('pl_max', float('inf')),
                 filtros.get('pvp_max', float('inf')),
-                filtros.get('liq_min')
+                filtros.get('liq_min'),
+                filtros.get('setor')
             )
         elif tipo == 'bdrs':
             dados = processar_ativos_bdrs_com_filtros(
@@ -495,7 +496,8 @@ def api_analise_ativos():
                 filtros.get('pl_min', 0),
                 filtros.get('pl_max', float('inf')),
                 filtros.get('pvp_max', float('inf')),
-                filtros.get('liq_min')
+                filtros.get('liq_min'),
+                filtros.get('setor')
             )
         elif tipo == 'fiis':
             dados = processar_ativos_fiis_com_filtros(

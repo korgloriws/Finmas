@@ -1798,7 +1798,7 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
         finally:
             conn.close()
 
-def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None):
+def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
 
     dados = [obter_informacoes(ticker, tipo_ativo) for ticker in lista_ativos]
     dados = [d for d in dados if d is not None]
@@ -1808,20 +1808,21 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
             ativo['dividend_yield'] > (dy_min or 0) and
             (pl_min or 0) <= ativo['pl'] <= (pl_max or float('inf')) and
             ativo['pvp'] <= (pvp_max or float('inf')) and
-            (ativo.get('liquidez_diaria', 0) > (liq_min or 0))
+            (ativo.get('liquidez_diaria', 0) > (liq_min or 0)) and
+            (not setor or ativo.get('setor', '').strip() == setor.strip())
         )
     ]
     return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)[:10]
 
-def processar_ativos_acoes_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None):
+def processar_ativos_acoes_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
-    return processar_ativos_com_filtros_geral(LISTA_ACOES, 'Ação', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold)
+    return processar_ativos_com_filtros_geral(LISTA_ACOES, 'Ação', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
-def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None):
+def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
-    return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold)
+    return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
     fiis = LISTA_FIIS

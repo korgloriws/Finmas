@@ -9,9 +9,28 @@ import { formatNumber, formatCurrency } from '../../utils/formatters'
 import { ExternalLink } from 'lucide-react'
 
 
+// Lista de setores comuns (baseado nos setores do yfinance)
+const SETORES_COMUNS = [
+  'Financial Services',
+  'Technology',
+  'Consumer Cyclical',
+  'Consumer Defensive',
+  'Healthcare',
+  'Energy',
+  'Industrials',
+  'Communication Services',
+  'Utilities',
+  'Real Estate',
+  'Basic Materials',
+  'Services',
+  'Consumer Staples',
+  'Consumer Discretionary'
+]
+
 function FiltrosAcoes({ 
   filtros, 
   onFiltroChange, 
+  onFiltroStringChange,
   onBuscar, 
   loading, 
   autoSearch, 
@@ -19,6 +38,7 @@ function FiltrosAcoes({
 }: {
   filtros: FiltrosAnalise
   onFiltroChange: (key: keyof FiltrosAnalise, value: number) => void
+  onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
   onBuscar: () => void
   loading: boolean
   autoSearch: boolean
@@ -132,6 +152,21 @@ function FiltrosAcoes({
             title="Filtrar por liquidez diária mínima"
           />
         </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">Setor</label>
+          <select
+            value={filtros.setor || ''}
+            onChange={(e) => onFiltroStringChange('setor', e.target.value)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+            aria-label="Setor"
+          >
+            <option value="">Todos os setores</option>
+            {SETORES_COMUNS.map((setor) => (
+              <option key={setor} value={setor}>{setor}</option>
+            ))}
+          </select>
+        </div>
       </div>
       
       <div className="mt-6 flex justify-end">
@@ -163,6 +198,7 @@ function FiltrosAcoes({
 function FiltrosBdrs({ 
   filtros, 
   onFiltroChange, 
+  onFiltroStringChange,
   onBuscar, 
   loading, 
   autoSearch, 
@@ -170,6 +206,7 @@ function FiltrosBdrs({
 }: {
   filtros: FiltrosAnalise
   onFiltroChange: (key: keyof FiltrosAnalise, value: number) => void
+  onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
   onBuscar: () => void
   loading: boolean
   autoSearch: boolean
@@ -268,6 +305,21 @@ function FiltrosBdrs({
             aria-label="Liquidez mínima em reais"
             title="Filtrar por liquidez diária mínima"
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">Setor</label>
+          <select
+            value={filtros.setor || ''}
+            onChange={(e) => onFiltroStringChange('setor', e.target.value)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+            aria-label="Setor"
+          >
+            <option value="">Todos os setores</option>
+            {SETORES_COMUNS.map((setor) => (
+              <option key={setor} value={setor}>{setor}</option>
+            ))}
+          </select>
         </div>
       </div>
       
@@ -1215,28 +1267,6 @@ export default function AnaliseListaTab() {
     }
   }, [autoSearchAcoes])
 
-  const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosBdrs(prev => ({ ...prev, [key]: value }))
-    if (autoSearchBdrs) {
-      setTimeout(() => handleBuscarBdrs(), 500)
-    }
-  }, [autoSearchBdrs])
-
-  const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
-    if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
-    }
-  }, [autoSearchFiis])
-
-  const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
-    if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
-    }
-  }, [autoSearchFiis])
-
-
   const handleBuscarAcoes = useCallback(async () => {
     setLoadingAcoes(true)
     setErrorAcoes(null)
@@ -1262,6 +1292,41 @@ export default function AnaliseListaTab() {
       setLoadingBdrs(false)
     }
   }, [filtrosBdrs])
+
+  const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosAcoes(prev => ({ ...prev, [key]: value }))
+    if (autoSearchAcoes) {
+      setTimeout(() => handleBuscarAcoes(), 500)
+    }
+  }, [autoSearchAcoes, handleBuscarAcoes])
+
+  const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
+    setFiltrosBdrs(prev => ({ ...prev, [key]: value }))
+    if (autoSearchBdrs) {
+      setTimeout(() => handleBuscarBdrs(), 500)
+    }
+  }, [autoSearchBdrs, handleBuscarBdrs])
+
+  const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosBdrs(prev => ({ ...prev, [key]: value }))
+    if (autoSearchBdrs) {
+      setTimeout(() => handleBuscarBdrs(), 500)
+    }
+  }, [autoSearchBdrs, handleBuscarBdrs])
+
+  const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
+    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
+    if (autoSearchFiis) {
+      setTimeout(() => handleBuscarFiis(), 500)
+    }
+  }, [autoSearchFiis])
+
+  const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
+    if (autoSearchFiis) {
+      setTimeout(() => handleBuscarFiis(), 500)
+    }
+  }, [autoSearchFiis])
 
   const handleBuscarFiis = useCallback(async () => {
     setLoadingFiis(true)
@@ -1402,6 +1467,7 @@ export default function AnaliseListaTab() {
             <FiltrosAcoes 
               filtros={filtrosAcoes}
               onFiltroChange={handleFiltroAcoesChange}
+              onFiltroStringChange={handleFiltroAcoesStringChange}
               onBuscar={handleBuscarAcoes}
               loading={loadingAcoes}
               autoSearch={autoSearchAcoes}
@@ -1428,6 +1494,7 @@ export default function AnaliseListaTab() {
             <FiltrosBdrs 
               filtros={filtrosBdrs}
               onFiltroChange={handleFiltroBdrsChange}
+              onFiltroStringChange={handleFiltroBdrsStringChange}
               onBuscar={handleBuscarBdrs}
               loading={loadingBdrs}
               autoSearch={autoSearchBdrs}

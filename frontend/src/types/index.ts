@@ -237,6 +237,7 @@ export interface FiltrosAnalise {
   liq_min?: number
   tipo_fii?: string
   segmento_fii?: string
+  setor?: string
 }
 
 // ==================== TIPOS DE CARTÕES ====================
