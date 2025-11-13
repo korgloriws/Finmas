@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function RankingsPage() {
   const navigate = useNavigate()
-  const [tipoSelecionado, setTipoSelecionado] = useState<'acoes' | 'fiis' | 'bdrs'>('acoes')
+  const [tipoSelecionado, setTipoSelecionado] = useState<'acoes' | 'fiis' | 'bdrs' | 'criptos'>('acoes')
   const [secoesExpandidas, setSecoesExpandidas] = useState<Record<string, boolean>>({})
   const [logosCache, setLogosCache] = useState<Record<string, string | null>>({})
 
@@ -106,7 +106,8 @@ export default function RankingsPage() {
     const labels: Record<string, string> = {
       'acoes': 'Ações',
       'fiis': 'FIIs',
-      'bdrs': 'BDRs'
+      'bdrs': 'BDRs',
+      'criptos': 'Criptomoedas'
     }
     return labels[tipo] || tipo
   }
@@ -171,7 +172,7 @@ export default function RankingsPage() {
 
         {/* Filtro de tipo */}
         <div className="flex gap-2 mb-4">
-          {(['acoes', 'fiis', 'bdrs'] as const).map(tipo => (
+          {(['acoes', 'fiis', 'bdrs', 'criptos'] as const).map(tipo => (
             <button
               key={tipo}
               onClick={() => setTipoSelecionado(tipo)}

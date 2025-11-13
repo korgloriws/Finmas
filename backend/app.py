@@ -3783,19 +3783,14 @@ def api_atualizar_lista_ranking():
 
 @server.route("/api/ranking/investidor10", methods=["GET"])
 def api_ranking_investidor10():
-    """
-    Endpoint para buscar rankings do investidor10.com.br
-    
-    Parâmetros:
-    - tipo: 'acoes', 'fiis' ou 'bdrs' (padrão: 'acoes')
-    """
+
     try:
         from scraper_rankings_investidor10 import buscar_rankings_investidor10
         
         tipo = request.args.get('tipo', 'acoes')
         
-        if tipo not in ['acoes', 'fiis', 'bdrs']:
-            return jsonify({"erro": "Tipo invalido. Use: acoes, fiis ou bdrs"}), 400
+        if tipo not in ['acoes', 'fiis', 'bdrs', 'criptos']:
+            return jsonify({"erro": "Tipo invalido. Use: acoes, fiis, bdrs ou criptos"}), 400
         
         print(f"[RANKING INVESTIDOR10] Buscando rankings de {tipo}...")
         resultado = buscar_rankings_investidor10(tipo)
@@ -3813,13 +3808,7 @@ def api_ranking_investidor10():
 
 @server.route("/api/ranking/lista", methods=["GET"])
 def api_obter_lista_ranking():
-    """
-    Endpoint para obter lista completa de ativos para ranking
-    Retorna lista atual (pode estar em cache)
-    Atualiza automaticamente se > 24h desde última atualização
-    
-    Uso: GET /api/ranking/lista
-    """
+
     try:
         from brapi_lista_completa import carregar_lista_brapi_arquivo, atualizar_lista_brapi
         

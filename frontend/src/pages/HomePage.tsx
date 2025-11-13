@@ -1,11 +1,10 @@
-import  { useState, useMemo, useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import  { useState, useMemo, useEffect, useRef, memo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 // import { useLazyData } from '../hooks/useLazyData' // Para uso futuro
 import { Link } from 'react-router-dom'
 // @ts-ignore
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
-import { toast } from 'react-hot-toast'
 import { 
   BarChart3, 
   Wallet, 
@@ -56,13 +55,13 @@ import {
   Legend,
   Label
 } from 'recharts'
-import { carteiraService, homeService } from '../services/api'
-import { formatCurrency, } from '../utils/formatters'
+import { carteiraService, homeService, rankingService, ativoService } from '../services/api'
+import { formatCurrency, formatPercentage } from '../utils/formatters'
+import { normalizeTicker } from '../utils/tickerUtils'
 import AtivosDetalhesModal from '../components/carteira/AtivosDetalhesModal'
 
 export default function HomePage() {
   const { user } = useAuth()
-  const queryClient = useQueryClient()
   const [ocultarValor, setOcultarValor] = useState(true) 
   const [mesAtual, setMesAtual] = useState(new Date().getMonth() + 1)
   const [anoAtual, setAnoAtual] = useState(new Date().getFullYear())
@@ -114,13 +113,11 @@ export default function HomePage() {
     queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
     retry: 3,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchOnMount: 'always',
     enabled: !!user,
-    staleTime: 0,
-    refetchInterval: 3 * 60 * 1000, 
-    refetchIntervalInBackground: true, 
+    staleTime: 10 * 60 * 1000, // 10 minutos - dados não ficam stale rapidamente
   })
 
 
@@ -128,11 +125,11 @@ export default function HomePage() {
     queryKey: ['home-resumo', user, mesAtual, anoAtual],
     queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
     retry: 3,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchOnMount: 'always',
     enabled: !!user && !!carteira, // Só carrega depois da carteira
-    staleTime: 0,
+    staleTime: 10 * 60 * 1000, // 10 minutos
   })
 
 
@@ -143,86 +140,21 @@ export default function HomePage() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
   const isFirstLoad = useRef(true)
 
-  // ==================== REFRESH AUTOMÁTICO ====================
-  
-  // Função para refresh automático (preços + indexadores)
-  const refreshCompleto = async () => {
-    try {
-      // Executar ambos em paralelo (silencioso)
-      const [precosResult, indexadoresResult] = await Promise.all([
-        carteiraService.refreshCarteira(),
-        carteiraService.refreshIndexadores()
-      ])
-      
-      const totalAtualizados = (precosResult.updated || 0) + (indexadoresResult.updated || 0)
-      
-      if (precosResult.success && indexadoresResult.success && totalAtualizados > 0) {
-        // Notificação sutil apenas se houve atualizações
-        toast.success(`${totalAtualizados} ativos atualizados automaticamente`, {
-          duration: 2000,
-          position: 'top-right',
-          style: {
-            background: '#10b981',
-            color: '#fff',
-            fontSize: '12px',
-          },
-        })
-        // Invalida carteira com usuário atual
-        const u = (typeof window !== 'undefined' && window.localStorage.getItem('finmas_user')) || undefined
-        queryClient.invalidateQueries({ queryKey: ['carteira', u] })
-        queryClient.invalidateQueries({ queryKey: ['carteira'] })
-        setUltimaAtualizacao(new Date())
-      }
-    } catch (error) {
-      // Falha silenciosa para não incomodar o usuário
-      console.log('Refresh automático falhou:', error)
-    }
-  }
+  // ==================== REFRESH AUTOMÁTICO REMOVIDO ====================
+  // Dados só são carregados quando a página é aberta/clicada
+  // Sem atualizações periódicas automáticas
 
-  // Monitorar atualizações automáticas da carteira
+  // Monitorar carregamento inicial da carteira
   useEffect(() => {
-    if (carteira && !isFirstLoad.current) {
-      setUltimaAtualizacao(new Date())
-      // Notificação sutil apenas para atualizações automáticas (não no primeiro carregamento)
-      toast.success('Carteira atualizada automaticamente', {
-        duration: 2000,
-        position: 'top-right',
-        style: {
-          background: '#10b981',
-          color: '#fff',
-          fontSize: '12px',
-        },
-      })
-    }
     if (carteira && isFirstLoad.current) {
       isFirstLoad.current = false
+      setUltimaAtualizacao(new Date())
     }
   }, [carteira])
 
-  // ==================== REFRESH AUTOMÁTICO ====================
-  
-
-  useEffect(() => {
-    if (user && carteira && carteira.length > 0) {
-      // Aguardar um pouco para não sobrecarregar na inicialização
-      const timer = setTimeout(() => {
-        refreshCompleto()
-      }, 2000) // 2 segundos após carregar a carteira
-      
-      return () => clearTimeout(timer)
-    }
-  }, [user, carteira])
-
-  // Refresh automático periódico (a cada 10 minutos)
-  useEffect(() => {
-    if (!user) return
-
-    const interval = setInterval(() => {
-      refreshCompleto()
-    }, 10 * 60 * 1000) // 10 minutos
-
-    return () => clearInterval(interval)
-  }, [user])
+  // ==================== REFRESH AUTOMÁTICO REMOVIDO ====================
+  // Agora os dados só são carregados quando a página é aberta/clicada
+  // Sem atualizações periódicas automáticas
 
 
 
@@ -249,13 +181,11 @@ export default function HomePage() {
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchOnMount: 'always',
     enabled: !!user && !!carteira, 
-    staleTime: 0, 
-    refetchInterval: 5 * 60 * 1000, 
-    refetchIntervalInBackground: true, 
+    staleTime: 10 * 60 * 1000, // 10 minutos
   })
 
 
@@ -1504,6 +1434,302 @@ export default function HomePage() {
     )
   }
 
+  // Componente de carrossel com melhores ativos dos rankings
+  // Memoizado para evitar re-renders desnecessários
+  const TopRankingsCarousel = memo(({ delay = 0 }: { delay?: number }) => {
+    const carouselRef = useRef<HTMLDivElement>(null)
+    const scrollInitializedRef = useRef(false)
+    const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Buscar rankings de todos os tipos
+    const { data: rankingsAcoes } = useQuery({
+      queryKey: ['rankings-top-acoes'],
+      queryFn: () => rankingService.getRankingsInvestidor10('acoes'),
+      staleTime: 10 * 60 * 1000,
+      retry: 2,
+    })
+
+    const { data: rankingsFiis } = useQuery({
+      queryKey: ['rankings-top-fiis'],
+      queryFn: () => rankingService.getRankingsInvestidor10('fiis'),
+      staleTime: 10 * 60 * 1000,
+      retry: 2,
+    })
+
+    const { data: rankingsBdrs } = useQuery({
+      queryKey: ['rankings-top-bdrs'],
+      queryFn: () => rankingService.getRankingsInvestidor10('bdrs'),
+      staleTime: 10 * 60 * 1000,
+      retry: 2,
+    })
+
+    const { data: rankingsCriptos } = useQuery({
+      queryKey: ['rankings-top-criptos'],
+      queryFn: () => rankingService.getRankingsInvestidor10('criptos'),
+      staleTime: 10 * 60 * 1000,
+      retry: 2,
+    })
+
+    // Pegar o primeiro item de cada tipo de ranking de cada categoria
+    // Usar uma chave estável baseada no conteúdo para evitar reinicializações
+    const topAtivos = useMemo(() => {
+      const ativos: Array<{
+        ticker: string
+        nome: string
+        rankingTipo: string
+        valor: string | number | null
+        tipo_valor: 'percent' | 'money' | null
+        categoria: string
+      }> = []
+      
+      // Função auxiliar para pegar o primeiro item de cada ranking
+      const processarRankings = (rankings: any, categoria: string) => {
+        if (!rankings?.rankings_por_tipo) return
+        
+        Object.entries(rankings.rankings_por_tipo).forEach(([tipoRanking, items]) => {
+          if (items && Array.isArray(items) && items.length > 0) {
+            ativos.push({
+              ticker: items[0].ticker,
+              nome: items[0].nome,
+              rankingTipo: tipoRanking,
+              valor: items[0].valor,
+              tipo_valor: items[0].tipo_valor,
+              categoria: categoria
+            })
+          }
+        })
+      }
+      
+      // Processar todos os tipos
+      processarRankings(rankingsAcoes, 'Ações')
+      processarRankings(rankingsFiis, 'FIIs')
+      processarRankings(rankingsBdrs, 'BDRs')
+      processarRankings(rankingsCriptos, 'Criptos')
+      
+      return ativos
+    }, [rankingsAcoes, rankingsFiis, rankingsBdrs, rankingsCriptos])
+
+
+    // Buscar logos dos top ativos
+    const tickersParaBuscar = useMemo(() => {
+      return topAtivos.map(a => normalizeTicker(a.ticker))
+    }, [topAtivos])
+
+    const { data: logos } = useQuery({
+      queryKey: ['logos-top-rankings', tickersParaBuscar.length],
+      queryFn: async () => {
+        if (tickersParaBuscar.length === 0) return {}
+        return await ativoService.getLogosBatch(tickersParaBuscar)
+      },
+      enabled: tickersParaBuscar.length > 0,
+      staleTime: 60 * 60 * 1000,
+    })
+
+    // Buscar cotações e variações
+    const { data: precosData } = useQuery({
+      queryKey: ['precos-top-rankings', tickersParaBuscar.join(',')],
+      queryFn: async () => {
+        if (tickersParaBuscar.length === 0) return {}
+        
+        const precos: Record<string, { preco: number; variacao: number }> = {}
+        
+        // Buscar preços em paralelo
+        await Promise.all(
+          tickersParaBuscar.map(async (ticker) => {
+            try {
+              const detalhes = await ativoService.getDetalhes(ticker)
+              if (detalhes?.info?.currentPrice) {
+                precos[ticker] = {
+                  preco: detalhes.info.currentPrice,
+                  variacao: detalhes.info.regularMarketChangePercent || 0
+                }
+              }
+            } catch (e) {
+              // Ignorar erros individuais
+            }
+          })
+        )
+        
+        return precos
+      },
+      enabled: tickersParaBuscar.length > 0,
+      staleTime: 2 * 60 * 1000, // 2 minutos
+    })
+
+    // Refs para manter estado do scroll
+    const isPausedRef = useRef(false)
+    const handlersRef = useRef<{
+      mouseEnter: (() => void) | null
+      mouseLeave: (() => void) | null
+    }>({ mouseEnter: null, mouseLeave: null })
+
+    // Auto-scroll do carrossel (girando continuamente)
+    // Só inicializa uma vez quando os dados são carregados pela primeira vez
+    useEffect(() => {
+      // Se já foi inicializado, não fazer nada
+      if (scrollInitializedRef.current) return
+      if (!topAtivos || topAtivos.length === 0) return
+
+      // Limpar timeout anterior se existir
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      // Aguardar um pouco para garantir que o elemento está renderizado
+      timeoutRef.current = setTimeout(() => {
+        if (!carouselRef.current) return
+        if (scrollInitializedRef.current) return // Verificar novamente
+
+        const container = carouselRef.current
+        scrollInitializedRef.current = true // Marcar como inicializado
+
+        const scroll = () => {
+          if (!container || isPausedRef.current) return
+
+          const maxScroll = container.scrollWidth - container.clientWidth
+
+          // Se não há scroll necessário, não fazer nada
+          if (maxScroll <= 0) return
+
+          // Scroll suave de 1 pixel a cada 16ms (aproximadamente 60fps)
+          container.scrollLeft += 1
+
+          // Se chegou ao fim, volta ao início
+          if (container.scrollLeft >= maxScroll) {
+            container.scrollLeft = 0
+          }
+        }
+
+        // Pausar ao passar o mouse
+        const handleMouseEnter = () => {
+          isPausedRef.current = true
+        }
+        const handleMouseLeave = () => {
+          isPausedRef.current = false
+        }
+
+        handlersRef.current.mouseEnter = handleMouseEnter
+        handlersRef.current.mouseLeave = handleMouseLeave
+
+        container.addEventListener('mouseenter', handleMouseEnter)
+        container.addEventListener('mouseleave', handleMouseLeave)
+
+        // Iniciar o scroll a cada 16ms (60fps)
+        intervalIdRef.current = setInterval(scroll, 16)
+      }, 500) // Aguardar 500ms para garantir renderização
+
+      // Cleanup apenas quando o componente for desmontado
+      return () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+      }
+    }, []) // Array vazio - só executa uma vez na montagem
+
+    // Cleanup apenas quando o componente for desmontado
+    useEffect(() => {
+      return () => {
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current)
+          intervalIdRef.current = null
+        }
+        if (carouselRef.current && handlersRef.current.mouseEnter && handlersRef.current.mouseLeave) {
+          carouselRef.current.removeEventListener('mouseenter', handlersRef.current.mouseEnter)
+          carouselRef.current.removeEventListener('mouseleave', handlersRef.current.mouseLeave)
+        }
+        scrollInitializedRef.current = false
+      }
+    }, [])
+
+    if (!topAtivos || topAtivos.length === 0) {
+      return null
+    }
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay }}
+        className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg sm:shadow-xl"
+      >
+        {/* Carrossel estreito horizontal com auto-scroll */}
+        <div 
+          ref={carouselRef}
+          className="overflow-x-auto scrollbar-hide"
+          style={{ scrollBehavior: 'smooth' }}
+        >
+          <div className="flex gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+            {topAtivos.map((ativo, index) => {
+              const tickerNormalizado = normalizeTicker(ativo.ticker)
+              const logoUrl = logos?.[tickerNormalizado] || logos?.[ativo.ticker] || null
+              const precoInfo = precosData?.[tickerNormalizado] || precosData?.[ativo.ticker]
+              const variacao = precoInfo?.variacao || 0
+              const preco = precoInfo?.preco
+
+              return (
+                <motion.div
+                  key={`${ativo.ticker}-${index}`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: delay + index * 0.1 }}
+                  onClick={() => window.location.href = `/detalhes?ticker=${tickerNormalizado}`}
+                  className="flex-shrink-0 w-32 sm:w-40 bg-background border border-border rounded-lg p-3 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group"
+                >
+                  {/* Logo */}
+                  <div className="flex justify-center mb-2">
+                    {logoUrl ? (
+                      <img
+                        src={logoUrl}
+                        alt={ativo.ticker}
+                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white font-bold text-xs">
+                        {ativo.ticker.replace('.SA', '').replace('.sa', '').replace('-USD', '').slice(0, 4)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ticker */}
+                  <div className="text-center mb-2">
+                    <p className="text-xs sm:text-sm font-bold text-foreground truncate">{ativo.ticker}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{ativo.rankingTipo}</p>
+                  </div>
+
+                  {/* Cotação e Variação */}
+                  <div className="space-y-1">
+                    {preco ? (
+                      <p className="text-xs sm:text-sm font-semibold text-foreground text-center">
+                        {formatCurrency(preco)}
+                      </p>
+                    ) : null}
+                    {variacao !== 0 && (
+                      <div className={`flex items-center justify-center gap-1 ${
+                        variacao >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {variacao >= 0 ? (
+                          <ArrowUpRight className="w-3 h-3" />
+                        ) : (
+                          <ArrowDownRight className="w-3 h-3" />
+                        )}
+                        <span className="text-xs font-semibold">
+                          {formatPercentage(Math.abs(variacao))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      </motion.div>
+    )
+  })
+
   // Componente para atalhos inteligentes baseados no contexto
   const SmartQuickActions = ({ delay = 0 }: { delay?: number }) => {
     const getContextualActions = () => {
@@ -1740,6 +1966,9 @@ export default function HomePage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Carrossel de Melhores Ativos dos Rankings */}
+        <TopRankingsCarousel delay={0.3} />
 
         {/* Cards principais com animações - Mobile First */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">

@@ -14,7 +14,8 @@ def buscar_rankings_investidor10(tipo: str) -> Dict[str, Any]:
     urls = {
         'acoes': 'https://investidor10.com.br/acoes/rankings/',
         'fiis': 'https://investidor10.com.br/fiis/rankings/',
-        'bdrs': 'https://investidor10.com.br/bdrs/rankings/'
+        'bdrs': 'https://investidor10.com.br/bdrs/rankings/',
+        'criptos': 'https://investidor10.com.br/criptomoedas/rankings/'
     }
     
     url = urls.get(tipo)
@@ -71,7 +72,7 @@ def buscar_rankings_investidor10(tipo: str) -> Dict[str, Any]:
                 for item in items_ranking:
                     try:
                         # Procurar link dentro do item
-                        link = item.find('a', href=lambda x: x and ('/acoes/' in x or '/fiis/' in x or '/bdrs/' in x))
+                        link = item.find('a', href=lambda x: x and ('/acoes/' in x or '/fiis/' in x or '/bdrs/' in x or '/criptomoedas/' in x))
                         if not link:
                             continue
                         
@@ -86,6 +87,71 @@ def buscar_rankings_investidor10(tipo: str) -> Dict[str, Any]:
                             ticker = href.split('/fiis/')[1].split('/')[0].upper()
                         elif '/bdrs/' in href:
                             ticker = href.split('/bdrs/')[1].split('/')[0].upper()
+                        elif '/criptomoedas/' in href:
+                            # Para criptomoedas, extrair o nome e converter para ticker padrão
+                            crypto_name = href.split('/criptomoedas/')[1].split('/')[0].lower()
+                            # Mapear nomes comuns para tickers
+                            crypto_map = {
+                                'bitcoin': 'BTC-USD',
+                                'ethereum': 'ETH-USD',
+                                'bnb': 'BNB-USD',
+                                'binance-coin': 'BNB-USD',
+                                'dogecoin': 'DOGE-USD',
+                                'solana': 'SOL-USD',
+                                'cardano': 'ADA-USD',
+                                'ripple': 'XRP-USD',
+                                'xrp': 'XRP-USD',
+                                'polkadot': 'DOT-USD',
+                                'polygon': 'MATIC-USD',
+                                'matic': 'MATIC-USD',
+                                'avalanche': 'AVAX-USD',
+                                'avax': 'AVAX-USD',
+                                'chainlink': 'LINK-USD',
+                                'link': 'LINK-USD',
+                                'uniswap': 'UNI-USD',
+                                'uni': 'UNI-USD',
+                                'litecoin': 'LTC-USD',
+                                'ltc': 'LTC-USD',
+                                'cosmos': 'ATOM-USD',
+                                'atom': 'ATOM-USD',
+                                'algorand': 'ALGO-USD',
+                                'algo': 'ALGO-USD',
+                                'stellar': 'XLM-USD',
+                                'xlm': 'XLM-USD',
+                                'vechain': 'VET-USD',
+                                'vet': 'VET-USD',
+                                'internet-computer': 'ICP-USD',
+                                'icp': 'ICP-USD',
+                                'filecoin': 'FIL-USD',
+                                'fil': 'FIL-USD',
+                                'aave': 'AAVE-USD',
+                                'maker': 'MKR-USD',
+                                'mkr': 'MKR-USD',
+                                'compound': 'COMP-USD',
+                                'comp': 'COMP-USD',
+                                'yearn-finance': 'YFI-USD',
+                                'yfi': 'YFI-USD',
+                                'synthetix': 'SNX-USD',
+                                'snx': 'SNX-USD',
+                                'curve': 'CRV-USD',
+                                'crv': 'CRV-USD',
+                                'sushi': 'SUSHI-USD',
+                                'sushiswap': 'SUSHI-USD',
+                                'tron': 'TRX-USD',
+                                'trx': 'TRX-USD',
+                                'ethereum-classic': 'ETC-USD',
+                                'etc': 'ETC-USD',
+                                'bitcoin-cash': 'BCH-USD',
+                                'bch': 'BCH-USD',
+                                'monero': 'XMR-USD',
+                                'xmr': 'XMR-USD',
+                                'dash': 'DASH-USD',
+                                'zcash': 'ZEC-USD',
+                                'zec': 'ZEC-USD',
+                                'tezos': 'XTZ-USD',
+                                'xtz': 'XTZ-USD'
+                            }
+                            ticker = crypto_map.get(crypto_name, f"{crypto_name.upper().replace('-', '')}-USD")
                         
                         if not ticker:
                             continue

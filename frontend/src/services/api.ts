@@ -769,7 +769,7 @@ export const simuladorService = {
 }
 
 export const rankingService = {
-  getRankingsInvestidor10: async (tipo: 'acoes' | 'fiis' | 'bdrs' = 'acoes'): Promise<{
+  getRankingsInvestidor10: async (tipo: 'acoes' | 'fiis' | 'bdrs' | 'criptos' = 'acoes'): Promise<{
     sucesso: boolean
     url: string
     tipo: string
