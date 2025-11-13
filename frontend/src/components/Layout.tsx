@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
@@ -19,6 +19,7 @@ const menuItems = [
   { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
   { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
   { path: '/controle', label: 'Controle Financeiro', icon: Calculator },
+  { path: '/rankings', label: 'Rankings', icon: Trophy },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -65,6 +66,7 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Carteira – Ativos', path: '/carteira', keywords: 'carteira ativos posicoes', params: { tab: 'ativos' } },
     { label: 'Carteira – Proventos', path: '/carteira', keywords: 'carteira proventos dividendos', params: { tab: 'proventos' } },
     { label: 'Carteira – Rebalanceamento', path: '/carteira', keywords: 'carteira rebalanceamento metas', params: { tab: 'rebalanceamento' } },
+    { label: 'Rankings', path: '/rankings', keywords: 'rankings mercado acoes fiis bdrs', params: {} },
   ]
 
   const filteredResults = searchQuery

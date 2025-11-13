@@ -2784,9 +2784,7 @@ def atualizar_precos_indicadores_carteira():
                             
                             preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
                             
-                            # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
-                            # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
-                            # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+
                             if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
                                 print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
                                 preco_atual = preco_inicial

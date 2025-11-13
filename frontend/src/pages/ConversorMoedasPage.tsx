@@ -583,7 +583,8 @@ export default function ConversorMoedasPage() {
                       <img 
                         src={logoQuery.data} 
                         alt={selectedTicker} 
-                        className="w-12 h-12 rounded-lg object-contain border border-border bg-white p-1"
+                        className="w-12 h-12 rounded-lg object-cover border border-border"
+                        style={{ objectFit: 'cover' }}
                       />
                     ) : (
                       <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold">

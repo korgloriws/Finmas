@@ -248,8 +248,8 @@ export default function DetalhesVisaoGeralTab({
               <motion.img 
                 src={logoUrl} 
                 alt={ticker} 
-                className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl sm:rounded-2xl object-contain border-2 border-primary/30 bg-white p-3 sm:p-4 shadow-xl group-hover:shadow-2xl group-hover:border-primary/50 transition-all duration-500"
-                style={{ transformStyle: 'preserve-3d' }}
+                className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl sm:rounded-2xl object-cover border-2 border-primary/30 shadow-xl group-hover:shadow-2xl group-hover:border-primary/50 transition-all duration-500"
+                style={{ transformStyle: 'preserve-3d', objectFit: 'cover' }}
               />
             </motion.div>
           ) : (

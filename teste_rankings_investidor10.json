@@ -1,0 +1,515 @@
+{
+  "acoes": {
+    "sucesso": true,
+    "url": "https://investidor10.com.br/acoes/rankings/",
+    "rankings_tabela": [
+      {
+        "ticker": "PETR4",
+        "nome": "Petrobrás",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "R$ 431,83 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/petr4/"
+      },
+      {
+        "ticker": "ITUB4",
+        "nome": "Banco Itaú",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "R$ 409,42 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/itub4/"
+      },
+      {
+        "ticker": "VALE3",
+        "nome": "Vale",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "R$ 298,49 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/vale3/"
+      },
+      {
+        "ticker": "MOAR3",
+        "nome": "MONTEIRO ARANHA",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 78.71,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/moar3/"
+      },
+      {
+        "ticker": "MELK3",
+        "nome": "MELNICK",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 30.98,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/melk3/"
+      },
+      {
+        "ticker": "VULC3",
+        "nome": "VULCABRAS",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 23.94,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/vulc3/"
+      },
+      {
+        "ticker": "LIGT3",
+        "nome": "LIGHT",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "665,52%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/ligt3/"
+      },
+      {
+        "ticker": "MNPR3",
+        "nome": "MINUPAR",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "308,91%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/mnpr3/"
+      },
+      {
+        "ticker": "ALLD3",
+        "nome": "ALLIED",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "279,22%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/alld3/"
+      },
+      {
+        "ticker": "ITSA4",
+        "nome": "Itaúsa",
+        "ranking_tipo": "Maiores Margem Líquida",
+        "valor": 193.63,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/itsa4/"
+      },
+      {
+        "ticker": "LOGG3",
+        "nome": "Log",
+        "ranking_tipo": "Maiores Margem Líquida",
+        "valor": 160.32,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/logg3/"
+      },
+      {
+        "ticker": "MNPR3",
+        "nome": "MINUPAR",
+        "ranking_tipo": "Maiores Margem Líquida",
+        "valor": 126.31,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/acoes/mnpr3/"
+      },
+      {
+        "ticker": "WEGE3",
+        "nome": "WEG",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "100",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/wege3/"
+      },
+      {
+        "ticker": "CMIG4",
+        "nome": "Cemig",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "100",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/cmig4/"
+      },
+      {
+        "ticker": "LOGG3",
+        "nome": "Log",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "100",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/logg3/"
+      },
+      {
+        "ticker": "BBAS3",
+        "nome": "Banco do Brasil",
+        "ranking_tipo": "Mais Queridas",
+        "valor": "1",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/bbas3/"
+      },
+      {
+        "ticker": "PETR4",
+        "nome": "Petrobrás",
+        "ranking_tipo": "Mais Queridas",
+        "valor": "2",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/petr4/"
+      },
+      {
+        "ticker": "BBSE3",
+        "nome": "BB SEGURIDADE",
+        "ranking_tipo": "Mais Queridas",
+        "valor": "3",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/bbse3/"
+      },
+      {
+        "ticker": "SYNE3",
+        "nome": "SYN",
+        "ranking_tipo": "Mais Baratas - Bazin",
+        "valor": "783,73%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/syne3/"
+      },
+      {
+        "ticker": "PEAB3",
+        "nome": "CIA PARTICIPAÇÕES ALIANÇA DA BAHIA",
+        "ranking_tipo": "Mais Baratas - Bazin",
+        "valor": "333,98%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/acoes/peab3/"
+      }
+    ],
+    "total_rankings": 48,
+    "secoes_encontradas": 356,
+    "cards_encontrados": 36,
+    "scripts_json": 0,
+    "html_tamanho": 270885
+  },
+  "fiis": {
+    "sucesso": true,
+    "url": "https://investidor10.com.br/fiis/rankings/",
+    "rankings_tabela": [
+      {
+        "ticker": "KNCR11",
+        "nome": "KINEA RENDIMENTOS IM",
+        "ranking_tipo": "Maiores Valor Patrimonial",
+        "valor": "R$ 7,80 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/kncr11/"
+      },
+      {
+        "ticker": "KNIP11",
+        "nome": "KINEA ÍNDICE DE PREÇ",
+        "ranking_tipo": "Maiores Valor Patrimonial",
+        "valor": "R$ 7,31 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/knip11/"
+      },
+      {
+        "ticker": "XPML11",
+        "nome": "XP MALLS FUNDOS",
+        "ranking_tipo": "Maiores Valor Patrimonial",
+        "valor": "R$ 6,39 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/xpml11/"
+      },
+      {
+        "ticker": "CFHI11",
+        "nome": "CF2",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 435.24,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/fiis/cfhi11/"
+      },
+      {
+        "ticker": "SNLG11",
+        "nome": "Suno Log Fundo de In",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 113.97,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/fiis/snlg11/"
+      },
+      {
+        "ticker": "FAMB11",
+        "nome": "EDIFÍCIO ALMIRANTE B",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 104.42,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/fiis/famb11/"
+      },
+      {
+        "ticker": "KNCR11",
+        "nome": "KINEA RENDIMENTOS IM",
+        "ranking_tipo": "Mais Buscados",
+        "valor": "R$ 7,80 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/kncr11/"
+      },
+      {
+        "ticker": "KNIP11",
+        "nome": "KINEA ÍNDICE DE PREÇ",
+        "ranking_tipo": "Mais Buscados",
+        "valor": "R$ 7,31 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/knip11/"
+      },
+      {
+        "ticker": "XPML11",
+        "nome": "XP MALLS FUNDOS",
+        "ranking_tipo": "Mais Buscados",
+        "valor": "R$ 6,39 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/xpml11/"
+      },
+      {
+        "ticker": "MXRF11",
+        "nome": "MAXI RENDA",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "1",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/mxrf11/"
+      },
+      {
+        "ticker": "GARE11",
+        "nome": "GUARDIAN REAL ESTATE",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "2",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/gare11/"
+      },
+      {
+        "ticker": "VGHF11",
+        "nome": "VALORA HEDGE",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "3",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/vghf11/"
+      },
+      {
+        "ticker": "JCIN11",
+        "nome": "FOF JHSF Capital Ins",
+        "ranking_tipo": "Maiores Liquidez",
+        "valor": "R$ 23,14 M",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/jcin11/"
+      },
+      {
+        "ticker": "CPLG11",
+        "nome": "CAPITÂNIA LOGÍSTICA",
+        "ranking_tipo": "Maiores Liquidez",
+        "valor": "R$ 17,53 M",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/cplg11/"
+      },
+      {
+        "ticker": "HPDP11",
+        "nome": "HEDGE SHOPPING PARQU",
+        "ranking_tipo": "Maiores Liquidez",
+        "valor": "R$ 15,58 M",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/hpdp11/"
+      },
+      {
+        "ticker": "SNLG11",
+        "nome": "Suno Log Fundo de In",
+        "ranking_tipo": "Maiores P/VP",
+        "valor": "2,96",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/snlg11/"
+      },
+      {
+        "ticker": "BRIX11",
+        "nome": "BRIX",
+        "ranking_tipo": "Maiores P/VP",
+        "valor": "1,55",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/brix11/"
+      },
+      {
+        "ticker": "PNRC11",
+        "nome": "PANORAMA REAL ESTATE",
+        "ranking_tipo": "Maiores P/VP",
+        "valor": "1,38",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/pnrc11/"
+      },
+      {
+        "ticker": "CFHI11",
+        "nome": "CF2",
+        "ranking_tipo": "Menores P/VP",
+        "valor": "0,07",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/cfhi11/"
+      },
+      {
+        "ticker": "HCTR11",
+        "nome": "HECTARE CE",
+        "ranking_tipo": "Menores P/VP",
+        "valor": "0,20",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/fiis/hctr11/"
+      }
+    ],
+    "total_rankings": 24,
+    "secoes_encontradas": 180,
+    "cards_encontrados": 20,
+    "scripts_json": 0,
+    "html_tamanho": 222316
+  },
+  "bdrs": {
+    "sucesso": true,
+    "url": "https://investidor10.com.br/bdrs/rankings/",
+    "rankings_tabela": [
+      {
+        "ticker": "NVDC34",
+        "nome": "NVIDIA CORPORATION",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "US$ 4,93 T",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/nvdc34/"
+      },
+      {
+        "ticker": "AAPL34",
+        "nome": "Apple",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "US$ 3,97 T",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/aapl34/"
+      },
+      {
+        "ticker": "MSFT34",
+        "nome": "Microsoft",
+        "ranking_tipo": "Maiores Valor de Mercado",
+        "valor": "US$ 3,69 T",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/msft34/"
+      },
+      {
+        "ticker": "A1IV34",
+        "nome": "Apartment Investment",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 52.6,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/a1iv34/"
+      },
+      {
+        "ticker": "F1MC34",
+        "nome": "FMC",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 16.58,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/f1mc34/"
+      },
+      {
+        "ticker": "L1YB34",
+        "nome": "LyondellBasell Industries",
+        "ranking_tipo": "Maiores Dividend Yield",
+        "valor": 12.89,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/l1yb34/"
+      },
+      {
+        "ticker": "CHCM34",
+        "nome": "Charter Communications",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "1.923,30%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/chcm34/"
+      },
+      {
+        "ticker": "M1HK34",
+        "nome": "Mohawk Industries",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "1.592,81%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/m1hk34/"
+      },
+      {
+        "ticker": "A1TT34",
+        "nome": "Allstate",
+        "ranking_tipo": "Mais Baratas - Graham",
+        "valor": "1.516,07%",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/a1tt34/"
+      },
+      {
+        "ticker": "PRXB31",
+        "nome": "Prosus NV ADR",
+        "ranking_tipo": "Margem Líquida",
+        "valor": 100.0,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/prxb31/"
+      },
+      {
+        "ticker": "M2ST34",
+        "nome": "MicroStrategy",
+        "ranking_tipo": "Margem Líquida",
+        "valor": 100.0,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/m2st34/"
+      },
+      {
+        "ticker": "LBRD34",
+        "nome": "Liberty Broadband",
+        "ranking_tipo": "Margem Líquida",
+        "valor": 99.75,
+        "tipo_valor": "percent",
+        "url": "https://investidor10.com.br/bdrs/lbrd34/"
+      },
+      {
+        "ticker": "Z1OM34",
+        "nome": "Zoom",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "90",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/z1om34/"
+      },
+      {
+        "ticker": "A1MT34",
+        "nome": "Applied Materials",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "90",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/a1mt34/"
+      },
+      {
+        "ticker": "E1RI34",
+        "nome": "Telefonaktiebolaget LM Ericsson (publ)",
+        "ranking_tipo": "Buy And Hold",
+        "valor": "90",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/e1ri34/"
+      },
+      {
+        "ticker": "ROXO34",
+        "nome": "Nu Holdings (NuBank)",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "1",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/roxo34/"
+      },
+      {
+        "ticker": "AAPL34",
+        "nome": "Apple",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "2",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/aapl34/"
+      },
+      {
+        "ticker": "AMZO34",
+        "nome": "Amazon",
+        "ranking_tipo": "Mais Queridos",
+        "valor": "3",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/amzo34/"
+      },
+      {
+        "ticker": "CAFR31",
+        "nome": "Carrefour SA",
+        "ranking_tipo": "Maiores Receitas",
+        "valor": "US$ 192,45 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/cafr31/"
+      },
+      {
+        "ticker": "AMZO34",
+        "nome": "Amazon",
+        "ranking_tipo": "Maiores Receitas",
+        "valor": "US$ 180,17 B",
+        "tipo_valor": "money",
+        "url": "https://investidor10.com.br/bdrs/amzo34/"
+      }
+    ],
+    "total_rankings": 48,
+    "secoes_encontradas": 356,
+    "cards_encontrados": 36,
+    "scripts_json": 0,
+    "html_tamanho": 274118
+  }
+}

@@ -196,7 +196,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
     if (!logoUrl) {
       return <div className="w-5 h-5 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">{(ticker || '?').charAt(0).toUpperCase()}</div>
     }
-    return <img src={logoUrl} alt={`Logo ${ticker}`} title={ticker} className="w-5 h-5 rounded object-contain" />
+    return <img src={logoUrl} alt={`Logo ${ticker}`} title={ticker} className="w-5 h-5 rounded object-cover" style={{ objectFit: 'cover' }} />
   }
 
   // Buscar preço atual quando necessário
@@ -480,7 +480,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
                           const cacheUrl = logosCache[key]
                           const url = cacheUrl ?? selectedLogoUrl
                           if (url) {
-                            return <img src={url} alt={`Logo ${ticker || nome || ''}`} title={ticker || nome || ''} className="w-full h-full object-contain p-2" />
+                            return <img src={url} alt={`Logo ${ticker || nome || ''}`} title={ticker || nome || ''} className="w-full h-full object-cover" style={{ objectFit: 'cover' }} />
                           }
                           const letter = (ticker || nome || '?').trim().charAt(0).toUpperCase()
                           return <div className="text-3xl font-semibold text-muted-foreground">{letter || '?'}</div>

@@ -45,7 +45,8 @@ export default function TickerWithLogo({
         <img 
           src={logoUrl} 
           alt={`Logo ${displayTicker}`}
-          className={`${logoSize} rounded flex-shrink-0 object-contain`}
+          className={`${logoSize} rounded flex-shrink-0 object-cover`}
+          style={{ objectFit: 'cover' }}
           onError={(e) => {
             e.currentTarget.style.display = 'none'
           }}

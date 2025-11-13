@@ -384,7 +384,8 @@ export default function AgendaDividendosPage() {
                               <img 
                                 src={logoUrl} 
                                 alt={item.nome}
-                                className="w-6 h-6 rounded object-contain"
+                                className="w-6 h-6 rounded object-cover"
+                                style={{ objectFit: 'cover' }}
                                 onError={(e) => {
                                   (e.target as HTMLImageElement).style.display = 'none'
                                 }}
@@ -493,7 +494,8 @@ export default function AgendaDividendosPage() {
                               <img 
                                 src={logoUrl} 
                                 alt={item.nome}
-                                className="w-6 h-6 rounded object-contain"
+                                className="w-6 h-6 rounded object-cover"
+                                style={{ objectFit: 'cover' }}
                                 onError={(e) => {
                                   (e.target as HTMLImageElement).style.display = 'none'
                                 }}
@@ -602,7 +604,8 @@ export default function AgendaDividendosPage() {
                               <img 
                                 src={logoUrl} 
                                 alt={item.nome}
-                                className="w-6 h-6 rounded object-contain"
+                                className="w-6 h-6 rounded object-cover"
+                                style={{ objectFit: 'cover' }}
                                 onError={(e) => {
                                   (e.target as HTMLImageElement).style.display = 'none'
                                 }}
@@ -763,7 +766,7 @@ export default function AgendaDividendosPage() {
                                     <img 
                                       src={logoUrl} 
                                       alt={item.nome}
-                                      className="w-6 h-6 rounded object-contain"
+                                      className="w-6 h-6 rounded object-cover"
                                       onError={(e) => {
                                         (e.target as HTMLImageElement).style.display = 'none'
                                       }}
@@ -856,7 +859,7 @@ export default function AgendaDividendosPage() {
                                     <img 
                                       src={logoUrl} 
                                       alt={item.nome}
-                                      className="w-6 h-6 rounded object-contain"
+                                      className="w-6 h-6 rounded object-cover"
                                       onError={(e) => {
                                         (e.target as HTMLImageElement).style.display = 'none'
                                       }}
@@ -949,7 +952,7 @@ export default function AgendaDividendosPage() {
                                     <img 
                                       src={logoUrl} 
                                       alt={item.nome}
-                                      className="w-6 h-6 rounded object-contain"
+                                      className="w-6 h-6 rounded object-cover"
                                       onError={(e) => {
                                         (e.target as HTMLImageElement).style.display = 'none'
                                       }}

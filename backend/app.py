@@ -3754,5 +3754,122 @@ def api_ranking_dividendos():
             "bdrs": {"total": 0, "ranking": []}
         }), 500
 
+# ==================== RANKING DE ATIVOS (LISTA COMPLETA BRAPI.DEV) ====================
+
+@server.route("/api/ranking/atualizar-lista", methods=["POST"])
+def api_atualizar_lista_ranking():
+    """
+    Endpoint para forçar atualização da lista completa de ativos do Brapi.dev
+    Ignora cache de 24h e atualiza imediatamente
+    
+    Uso: POST /api/ranking/atualizar-lista
+    """
+    try:
+        from brapi_lista_completa import atualizar_lista_brapi
+        
+        print("[API] Solicitacao de atualizacao da lista de ranking")
+        resultado = atualizar_lista_brapi(forcar=True)
+        
+        if resultado.get('success'):
+            return jsonify(resultado), 200
+        else:
+            return jsonify(resultado), 500
+            
+    except Exception as e:
+        print(f"[ERRO] Erro ao atualizar lista de ranking: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@server.route("/api/ranking/investidor10", methods=["GET"])
+def api_ranking_investidor10():
+    """
+    Endpoint para buscar rankings do investidor10.com.br
+    
+    Parâmetros:
+    - tipo: 'acoes', 'fiis' ou 'bdrs' (padrão: 'acoes')
+    """
+    try:
+        from scraper_rankings_investidor10 import buscar_rankings_investidor10
+        
+        tipo = request.args.get('tipo', 'acoes')
+        
+        if tipo not in ['acoes', 'fiis', 'bdrs']:
+            return jsonify({"erro": "Tipo invalido. Use: acoes, fiis ou bdrs"}), 400
+        
+        print(f"[RANKING INVESTIDOR10] Buscando rankings de {tipo}...")
+        resultado = buscar_rankings_investidor10(tipo)
+        
+        if resultado.get('erro'):
+            return jsonify(resultado), 500
+        
+        return jsonify(resultado), 200
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao buscar rankings do investidor10: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"erro": str(e)}), 500
+
+@server.route("/api/ranking/lista", methods=["GET"])
+def api_obter_lista_ranking():
+    """
+    Endpoint para obter lista completa de ativos para ranking
+    Retorna lista atual (pode estar em cache)
+    Atualiza automaticamente se > 24h desde última atualização
+    
+    Uso: GET /api/ranking/lista
+    """
+    try:
+        from brapi_lista_completa import carregar_lista_brapi_arquivo, atualizar_lista_brapi
+        
+        # Tentar carregar do arquivo
+        lista = carregar_lista_brapi_arquivo()
+        
+        # Se não existe ou está desatualizada, atualizar
+        if not lista:
+            print("[API] Lista nao encontrada. Atualizando...")
+            resultado = atualizar_lista_brapi(forcar=True)
+            if resultado.get('success'):
+                lista = carregar_lista_brapi_arquivo()
+        else:
+            # Verificar se precisa atualizar (automático a cada 24h)
+            try:
+                ultima_atualizacao = lista.get('ultima_atualizacao', '')
+                if ultima_atualizacao:
+                    ultima_dt = datetime.strptime(ultima_atualizacao, "%Y-%m-%d %H:%M:%S")
+                    horas_desde_atualizacao = (datetime.now() - ultima_dt).total_seconds() / 3600
+                    
+                    if horas_desde_atualizacao >= 24:
+                        print(f"[API] Lista desatualizada ({horas_desde_atualizacao:.1f}h). Atualizando automaticamente...")
+                        resultado = atualizar_lista_brapi(forcar=False)  # Não força, mas atualiza se > 24h
+                        if resultado.get('success'):
+                            lista = carregar_lista_brapi_arquivo()
+            except:
+                pass
+        
+        if lista:
+            return jsonify({
+                "success": True,
+                "dados": {
+                    "acoes_brasileiras": lista.get('acoes_brasileiras', []),
+                    "fiis_brasileiros": lista.get('fiis_brasileiros', []),
+                    "bdrs": lista.get('bdrs', []),
+                    "stocks_internacionais": lista.get('stocks_internacionais', []),
+                    "outros": lista.get('outros', []),
+                    "total": lista.get('total', 0),
+                    "ultima_atualizacao": lista.get('ultima_atualizacao', ''),
+                    "fonte": lista.get('fonte', 'brapi.dev')
+                }
+            }), 200
+        else:
+            return jsonify({"success": False, "message": "Lista nao disponivel"}), 404
+            
+    except Exception as e:
+        print(f"[ERRO] Erro ao obter lista de ranking: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
 if __name__ == "__main__":
     server.run(debug=False, port=5005, host='0.0.0.0') 

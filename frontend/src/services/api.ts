@@ -768,6 +768,36 @@ export const simuladorService = {
   },
 }
 
+export const rankingService = {
+  getRankingsInvestidor10: async (tipo: 'acoes' | 'fiis' | 'bdrs' = 'acoes'): Promise<{
+    sucesso: boolean
+    url: string
+    tipo: string
+    rankings: Array<{
+      ticker: string
+      nome: string
+      valor: number | string | null
+      valor_formatado?: string | null
+      tipo_valor: 'percent' | 'money' | null
+      url: string
+    }>
+    rankings_por_tipo: Record<string, Array<{
+      ticker: string
+      nome: string
+      valor: number | string | null
+      valor_formatado?: string | null
+      tipo_valor: 'percent' | 'money' | null
+      url: string
+    }>>
+    total_rankings: number
+    total_tipos_ranking: number
+    erro?: string
+  }> => {
+    const response = await api.get(`/ranking/investidor10?tipo=${tipo}`)
+    return response.data
+  },
+}
+
 export const dividendosService = {
   getAgenda: async (mes?: number, ano?: number, tipos?: string[]): Promise<{
     mes: number

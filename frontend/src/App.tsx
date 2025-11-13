@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider } from './contexts/AuthContext'
@@ -17,6 +17,7 @@ const JurosCompostosPage = lazy(() => import('./pages/JurosCompostosPage'))
 const GuiaMercadoPage = lazy(() => import('./pages/GuiaMercadoPage'))
 const ConversorMoedasPage = lazy(() => import('./pages/ConversorMoedasPage'))
 const AgendaDividendosPage = lazy(() => import('./pages/AgendaDividendosPage'))
+const RankingsPage = lazy(() => import('./pages/RankingsPage'))
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 
@@ -120,7 +121,21 @@ function App() {
               </SecurityCheck>
             </ProtectedRoute>
           } />
-          
+
+          <Route path="/rankings" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <Suspense fallback={<LoadingSpinner text="Carregando rankings..." />}>
+                    <RankingsPage />
+                  </Suspense>
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+
+          {/* Redirect da rota antiga para a nova */}
+          <Route path="/rankings-teste" element={<Navigate to="/rankings" replace />} />
 
         </Routes>
       </ThemeProvider>
