@@ -159,29 +159,14 @@ export default function AgendaDividendosPage() {
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2 flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-primary" />
-              Agenda de Dividendos
-            </h1>
-            <p className="text-muted-foreground">
-              Calendário de dividendos do mercado brasileiro
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setCalculadoraTicker('')
-              setCalculadoraValor(undefined)
-              setCalculadoraNome('')
-              setCalculadoraOpen(true)
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-lg"
-            title="Calculadora de Dividendos"
-          >
-            <Calculator className="w-5 h-5" />
-            <span className="hidden md:inline">Calculadora</span>
-          </button>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2 flex items-center gap-3">
+            <Calendar className="w-8 h-8 text-primary" />
+            Agenda de Dividendos
+          </h1>
+          <p className="text-muted-foreground">
+            Calendário de dividendos do mercado brasileiro
+          </p>
         </div>
       </div>
 

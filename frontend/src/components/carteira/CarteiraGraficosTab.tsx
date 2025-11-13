@@ -449,10 +449,10 @@ export default function CarteiraGraficosTab({
                       <Legend />
                       <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
                       <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} (índice)`} />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
               </>
             ) : (
             <div className="h-64 flex items-center justify-center text-muted-foreground">

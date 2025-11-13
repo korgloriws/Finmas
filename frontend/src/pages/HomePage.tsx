@@ -1890,9 +1890,7 @@ export default function HomePage() {
           </h1>
           
           <div className="flex items-center justify-center gap-2">
-            <p className="text-xs sm:text-sm lg:text-base text-muted-foreground max-w-2xl mx-auto px-2">
-              Visão geral completa do seu sistema financeiro e patrimonial
-            </p>
+
             {/* Indicador de atualização automática */}
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <RefreshCw className={`w-3 h-3 ${isFetchingCarteira ? 'animate-spin' : ''}`} />

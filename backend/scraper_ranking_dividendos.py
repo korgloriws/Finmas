@@ -1,5 +1,6 @@
 """
 Scraper para buscar rankings de dividendos do agendadividendos.com
+Quando mes/ano são fornecidos, usa o scraper do investidor10 para buscar dados da agenda
 """
 
 import requests
@@ -122,7 +123,7 @@ def buscar_ranking_dividendos(tipo: str = 'acoes', mes: Optional[int] = None, an
     # Se mês e ano foram fornecidos, buscar da agenda e criar ranking baseado em data-com
     if mes is not None and ano is not None:
         try:
-            from scraper_agenda_dividendos import buscar_agenda_dividendos
+            from scraper_agenda_dividendos_investidor10 import buscar_agenda_dividendos
             
             # Buscar agenda de dividendos para o mês/ano específico
             tipo_agenda_map = {

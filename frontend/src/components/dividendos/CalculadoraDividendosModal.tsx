@@ -22,8 +22,10 @@ export default function CalculadoraDividendosModal({
 }: CalculadoraDividendosModalProps) {
   const [ticker, setTicker] = useState(tickerInicial || '')
   const [quantidade, setQuantidade] = useState<number | ''>('')
+  const [valorInvestido, setValorInvestido] = useState<number | ''>('')
   const [valorDividendo, setValorDividendo] = useState<number | ''>(valorDividendoInicial || '')
   const [nomeAtivo, setNomeAtivo] = useState(nomeAtivoInicial || '')
+  const [ultimoCampoAlterado, setUltimoCampoAlterado] = useState<'quantidade' | 'valor' | null>(null)
 
   // Resetar quando o modal abrir com novos valores
   useEffect(() => {
@@ -38,8 +40,10 @@ export default function CalculadoraDividendosModal({
       if (!tickerInicial) {
         setTicker('')
         setQuantidade('')
+        setValorInvestido('')
         setValorDividendo('')
         setNomeAtivo('')
+        setUltimoCampoAlterado(null)
       }
     }
   }, [isOpen, tickerInicial, valorDividendoInicial, nomeAtivoInicial])
@@ -57,27 +61,68 @@ export default function CalculadoraDividendosModal({
     retry: 1,
   })
 
+  // Calcular quantidade a partir do valor investido
+  useEffect(() => {
+    if (ultimoCampoAlterado === 'valor' && valorInvestido && precoData?.preco && precoData.preco > 0) {
+      const valor = typeof valorInvestido === 'number' ? valorInvestido : parseFloat(String(valorInvestido))
+      if (!isNaN(valor) && valor > 0) {
+        const qtyCalculada = Math.floor(valor / precoData.preco)
+        setQuantidade(qtyCalculada)
+      }
+    }
+  }, [valorInvestido, precoData, ultimoCampoAlterado])
+
+  // Calcular valor investido a partir da quantidade
+  useEffect(() => {
+    if (ultimoCampoAlterado === 'quantidade' && quantidade && precoData?.preco && precoData.preco > 0) {
+      const qty = typeof quantidade === 'number' ? quantidade : parseFloat(String(quantidade))
+      if (!isNaN(qty) && qty > 0) {
+        const valorCalculado = qty * precoData.preco
+        setValorInvestido(valorCalculado)
+      }
+    }
+  }, [quantidade, precoData, ultimoCampoAlterado])
+
   // Calcular resultado
   const resultado = useMemo(() => {
-    if (!quantidade || !valorDividendo) return null
-    
+    const preco = precoData?.preco || 0
     const qty = typeof quantidade === 'number' ? quantidade : parseFloat(String(quantidade))
     const valor = typeof valorDividendo === 'number' ? valorDividendo : parseFloat(String(valorDividendo))
+    const valorInv = typeof valorInvestido === 'number' ? valorInvestido : parseFloat(String(valorInvestido))
     
-    if (isNaN(qty) || isNaN(valor) || qty <= 0 || valor <= 0) return null
+    // Se não tem dividendo, não pode calcular
+    if (!valor || isNaN(valor) || valor <= 0) return null
     
-    const total = qty * valor
-    const preco = precoData?.preco || 0
+    // Se tem quantidade, usar ela; senão calcular a partir do valor investido
+    let qtyFinal = qty
+    let valorInvestidoFinal = valorInv
+    
+    if (qty > 0 && !isNaN(qty)) {
+      // Usar quantidade informada
+      if (preco > 0) {
+        valorInvestidoFinal = qty * preco
+      }
+    } else if (valorInv > 0 && !isNaN(valorInv) && preco > 0) {
+      // Calcular quantidade a partir do valor investido
+      qtyFinal = Math.floor(valorInv / preco)
+      if (qtyFinal <= 0) return null
+    } else {
+      // Não tem nem quantidade nem valor investido válido
+      return null
+    }
+    
+    const totalDividendo = qtyFinal * valor
     const dividendYield = preco > 0 ? (valor / preco) * 100 : 0
     
     return {
-      total,
+      totalDividendo,
       preco,
       dividendYield,
-      quantidade: qty,
-      valorDividendo: valor
+      quantidade: qtyFinal,
+      valorDividendo: valor,
+      valorInvestido: valorInvestidoFinal
     }
-  }, [quantidade, valorDividendo, precoData])
+  }, [quantidade, valorInvestido, valorDividendo, precoData])
 
   if (!isOpen) return null
 
@@ -150,10 +195,37 @@ export default function CalculadoraDividendosModal({
               onChange={(e) => {
                 const val = e.target.value
                 setQuantidade(val === '' ? '' : parseInt(val, 10))
+                setUltimoCampoAlterado('quantidade')
               }}
               placeholder="Ex: 10"
               className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ou informe o valor investido abaixo
+            </p>
+          </div>
+
+          {/* Valor Investido */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Valor Investido (R$)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={valorInvestido}
+              onChange={(e) => {
+                const val = e.target.value
+                setValorInvestido(val === '' ? '' : parseFloat(val))
+                setUltimoCampoAlterado('valor')
+              }}
+              placeholder="Ex: 5000.00"
+              className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              A quantidade será calculada automaticamente com base na cotação atual
+            </p>
           </div>
 
           {/* Cotação Atual */}
@@ -188,22 +260,29 @@ export default function CalculadoraDividendosModal({
               </div>
 
               <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Quantidade de ações:</span>
-                  <span className="font-semibold text-foreground">{resultado.quantidade.toLocaleString('pt-BR')}</span>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Valor do dividendo por ação:</span>
-                  <span className="font-semibold text-foreground">{formatCurrency(resultado.valorDividendo)}</span>
-                </div>
-
                 {resultado.preco > 0 && (
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Cotação atual:</span>
                     <span className="font-semibold text-foreground">{formatCurrency(resultado.preco)}</span>
                   </div>
                 )}
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Quantidade de ações:</span>
+                  <span className="font-semibold text-foreground">{resultado.quantidade.toLocaleString('pt-BR')}</span>
+                </div>
+
+                {resultado.valorInvestido > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Valor investido:</span>
+                    <span className="font-semibold text-foreground">{formatCurrency(resultado.valorInvestido)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Valor do dividendo por ação:</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(resultado.valorDividendo)}</span>
+                </div>
 
                 {resultado.dividendYield > 0 && (
                   <div className="flex justify-between items-center">
@@ -216,7 +295,7 @@ export default function CalculadoraDividendosModal({
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-semibold text-foreground">Total a Receber:</span>
                     <span className="text-3xl font-bold text-primary">
-                      {formatCurrency(resultado.total)}
+                      {formatCurrency(resultado.totalDividendo)}
                     </span>
                   </div>
                 </div>
@@ -227,7 +306,8 @@ export default function CalculadoraDividendosModal({
           {/* Instruções */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>Como usar:</strong> Informe o ticker do ativo, o valor do dividendo por ação e a quantidade de ações que você possui. 
+              <strong>Como usar:</strong> Informe o ticker do ativo e o valor do dividendo por ação. 
+              Depois, você pode informar <strong>a quantidade de ações</strong> que possui <strong>ou o valor em dinheiro</strong> que deseja investir. 
               O sistema buscará automaticamente a cotação atual e calculará o total que você receberá.
             </p>
           </div>

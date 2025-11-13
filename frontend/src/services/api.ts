@@ -99,6 +99,7 @@ export const ativoService = {
       const response = await api.get(`/logo/${normalizedTicker}`)
       return response.data.logo_url
     } catch (error) {
+      console.error(`Erro ao buscar logo para ${ticker}:`, error)
       return null
     }
   },
@@ -107,7 +108,8 @@ export const ativoService = {
     try {
       const response = await api.post('/logos', { tickers })
       return (response.data?.logos || {}) as Record<string, string | null>
-    } catch {
+    } catch (error) {
+      console.error('Erro ao buscar logos em batch:', error)
       return {}
     }
   },

@@ -1236,6 +1236,9 @@ def api_get_logo_url(ticker):
         logo_url = get_logo_url(ticker)
         return jsonify({"logo_url": logo_url})
     except Exception as e:
+        import traceback
+        print(f"[ERRO] Erro ao buscar logo para {ticker}: {e}")
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/logos", methods=["POST"])
@@ -1250,10 +1253,14 @@ def api_get_logos_batch():
         for t in tickers[:500]:
             try:
                 out[t] = get_logo_url(str(t))
-            except Exception:
+            except Exception as e:
+                print(f"[ERRO] Erro ao buscar logo para {t}: {e}")
                 out[t] = None
         return jsonify({"logos": out})
     except Exception as e:
+        import traceback
+        print(f"[ERRO] Erro ao buscar logos em batch: {e}")
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 # ==================== SERVE FRONTEND (SPA) ====================
@@ -3645,7 +3652,7 @@ def api_agenda_dividendos():
     mes = None
     ano = None
     try:
-        from scraper_agenda_dividendos import buscar_agenda_dividendos
+        from scraper_agenda_dividendos_investidor10 import buscar_agenda_dividendos
         
         # Obter parâmetros
         mes = request.args.get('mes', type=int)
@@ -3660,9 +3667,15 @@ def api_agenda_dividendos():
             tipos = ['acoes', 'fiis', 'bdrs']
         
         # Buscar agenda (o scraper retorna todos os tipos, vamos filtrar depois se necessário)
-        print(f"[AGENDA DIVIDENDOS] Chamando buscar_agenda_dividendos...")
-        resultado = buscar_agenda_dividendos(mes=mes, ano=ano, tipo_ativo=None)
-        print(f"[AGENDA DIVIDENDOS] Resultado recebido: acoes={resultado.get('acoes', {}).get('total', 0)}, fiis={resultado.get('fiis', {}).get('total', 0)}, bdrs={resultado.get('bdrs', {}).get('total', 0)}")
+        print(f"[AGENDA DIVIDENDOS] Chamando buscar_agenda_dividendos (investidor10)...")
+        try:
+            resultado = buscar_agenda_dividendos(mes=mes, ano=ano, tipo_ativo=None)
+            print(f"[AGENDA DIVIDENDOS] Resultado recebido: acoes={resultado.get('acoes', {}).get('total', 0)}, fiis={resultado.get('fiis', {}).get('total', 0)}, bdrs={resultado.get('bdrs', {}).get('total', 0)}")
+        except Exception as e:
+            print(f"[ERRO] Erro ao chamar buscar_agenda_dividendos: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Se tipos específicos foram solicitados, filtrar resultado
         if len(tipos) < 3:

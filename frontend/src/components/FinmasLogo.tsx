@@ -2,7 +2,7 @@ import { useTheme } from '../contexts/ThemeContext'
 
 // Importar as logos
 import logoClaro from '../assets/1760101826967.jpg'
-import logoEscuro from '../assets/logoEscuraComBrilho.jpg'
+import logoEscuro from '../assets/1760101899780.jpg'
 
 interface FinmasLogoProps {
   size?: 'sm' | 'md' | 'lg'
