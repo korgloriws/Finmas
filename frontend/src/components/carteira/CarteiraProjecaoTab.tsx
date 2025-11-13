@@ -96,33 +96,76 @@ export default function CarteiraProjecaoTab({
 
   const crescimentoMedioAnual = useMemo(() => {
     const datas: string[] = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
-    const valoresAbs: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_valor) ? historicoMensal!.carteira_valor : []
+    // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    
+    // Se não tiver carteira_price, usar carteira (rebased) como fallback
     const valoresRebased: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira) ? (historicoMensal as any).carteira : []
-
-    const countValidSteps = (arr: Array<number | null | undefined>) => {
-      let c = 0
-      for (let i = 1; i < arr.length; i++) {
-        const prev = Number(arr[i - 1])
-        const cur = Number(arr[i])
-        if (Number.isFinite(prev) && Number.isFinite(cur) && prev > 0 && cur > 0) c++
-      }
-      return c
-    }
-    const stepsAbs = countValidSteps(valoresAbs)
-    const stepsReb = countValidSteps(valoresRebased)
-    const valores: Array<number | null | undefined> = stepsAbs >= stepsReb ? valoresAbs : valoresRebased
+    
+    // Priorizar carteira_price, senão usar carteira rebased
+    const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
+    
     if (datas.length < 2 || valores.length < 2) return 0
-    const retornosMensais: number[] = []
-    for (let i = 1; i < valores.length; i++) {
-      const prev = Number(valores[i - 1])
-      const cur = Number(valores[i])
-      if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) continue
-      const r = (cur - prev) / prev
-      if (Number.isFinite(r)) retornosMensais.push(r)
+    
+    // Agrupar por ano e calcular taxa anual baseada nos meses com registro
+    const dadosPorAno = new Map<number, { primeiro: number | null, ultimo: number | null, meses: number }>()
+    
+    for (let i = 0; i < datas.length; i++) {
+      const dataStr = datas[i]
+      if (!dataStr) continue
+      
+      // Extrair ano da data (formato YYYY-MM ou YYYY-MM-DD)
+      const ano = parseInt(dataStr.substring(0, 4))
+      if (isNaN(ano)) continue
+      
+      const valor = Number(valores[i])
+      if (!Number.isFinite(valor) || valor <= 0) continue
+      
+      if (!dadosPorAno.has(ano)) {
+        dadosPorAno.set(ano, { primeiro: valor, ultimo: valor, meses: 1 })
+      } else {
+        const dados = dadosPorAno.get(ano)!
+        dados.ultimo = valor
+        dados.meses++
+      }
     }
-    if (retornosMensais.length === 0) return 0
-    const mediaMensal = retornosMensais.reduce((s, r) => s + r, 0) / retornosMensais.length
-    let crescimentoAnual = Math.pow(1 + mediaMensal, 12) - 1
+    
+    // Calcular taxa de crescimento anual para cada ano completo
+    const taxasAnuais: number[] = []
+    
+    for (const dados of dadosPorAno.values()) {
+      if (dados.primeiro && dados.ultimo && dados.primeiro > 0 && dados.ultimo > 0) {
+        // Taxa de crescimento do ano
+        const taxaAno = (dados.ultimo - dados.primeiro) / dados.primeiro
+        if (Number.isFinite(taxaAno)) {
+          taxasAnuais.push(taxaAno)
+        }
+      }
+    }
+    
+    // Se não tiver dados anuais suficientes, calcular taxa mensal média e anualizar
+    if (taxasAnuais.length === 0) {
+      const retornosMensais: number[] = []
+      for (let i = 1; i < valores.length; i++) {
+        const prev = Number(valores[i - 1])
+        const cur = Number(valores[i])
+        if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) continue
+        const r = (cur - prev) / prev
+        if (Number.isFinite(r)) retornosMensais.push(r)
+      }
+      if (retornosMensais.length === 0) return 0
+      const mediaMensal = retornosMensais.reduce((s, r) => s + r, 0) / retornosMensais.length
+      let crescimentoAnual = Math.pow(1 + mediaMensal, 12) - 1
+      if (!Number.isFinite(crescimentoAnual)) crescimentoAnual = 0
+      crescimentoAnual = Math.max(-0.9, Math.min(2.0, crescimentoAnual))
+      return Math.max(0, crescimentoAnual)
+    }
+    
+    // Calcular média das taxas anuais
+    const mediaTaxaAnual = taxasAnuais.reduce((s, t) => s + t, 0) / taxasAnuais.length
+    
+    // Validar e limitar taxa
+    let crescimentoAnual = mediaTaxaAnual
     if (!Number.isFinite(crescimentoAnual)) crescimentoAnual = 0
     crescimentoAnual = Math.max(-0.9, Math.min(2.0, crescimentoAnual))
     return Math.max(0, crescimentoAnual)
@@ -131,20 +174,12 @@ export default function CarteiraProjecaoTab({
   // Estatísticas mensais: quantidade de meses, último mês e média mensal
   const monthlyStats = useMemo(() => {
     const datas: string[] = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
-    const valoresAbs: Array<number | null | undefined> = Array.isArray((historicoMensal as any)?.carteira_valor) ? (historicoMensal as any).carteira_valor : []
+    // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    // Se não tiver carteira_price, usar carteira (rebased) como fallback
     const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoMensal as any)?.carteira) ? (historicoMensal as any).carteira : []
-    const countValidSteps = (arr: Array<number | null | undefined>) => {
-      let c = 0
-      for (let i = 1; i < arr.length; i++) {
-        const prev = Number(arr[i - 1])
-        const cur = Number(arr[i])
-        if (Number.isFinite(prev) && Number.isFinite(cur) && prev > 0 && cur > 0) c++
-      }
-      return c
-    }
-    const stepsAbs = countValidSteps(valoresAbs)
-    const stepsReb = countValidSteps(valoresRebased)
-    const valores: Array<number | null | undefined> = stepsAbs >= stepsReb ? valoresAbs : valoresRebased
+    // Priorizar carteira_price, senão usar carteira rebased
+    const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
     const records: { label: string; r: number }[] = []
     for (let i = 1; i < valores.length; i++) {
       const prev = Number(valores[i - 1])
@@ -163,9 +198,12 @@ export default function CarteiraProjecaoTab({
 
   const historicoIncompleto = useMemo(() => {
     const datas = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
-    const valores = Array.isArray((historicoMensal as any)?.carteira_valor)
-      ? (historicoMensal as any).carteira_valor
-      : (Array.isArray((historicoMensal as any)?.carteira) ? (historicoMensal as any).carteira : [])
+    // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    // Se não tiver carteira_price, usar carteira (rebased) como fallback
+    const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoMensal as any)?.carteira) ? (historicoMensal as any).carteira : []
+    // Priorizar carteira_price, senão usar carteira rebased
+    const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
     const pontosValidos = datas.reduce((acc: number, _d: string, i: number) => {
       const v = Number(valores[i])
       return acc + (Number.isFinite(v) && v > 0 ? 1 : 0)

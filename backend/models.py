@@ -2744,59 +2744,68 @@ def atualizar_precos_indicadores_carteira():
                             continue
                         
                         # Determinar novo preco_atual e métricas
-                        if _ticker in precos_batch:
-                            dados_preco = precos_batch[_ticker]
-                            if _indexador and _indexador_pct:
-                                print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                                # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
-                                # 1. indexador_base_preco (se configurado explicitamente)
-                                # 2. preco_compra (preço de compra original)
-                                # 3. preco_medio (preço médio ponderado)
-                                # 4. Primeira movimentação (último recurso)
-                                # NUNCA usar preco_atual como base!
-                                if base_preco is not None and base_data:
-                                    preco_inicial = base_preco
-                                    _data_adicao = base_data
-                                    print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
-                                elif _preco_compra is not None and _preco_compra > 0:
-                                    preco_inicial = _preco_compra
-                                    print(f"DEBUG: Usando preco_compra: {preco_inicial}")
-                                elif _preco_medio is not None and _preco_medio > 0:
-                                    preco_inicial = _preco_medio
-                                    print(f"DEBUG: Usando preco_medio: {preco_inicial}")
-                                else:
-                                    # Último recurso: buscar primeira movimentação
-                                    c.execute('SELECT preco FROM movimentacoes WHERE ticker = %s ORDER BY data ASC LIMIT 1', (_ticker,))
-                                    mov_row = c.fetchone()
-                                    if mov_row and mov_row[0] and float(mov_row[0]) > 0:
-                                        preco_inicial = float(mov_row[0])
-                                        print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
-                                    else:
-                                        # Se não encontrou nada, pular este ativo (não atualizar)
-                                        print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
-                                        continue
-                                
-                                print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
-                                preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
-                                
-                                # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
-                                # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
-                                # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
-                                if preco_atual is None or preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                                    print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x se calculado). Mantendo preco inicial para evitar corrupcao.")
-                                    preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
-                                else:
-                                    print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
-                                dy = None; pl = None; pvp = None; roe = None
+                        # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
+                        if _indexador and _indexador_pct:
+                            print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
+                            # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
+                            # 1. indexador_base_preco (se configurado explicitamente)
+                            # 2. preco_compra (preço de compra original)
+                            # 3. preco_medio (preço médio ponderado)
+                            # 4. Primeira movimentação (último recurso)
+                            # NUNCA usar preco_atual como base!
+                            if base_preco is not None and base_data:
+                                preco_inicial = base_preco
+                                _data_adicao = base_data
+                                print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                            elif _preco_compra is not None and _preco_compra > 0:
+                                preco_inicial = _preco_compra
+                                print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                            elif _preco_medio is not None and _preco_medio > 0:
+                                preco_inicial = _preco_medio
+                                print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                             else:
-                                preco_atual = dados_preco.get('preco_atual', _preco_atual)
-                                dy = dados_preco.get('dy')
-                                pl = dados_preco.get('pl')
-                                pvp = dados_preco.get('pvp')
-                                roe = dados_preco.get('roe')
+                                # Último recurso: buscar primeira movimentação
+                                c.execute('SELECT preco FROM movimentacoes WHERE ticker = %s ORDER BY data ASC LIMIT 1', (_ticker,))
+                                mov_row = c.fetchone()
+                                if mov_row and mov_row[0] and float(mov_row[0]) > 0:
+                                    preco_inicial = float(mov_row[0])
+                                    print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
+                                else:
+                                    # Se não encontrou nada, pular este ativo (não atualizar)
+                                    print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                    continue
+                            
+                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
+                            
+                            # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
+                            if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
+                                print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
+                                continue
+                            
+                            preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
+                            
+                            # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
+                            # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
+                            # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+                            if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
+                                print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
+                                preco_atual = preco_inicial
+                            elif preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                                print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x). Mantendo preco inicial para evitar corrupcao.")
+                                preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
+                            else:
+                                print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
+                            dy = None; pl = None; pvp = None; roe = None
+                        elif _ticker in precos_batch:
+                            # Se não tem indexador, usar preços do batch (yfinance)
+                            dados_preco = precos_batch[_ticker]
+                            preco_atual = dados_preco.get('preco_atual', _preco_atual)
+                            dy = dados_preco.get('dy')
+                            pl = dados_preco.get('pl')
+                            pvp = dados_preco.get('pvp')
+                            roe = dados_preco.get('roe')
                         else:
-        
-
+                            # Se não tem indexador e não está no batch, manter preço atual
                             preco_atual = _preco_atual
                             dy = None; pl = None; pvp = None; roe = None
 
@@ -2862,68 +2871,73 @@ def atualizar_precos_indicadores_carteira():
                     if not _ticker:
                         continue
                     
-                    # Usar preços já obtidos em batch (SQLite)
-                    if _ticker in precos_batch:
-                        dados_preco = precos_batch[_ticker]
+                    # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
+                    if _indexador and _indexador_pct:
+                        print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
                         
-                        # Se tem indexador configurado, calcular preço baseado no indexador
-                        if _indexador and _indexador_pct:
-                            print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                            
-                            # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
-                            # 1. indexador_base_preco (se configurado explicitamente)
-                            # 2. preco_compra (preço de compra original)
-                            # 3. preco_medio (preço médio ponderado)
-                            # 4. Primeira movimentação (último recurso)
-                            # NUNCA usar preco_atual como base!
-                            if base_preco is not None and base_data:
-                                preco_inicial = base_preco
-                                _data_adicao = base_data
-                                print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
-                            elif _preco_compra is not None and _preco_compra > 0:
-                                preco_inicial = _preco_compra
-                                print(f"DEBUG: Usando preco_compra: {preco_inicial}")
-                            elif _preco_medio is not None and _preco_medio > 0:
-                                preco_inicial = _preco_medio
-                                print(f"DEBUG: Usando preco_medio: {preco_inicial}")
-                            else:
-                                # Último recurso: buscar primeira movimentação
-                                cur.execute('SELECT preco FROM movimentacoes WHERE ticker = ? ORDER BY data ASC LIMIT 1', (_ticker,))
-                                mov_row = cur.fetchone()
-                                if mov_row and mov_row[0] and float(mov_row[0]) > 0:
-                                    preco_inicial = float(mov_row[0])
-                                    print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
-                                else:
-                                    # Se não encontrou nada, pular este ativo (não atualizar)
-                                    print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
-                                    continue
-                            
-                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
-                            
-                            preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
-                            
-                            # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
-                            # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
-                            # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
-                            if preco_atual is None or preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                                print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x se calculado). Mantendo preco inicial para evitar corrupcao.")
-                                preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
-                            else:
-                                print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
-                            
-                            dy = None
-                            pl = None 
-                            pvp = None
-                            roe = None
+                        # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
+                        # 1. indexador_base_preco (se configurado explicitamente)
+                        # 2. preco_compra (preço de compra original)
+                        # 3. preco_medio (preço médio ponderado)
+                        # 4. Primeira movimentação (último recurso)
+                        # NUNCA usar preco_atual como base!
+                        if base_preco is not None and base_data:
+                            preco_inicial = base_preco
+                            _data_adicao = base_data
+                            print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                        elif _preco_compra is not None and _preco_compra > 0:
+                            preco_inicial = _preco_compra
+                            print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                        elif _preco_medio is not None and _preco_medio > 0:
+                            preco_inicial = _preco_medio
+                            print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                         else:
-                            # Usar preços obtidos em batch
-                            preco_atual = dados_preco.get('preco_atual', _preco_atual)
-                            dy = dados_preco.get('dy')
-                            pl = dados_preco.get('pl')
-                            pvp = dados_preco.get('pvp')
-                            roe = dados_preco.get('roe')
+                            # Último recurso: buscar primeira movimentação
+                            cur.execute('SELECT preco FROM movimentacoes WHERE ticker = ? ORDER BY data ASC LIMIT 1', (_ticker,))
+                            mov_row = cur.fetchone()
+                            if mov_row and mov_row[0] and float(mov_row[0]) > 0:
+                                preco_inicial = float(mov_row[0])
+                                print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
+                            else:
+                                # Se não encontrou nada, pular este ativo (não atualizar)
+                                print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                continue
+                        
+                        print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
+                        
+                        # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
+                        if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
+                            print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
+                            continue
+                        
+                        preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
+                        
+                        # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
+                        # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
+                        # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+                        if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
+                            print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
+                            preco_atual = preco_inicial
+                        elif preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                            print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x). Mantendo preco inicial para evitar corrupcao.")
+                            preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
+                        else:
+                            print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
+                        
+                        dy = None
+                        pl = None 
+                        pvp = None
+                        roe = None
+                    elif _ticker in precos_batch:
+                        # Se não tem indexador, usar preços do batch (yfinance)
+                        dados_preco = precos_batch[_ticker]
+                        preco_atual = dados_preco.get('preco_atual', _preco_atual)
+                        dy = dados_preco.get('dy')
+                        pl = dados_preco.get('pl')
+                        pvp = dados_preco.get('pvp')
+                        roe = dados_preco.get('roe')
                     else:
-                        # Fallback: se não conseguiu obter em batch, usar preço atual
+                        # Se não tem indexador e não está no batch, manter preço atual
                         print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
                         preco_atual = _preco_atual
                         dy = None
