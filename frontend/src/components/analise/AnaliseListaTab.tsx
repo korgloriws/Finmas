@@ -24,7 +24,11 @@ const SETORES_COMUNS = [
   'Basic Materials',
   'Services',
   'Consumer Staples',
-  'Consumer Discretionary'
+  'Consumer Discretionary',
+  'Oil & Gas Integrated',
+  'Utilities - Regulated Electric',
+  'Real Estate Services',
+
 ]
 
 function FiltrosAcoes({ 

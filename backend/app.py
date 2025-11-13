@@ -296,38 +296,6 @@ def api_usuario_atual():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@server.route("/api/auth/debug-bancos", methods=["GET"])
-def api_debug_bancos():
-    
-    try:
-        import os
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        bancos_dir = os.path.join(current_dir, "bancos_usuarios")
-        
-        if not os.path.exists(bancos_dir):
-            return jsonify({"error": "Diretório bancos_usuarios não existe"}), 404
-        
-        usuarios = []
-        for user_dir in os.listdir(bancos_dir):
-            user_path = os.path.join(bancos_dir, user_dir)
-            if os.path.isdir(user_path):
-                bancos = []
-                for file in os.listdir(user_path):
-                    if file.endswith('.db'):
-                        bancos.append(file)
-                usuarios.append({
-                    "usuario": user_dir,
-                    "bancos": bancos,
-                    "caminho": user_path
-                })
-        
-        return jsonify({
-            "bancos_dir": bancos_dir,
-            "usuarios": usuarios
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @server.route("/api/auth/criar-bancos/<username>", methods=["POST"])
 def api_criar_bancos(username):
     
@@ -1311,7 +1279,6 @@ def serve_frontend(path):
         return send_from_directory(server.static_folder, 'index.html')
     return jsonify({"message": "Frontend não construído. Rode npm run build em frontend/"}), 200
 
-# ==================== TRENDING (PROTÓTIPO/TESTE) ====================
 
 
 
@@ -1386,18 +1353,6 @@ def api_carteira_com_metadados_fii():
         print(f"Erro na API carteira com metadados FII: {e}")
         return jsonify({"error": str(e)}), 500
 
-@server.route("/api/carteira/migrar-precos", methods=["POST"])
-def api_migrar_precos_compra():
-    """API para executar migração única de preços de compra (executar apenas uma vez)"""
-    try:
-        from models import migrar_preco_compra_existente
-        resultado = migrar_preco_compra_existente()
-        if resultado["success"]:
-            return jsonify({"message": f"Migração concluída. {resultado['migrados']} ativos migrados."}), 200
-        else:
-            return jsonify({"error": resultado["message"]}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @server.route("/api/carteira/refresh", methods=["POST"])
 def api_refresh_carteira():
@@ -2107,74 +2062,6 @@ def api_taxas_indexadores():
         print(f"Erro ao obter taxas de indexadores: {e}")
         return jsonify({"error": str(e)}), 500
 
-@server.route("/api/teste-indexador", methods=["POST"])
-def api_teste_indexador():
-    """Endpoint para testar o cálculo de indexadores"""
-    try:
-        from models import calcular_preco_com_indexador, obter_taxas_indexadores
-        data = request.get_json()
-        
-        preco_inicial = float(data.get('preco_inicial', 100))
-        indexador = data.get('indexador', 'CDI')
-        indexador_pct = float(data.get('indexador_pct', 100))
-        data_adicao = data.get('data_adicao', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        
-        # Primeiro obter as taxas para debug
-        taxas = obter_taxas_indexadores()
-        print(f"DEBUG: Taxas disponíveis para teste: {taxas}")
-        
-        # Testar com diferentes cenários
-        resultados = []
-        
-        # Cenário 1: Taxa atual da API
-        preco_calculado = calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_adicao)
-        resultados.append({
-            "cenario": "Taxa atual da API",
-            "preco_calculado": preco_calculado,
-            "variacao": ((preco_calculado - preco_inicial) / preco_inicial) * 100
-        })
-        
-        # Cenário 2: Taxa padrão (CDI 13.65%, SELIC 13.75%)
-        if indexador == "CDI":
-            taxa_padrao = 13.65
-        elif indexador == "SELIC":
-            taxa_padrao = 13.75
-        else:
-            taxa_padrao = taxas.get(indexador, 0)
-        
-        # Simular cálculo com taxa padrão
-        from datetime import datetime
-        data_adicao_dt = datetime.strptime(data_adicao, "%Y-%m-%d %H:%M:%S")
-        dias_desde_adicao = (datetime.now() - data_adicao_dt).days
-        
-        if indexador in ["SELIC", "CDI"] and dias_desde_adicao > 0:
-            taxa_anual_decimal = taxa_padrao / 100
-            taxa_diaria = (1 + taxa_anual_decimal) ** (1/252) - 1
-            fator_correcao = (1 + taxa_diaria) ** dias_desde_adicao
-            fator_percentual = indexador_pct / 100
-            preco_padrao = preco_inicial * fator_percentual * fator_correcao
-            
-            resultados.append({
-                "cenario": f"Taxa padrão ({taxa_padrao}%)",
-                "preco_calculado": round(preco_padrao, 4),
-                "variacao": ((preco_padrao - preco_inicial) / preco_inicial) * 100,
-                "dias_desde_adicao": dias_desde_adicao,
-                "fator_correcao": round(fator_correcao, 6),
-                "fator_percentual": fator_percentual
-            })
-        
-        return jsonify({
-            "success": True,
-            "preco_inicial": preco_inicial,
-            "indexador": indexador,
-            "indexador_pct": indexador_pct,
-            "data_adicao": data_adicao,
-            "resultados": resultados,
-            "taxas_disponiveis": taxas
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @server.route("/api/tesouro/titulos", methods=["GET"])
 def api_tesouro_titulos():
     try:
@@ -2736,34 +2623,6 @@ def api_remover_marmita(id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@server.route("/api/marmitas/debug", methods=["GET"])
-def api_debug_marmitas():
-    """Endpoint de debug para marmitas"""
-    try:
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Usuário não autenticado"}), 401
-        
-        # Consultar marmitas diretamente
-        registros = consultar_marmitas()
-        
-        debug_info = {
-            "usuario": usuario,
-            "total_registros": len(registros),
-            "registros": []
-        }
-        
-        for registro in registros:
-            debug_info["registros"].append({
-                "id": registro[0],
-                "data": str(registro[1]),
-                "valor": float(registro[2]) if registro[2] is not None else 0,
-                "comprou": bool(registro[3])
-            })
-        
-        return jsonify(debug_info)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @server.route("/api/marmitas/gastos-mensais", methods=["GET"])
 def api_get_gastos_mensais():

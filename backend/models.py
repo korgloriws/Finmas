@@ -2365,8 +2365,35 @@ def _obter_taxa_atual_indexador(indexador):
 
 def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_adicao):
     """Calcula o preço atual baseado no indexador e percentual - USANDO ABORDAGEM QUE JÁ FUNCIONA"""
+    from math import isfinite
     try:
-        if not preco_inicial or not indexador or not indexador_pct:
+        # CONVERSÃO EXPLÍCITA E VALIDAÇÃO CRÍTICA DE TIPOS (fix para PostgreSQL)
+        # PostgreSQL pode retornar NUMERIC como Decimal ou string, precisamos garantir float
+        try:
+            preco_inicial = float(preco_inicial) if preco_inicial is not None else None
+        except (ValueError, TypeError):
+            print(f"[ERRO CRITICO] Preco inicial invalido: {preco_inicial} (tipo: {type(preco_inicial)})")
+            return None
+        
+        try:
+            indexador_pct = float(indexador_pct) if indexador_pct is not None else None
+        except (ValueError, TypeError):
+            print(f"[ERRO CRITICO] Indexador_pct invalido: {indexador_pct} (tipo: {type(indexador_pct)})")
+            return preco_inicial
+        
+        # Validações básicas
+        if preco_inicial is None or preco_inicial <= 0:
+            print(f"[ERRO] Preco inicial invalido ou zero: {preco_inicial}")
+            return preco_inicial if preco_inicial else None
+        
+        if not indexador or indexador_pct is None:
+            print(f"[ERRO] Indexador ou percentual faltando: indexador={indexador}, pct={indexador_pct}")
+            return preco_inicial
+        
+        # VALIDAÇÃO CRÍTICA: indexador_pct deve ser um valor razoável (entre 0.1 e 1000)
+        # Valores muito altos ou muito baixos indicam erro de conversão
+        if indexador_pct < 0.1 or indexador_pct > 1000:
+            print(f"[ERRO CRITICO] Indexador_pct fora do range esperado: {indexador_pct}% (esperado: 0.1-1000%)")
             return preco_inicial
         
         # Converter data de adição para datetime (aceitar múltiplos formatos)
@@ -2414,11 +2441,13 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             return preco_inicial
         
         print(f"DEBUG: Calculando valorização para {indexador} desde {data_adicao} ({dias_totais} dias)")
+        print(f"DEBUG: Valores recebidos - preco_inicial: {preco_inicial} (tipo: {type(preco_inicial).__name__}), indexador_pct: {indexador_pct} (tipo: {type(indexador_pct).__name__})")
         
         # Aplicar percentual do indexador (ex: 110% = 1.1)
-        fator_percentual = indexador_pct / 100
-        if fator_percentual <= 0:
-            print(f"[ERRO] Fator percentual invalido: {fator_percentual}")
+        # GARANTIR que indexador_pct é float antes da divisão
+        fator_percentual = float(indexador_pct) / 100.0
+        if fator_percentual <= 0 or fator_percentual > 10:
+            print(f"[ERRO CRITICO] Fator percentual invalido: {fator_percentual} (indexador_pct={indexador_pct})")
             return preco_inicial
 
         # USAR A MESMA ABORDAGEM QUE JÁ FUNCIONA NA TELA DE DETALHES
@@ -2479,23 +2508,29 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"DEBUG: Indexador não reconhecido: {indexador}")
             return preco_inicial
         
-        # Preço final
-        preco_final = preco_inicial * fator_correcao
+        # Preço final - GARANTIR que ambos são float antes da multiplicação
+        preco_final = float(preco_inicial) * float(fator_correcao)
         
         # VALIDAÇÃO CRÍTICA FINAL: Verificar se o preço calculado é válido
-        if preco_final <= 0:
-            print(f"[ERRO] Preco calculado invalido (<= 0): {preco_final}. Retornando preco inicial.")
+        if preco_final <= 0 or not isinstance(preco_final, (int, float)) or not isfinite(preco_final):
+            print(f"[ERRO CRITICO] Preco calculado invalido: {preco_final} (tipo: {type(preco_final).__name__}). Retornando preco inicial.")
             return preco_inicial
         
         # Validação do fator: para renda fixa, mesmo com 10 anos, o fator máximo seria ~3.5x (115% CDI)
         # Mas permitir até 20x para casos extremos (múltiplas aplicações ou períodos muito longos)
         if not (0.01 <= fator_correcao <= 20.0):
-            print(f"[ERRO] Fator de correcao absurdo: {fator_correcao}. Retornando preco inicial.")
+            print(f"[ERRO CRITICO] Fator de correcao absurdo: {fator_correcao}. Retornando preco inicial.")
+            return preco_inicial
+        
+        # VALIDAÇÃO ADICIONAL: Preço final não pode ser muito diferente do inicial
+        # Se o preço final for menor que 20% do inicial ou maior que 20x, há algo errado
+        if preco_final < preco_inicial * 0.2 or preco_final > preco_inicial * 20.0:
+            print(f"[ERRO CRITICO] Preco final fora do range esperado: inicial={preco_inicial}, final={preco_final} (fator={preco_final/preco_inicial:.4f}x). Retornando preco inicial.")
             return preco_inicial
         
         print(f"DEBUG: Preço inicial: {preco_inicial}, fator: {fator_correcao:.6f}, preço final: {preco_final}")
         
-        return round(preco_final, 4)
+        return round(float(preco_final), 4)
         
     except Exception as e:
         print(f"[ERRO] Erro ao calcular preco com indexador: {e}")
@@ -2678,7 +2713,28 @@ def atualizar_precos_indicadores_carteira():
                         _preco_atual = float(row[3] or 0)
                         _data_adicao = row[4]
                         _indexador = row[5]
-                        _indexador_pct = float(row[6]) if row[6] is not None else None
+                        # CONVERSÃO ROBUSTA para PostgreSQL (pode vir como Decimal, string, etc)
+                        _indexador_pct_raw = row[6]
+                        if _indexador_pct_raw is not None:
+                            try:
+                                # Tentar converter para float diretamente
+                                if isinstance(_indexador_pct_raw, (int, float)):
+                                    _indexador_pct = float(_indexador_pct_raw)
+                                elif isinstance(_indexador_pct_raw, str):
+                                    _indexador_pct = float(_indexador_pct_raw.replace(',', '.'))
+                                else:
+                                    # Para Decimal ou outros tipos do PostgreSQL
+                                    _indexador_pct = float(str(_indexador_pct_raw))
+                                
+                                # Validação: deve ser um valor razoável
+                                if _indexador_pct < 0.1 or _indexador_pct > 1000:
+                                    print(f"[ERRO] Indexador_pct fora do range: {_indexador_pct}% para {_ticker}. Usando None.")
+                                    _indexador_pct = None
+                            except (ValueError, TypeError, AttributeError) as e:
+                                print(f"[ERRO] Erro ao converter indexador_pct para {_ticker}: {_indexador_pct_raw} (tipo: {type(_indexador_pct_raw).__name__}) - {e}")
+                                _indexador_pct = None
+                        else:
+                            _indexador_pct = None
                         base_preco = float(row[7]) if (len(row) > 7 and row[7] is not None) else None
                         base_data = row[8] if (len(row) > 8) else None
                         _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
@@ -2726,9 +2782,9 @@ def atualizar_precos_indicadores_carteira():
                                 # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
                                 # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
                                 # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
-                                if preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                                    print(f"[ERRO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.2f}x). Mantendo preco atual.")
-                                    preco_atual = _preco_atual  # Manter preço atual se cálculo der absurdo
+                                if preco_atual is None or preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                                    print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x se calculado). Mantendo preco inicial para evitar corrupcao.")
+                                    preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
                                 else:
                                     print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                                 dy = None; pl = None; pvp = None; roe = None
@@ -2778,7 +2834,26 @@ def atualizar_precos_indicadores_carteira():
                     _preco_atual = float(row[3] or 0)
                     _data_adicao = row[4]
                     _indexador = row[5]
-                    _indexador_pct = float(row[6]) if row[6] is not None else None
+                    # CONVERSÃO ROBUSTA para SQLite (consistência com PostgreSQL)
+                    _indexador_pct_raw = row[6]
+                    if _indexador_pct_raw is not None:
+                        try:
+                            if isinstance(_indexador_pct_raw, (int, float)):
+                                _indexador_pct = float(_indexador_pct_raw)
+                            elif isinstance(_indexador_pct_raw, str):
+                                _indexador_pct = float(_indexador_pct_raw.replace(',', '.'))
+                            else:
+                                _indexador_pct = float(str(_indexador_pct_raw))
+                            
+                            # Validação: deve ser um valor razoável
+                            if _indexador_pct < 0.1 or _indexador_pct > 1000:
+                                print(f"[ERRO] Indexador_pct fora do range: {_indexador_pct}% para {_ticker}. Usando None.")
+                                _indexador_pct = None
+                        except (ValueError, TypeError, AttributeError) as e:
+                            print(f"[ERRO] Erro ao converter indexador_pct para {_ticker}: {_indexador_pct_raw} (tipo: {type(_indexador_pct_raw).__name__}) - {e}")
+                            _indexador_pct = None
+                    else:
+                        _indexador_pct = None
                     base_preco = float(row[7]) if (len(row) > 7 and row[7] is not None) else None
                     base_data = row[8] if (len(row) > 8) else None
                     _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
@@ -2830,9 +2905,9 @@ def atualizar_precos_indicadores_carteira():
                             # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
                             # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
                             # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
-                            if preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                                print(f"[ERRO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.2f}x). Mantendo preco atual.")
-                                preco_atual = _preco_atual  # Manter preço atual se cálculo der absurdo
+                            if preco_atual is None or preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
+                                print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x se calculado). Mantendo preco inicial para evitar corrupcao.")
+                                preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
                             else:
                                 print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                             
