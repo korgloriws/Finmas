@@ -42,4 +42,26 @@ export function normalizeTicker(ticker: string): string {
     return normalized + '.SA'
   }
   return normalized
+}
+
+/**
+ * Formata uma data string (formato YYYY-MM-DD) para o formato brasileiro (DD/MM/YYYY)
+ * Evita problemas de timezone ao converter strings de data
+ */
+export function formatDate(dateString: string): string {
+  if (!dateString) return '-'
+  
+  // Se já está no formato YYYY-MM-DD, parsear diretamente
+  const parts = dateString.split('-')
+  if (parts.length === 3) {
+    const [year, month, day] = parts
+    // Criar data local (não UTC) para evitar problemas de timezone
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    return date.toLocaleDateString('pt-BR')
+  }
+  
+  // Se for outro formato, tentar parsear normalmente
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('pt-BR')
 } 

@@ -98,22 +98,7 @@ def extrair_ranking_tabela(tabela, tipo_ativo: str) -> List[Dict[str, Any]]:
     return ranking
 
 def buscar_ranking_dividendos(tipo: str = 'acoes', mes: Optional[int] = None, ano: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Busca ranking de dividendos do agendadividendos.com
-    
-    Args:
-        tipo: 'acoes', 'fiis' ou 'bdrs'
-        mes: mês para filtrar por data-com (1-12), None para ranking geral
-        ano: ano para filtrar por data-com, None para ranking geral
-    
-    Returns:
-        Dict com estrutura:
-        {
-            'tipo': str,
-            'data_busca': str,
-            'ranking': [...]
-        }
-    """
+
     tipo_map = {
         'acoes': 'acoes',
         'fiis': 'fii',

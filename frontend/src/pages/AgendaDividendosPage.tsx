@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, TrendingUp, DollarSign, Filter, RefreshCw, Search, ExternalLink, ChevronDown, ChevronUp, Trophy, Calculator } from 'lucide-react'
 import { dividendosService, ativoService } from '../services/api'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, formatDate } from '../utils/formatters'
 import { getDisplayTicker, normalizeTicker } from '../utils/tickerUtils'
 import LoadingSpinner from '../components/LoadingSpinner'
 import CalculadoraDividendosModal from '../components/dividendos/CalculadoraDividendosModal'
@@ -411,10 +411,10 @@ export default function AgendaDividendosPage() {
                         </td>
                         <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                         <td className="py-3 px-4 text-right text-foreground">
-                          {new Date(item.data_com).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_com)}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-foreground">
-                          {new Date(item.data_pagamento).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_pagamento)}
                         </td>
                         <td className="py-3 px-4 text-center text-sm">
                           <span className={`px-2 py-1 rounded ${
@@ -521,10 +521,10 @@ export default function AgendaDividendosPage() {
                         </td>
                         <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                         <td className="py-3 px-4 text-right text-foreground">
-                          {new Date(item.data_com).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_com)}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-foreground">
-                          {new Date(item.data_pagamento).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_pagamento)}
                         </td>
                         <td className="py-3 px-4 text-center text-sm">
                           <span className={`px-2 py-1 rounded ${
@@ -631,10 +631,10 @@ export default function AgendaDividendosPage() {
                         </td>
                         <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                         <td className="py-3 px-4 text-right text-foreground">
-                          {new Date(item.data_com).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_com)}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-foreground">
-                          {new Date(item.data_pagamento).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data_pagamento)}
                         </td>
                         <td className="py-3 px-4 text-center text-sm">
                           <span className={`px-2 py-1 rounded ${
