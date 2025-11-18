@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, TrendingUp, DollarSign, Filter, RefreshCw, Search, ExternalLink, ChevronDown, ChevronUp, Trophy, Calculator } from 'lucide-react'
@@ -27,6 +27,11 @@ export default function AgendaDividendosPage() {
   const [calculadoraTicker, setCalculadoraTicker] = useState<string>('')
   const [calculadoraValor, setCalculadoraValor] = useState<number | undefined>(undefined)
   const [calculadoraNome, setCalculadoraNome] = useState<string>('')
+  const [precosRanking, setPrecosRanking] = useState<Record<string, number>>({})
+  const [tickersCarregando, setTickersCarregando] = useState<Set<string>>(new Set())
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
+  const tickersProcessados = useRef<Set<string>>(new Set())
+  const logosProcessados = useRef<Set<string>>(new Set())
   
   const { data: agenda, isLoading, error, refetch } = useQuery({
     queryKey: ['agenda-dividendos', mesSelecionado, anoSelecionado, tiposFiltro],
@@ -112,28 +117,155 @@ export default function AgendaDividendosPage() {
     staleTime: 60 * 60 * 1000, // 1 hora
   })
 
-  // Carregar logos dos ativos (ranking)
-  useQuery({
-    queryKey: ['logos-ranking', ranking?.acoes?.total, ranking?.fiis?.total, ranking?.bdrs?.total],
-    queryFn: async () => {
-      if (!ranking) return {}
+  // Buscar logos e cotações incrementalmente apenas para itens visíveis (em paralelo)
+  useEffect(() => {
+    if (!ranking || abaAtiva !== 'ranking') {
+      setPrecosRanking({})
+      setTickersCarregando(new Set())
+      tickersProcessados.current.clear()
+      logosProcessados.current.clear()
+      return
+    }
+
+    const todosTickers = [
+      ...(ranking.acoes?.ranking?.map(r => r.ticker) || []),
+      ...(ranking.fiis?.ranking?.map(r => r.ticker) || []),
+      ...(ranking.bdrs?.ranking?.map(r => r.ticker) || [])
+    ]
+
+    if (todosTickers.length === 0) return
+
+    // Snapshot do cache atual para verificação dentro do useEffect
+    let cacheSnapshot = { ...logosCache }
+
+    // Função para buscar logo de um ticker
+    const buscarLogo = async (ticker: string) => {
+      const normalizedTicker = normalizeTicker(ticker)
       
-      const todosTickers = [
-        ...(ranking.acoes?.ranking?.map(r => r.ticker) || []),
-        ...(ranking.fiis?.ranking?.map(r => r.ticker) || []),
-        ...(ranking.bdrs?.ranking?.map(r => r.ticker) || [])
-      ]
+      // Verificar se já está processando
+      if (logosProcessados.current.has(ticker)) {
+        return
+      }
       
-      if (todosTickers.length === 0) return {}
-      
-      const tickersNormalizados = todosTickers.map(t => normalizeTicker(t))
-      const logos = await ativoService.getLogosBatch(tickersNormalizados)
-      setLogosCache(prev => ({ ...prev, ...logos }))
-      return logos
-    },
-    enabled: !!ranking && abaAtiva === 'ranking',
-    staleTime: 60 * 60 * 1000, // 1 hora
-  })
+      // Verificar se já tem logo no cache (usando snapshot)
+      if (cacheSnapshot[normalizedTicker]) {
+        return
+      }
+
+      // Marcar como processando
+      logosProcessados.current.add(ticker)
+
+      try {
+        const logoUrl = await ativoService.getLogoUrl(normalizedTicker)
+        if (logoUrl) {
+          // Atualizar snapshot e estado incrementalmente
+          cacheSnapshot[normalizedTicker] = logoUrl
+          setLogosCache(prev => ({
+            ...prev,
+            [normalizedTicker]: logoUrl
+          }))
+        }
+      } catch (e) {
+        console.debug(`Erro ao buscar logo para ${ticker}:`, e)
+      }
+    }
+
+    // Função para buscar cotação de um ticker
+    const buscarCotacao = async (ticker: string) => {
+      // Verificar se já está processando ou já tem preço
+      if (tickersProcessados.current.has(ticker) || precosRanking[ticker]) {
+        return
+      }
+
+      // Marcar como processando
+      tickersProcessados.current.add(ticker)
+      setTickersCarregando(prev => new Set([...prev, ticker]))
+
+      try {
+        const normalizedTicker = normalizeTicker(ticker)
+        const precoData = await ativoService.getPrecoAtual(normalizedTicker)
+        if (precoData?.preco) {
+          // Atualizar estado incrementalmente
+          setPrecosRanking(prev => ({
+            ...prev,
+            [ticker]: precoData.preco
+          }))
+        }
+      } catch (e) {
+        console.debug(`Erro ao buscar cotação para ${ticker}:`, e)
+      } finally {
+        setTickersCarregando(prev => {
+          const next = new Set(prev)
+          next.delete(ticker)
+          return next
+        })
+      }
+    }
+
+    // Função para carregar logo e cotação de um ticker (em paralelo)
+    const carregarDados = (ticker: string) => {
+      // Buscar logo e cotação ao mesmo tempo
+      buscarLogo(ticker)
+      buscarCotacao(ticker)
+    }
+
+    // Intersection Observer para detectar linhas visíveis
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const ticker = entry.target.getAttribute('data-ticker')
+            if (ticker) {
+              // Carregar logo e cotação ao mesmo tempo
+              carregarDados(ticker)
+            }
+          }
+        })
+      },
+      {
+        root: null,
+        rootMargin: '100px', // Começar a carregar 100px antes de ficar visível
+        threshold: 0.1
+      }
+    )
+
+    // Observar todas as linhas da tabela após um pequeno delay para garantir renderização
+    const timeoutId = setTimeout(() => {
+      const rows = rowRefs.current
+      rows.forEach((row) => {
+        if (row) {
+          observer.observe(row)
+        }
+      })
+    }, 100)
+
+    // Buscar os primeiros 10 itens imediatamente (os que já estão visíveis)
+    // Logos e cotações começam ao mesmo tempo!
+    const primeirosTickers = todosTickers.slice(0, 10)
+    primeirosTickers.forEach(ticker => {
+      carregarDados(ticker)
+    })
+
+    return () => {
+      clearTimeout(timeoutId)
+      observer.disconnect()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranking, abaAtiva, secoesExpandidas.rankingAcoes, secoesExpandidas.rankingFiis, secoesExpandidas.rankingBdrs])
+
+  // Função para calcular valor do dividendo baseado em DY e cotação
+  const calcularValorDividendo = (dividendYield: number | undefined, cotacao: number | undefined): number | null => {
+    if (!dividendYield || !cotacao) return null
+    // DY está em percentual, então: (DY / 100) * Cotação
+    return (dividendYield / 100) * cotacao
+  }
+
+  // Função para calcular DY baseado em valor do dividendo e cotação
+  const calcularDividendYield = (valorDividendo: number | undefined, cotacao: number | undefined): number | null => {
+    if (!valorDividendo || !cotacao || cotacao === 0) return null
+    // DY = (Valor do Dividendo / Cotação) * 100
+    return (valorDividendo / cotacao) * 100
+  }
 
   const meses = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -726,6 +858,7 @@ export default function AgendaDividendosPage() {
                           <th className="text-center py-3 px-4 text-sm font-semibold text-foreground">Posição</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Ticker</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Nome</th>
+                          <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Cotação</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Dividend Yield</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Valor Dividendo</th>
                         </tr>
@@ -735,7 +868,18 @@ export default function AgendaDividendosPage() {
                           const tickerNormalizado = normalizeTicker(item.ticker)
                           const logoUrl = logosCache[tickerNormalizado]
                           return (
-                            <tr key={idx} className="border-b border-border hover:bg-muted/50 transition-colors">
+                            <tr 
+                              key={idx} 
+                              ref={(el) => {
+                                if (el) {
+                                  rowRefs.current.set(item.ticker, el)
+                                } else {
+                                  rowRefs.current.delete(item.ticker)
+                                }
+                              }}
+                              data-ticker={item.ticker}
+                              className="border-b border-border hover:bg-muted/50 transition-colors"
+                            >
                               <td className="py-3 px-4 text-center font-bold text-foreground">
                                 <span className={`px-2 py-1 rounded ${
                                   item.posicao <= 3 
@@ -780,10 +924,37 @@ export default function AgendaDividendosPage() {
                               </td>
                               <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'}
+                                {precosRanking[item.ticker] ? (
+                                  formatCurrency(precosRanking[item.ticker])
+                                ) : tickersCarregando.has(item.ticker) ? (
+                                  <span className="text-muted-foreground text-xs">Carregando...</span>
+                                ) : (
+                                  '-'
+                                )}
                               </td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'}
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorDividendo = item.valor_dividendo
+                                  // Se temos cotação e valor do dividendo, calcular DY
+                                  const dyCalculado = calcularDividendYield(valorDividendo, cotacao)
+                                  // Priorizar DY calculado se tiver cotação, senão usar o valor original
+                                  if (dyCalculado !== null) {
+                                    return `${dyCalculado.toFixed(2)}%`
+                                  }
+                                  return item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'
+                                })()}
+                              </td>
+                              <td className="py-3 px-4 text-right font-semibold text-foreground">
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorCalculado = calcularValorDividendo(item.dividend_yield, cotacao)
+                                  // Priorizar valor calculado se tiver cotação, senão usar o valor original
+                                  if (valorCalculado !== null) {
+                                    return formatCurrency(valorCalculado)
+                                  }
+                                  return item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'
+                                })()}
                               </td>
                             </tr>
                           )
@@ -819,6 +990,7 @@ export default function AgendaDividendosPage() {
                           <th className="text-center py-3 px-4 text-sm font-semibold text-foreground">Posição</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Ticker</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Nome</th>
+                          <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Cotação</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Dividend Yield</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Valor Dividendo</th>
                         </tr>
@@ -828,7 +1000,18 @@ export default function AgendaDividendosPage() {
                           const tickerNormalizado = normalizeTicker(item.ticker)
                           const logoUrl = logosCache[tickerNormalizado]
                           return (
-                            <tr key={idx} className="border-b border-border hover:bg-muted/50 transition-colors">
+                            <tr 
+                              key={idx} 
+                              ref={(el) => {
+                                if (el) {
+                                  rowRefs.current.set(item.ticker, el)
+                                } else {
+                                  rowRefs.current.delete(item.ticker)
+                                }
+                              }}
+                              data-ticker={item.ticker}
+                              className="border-b border-border hover:bg-muted/50 transition-colors"
+                            >
                               <td className="py-3 px-4 text-center font-bold text-foreground">
                                 <span className={`px-2 py-1 rounded ${
                                   item.posicao <= 3 
@@ -873,10 +1056,37 @@ export default function AgendaDividendosPage() {
                               </td>
                               <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'}
+                                {precosRanking[item.ticker] ? (
+                                  formatCurrency(precosRanking[item.ticker])
+                                ) : tickersCarregando.has(item.ticker) ? (
+                                  <span className="text-muted-foreground text-xs">Carregando...</span>
+                                ) : (
+                                  '-'
+                                )}
                               </td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'}
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorDividendo = item.valor_dividendo
+                                  // Se temos cotação e valor do dividendo, calcular DY
+                                  const dyCalculado = calcularDividendYield(valorDividendo, cotacao)
+                                  // Priorizar DY calculado se tiver cotação, senão usar o valor original
+                                  if (dyCalculado !== null) {
+                                    return `${dyCalculado.toFixed(2)}%`
+                                  }
+                                  return item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'
+                                })()}
+                              </td>
+                              <td className="py-3 px-4 text-right font-semibold text-foreground">
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorCalculado = calcularValorDividendo(item.dividend_yield, cotacao)
+                                  // Priorizar valor calculado se tiver cotação, senão usar o valor original
+                                  if (valorCalculado !== null) {
+                                    return formatCurrency(valorCalculado)
+                                  }
+                                  return item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'
+                                })()}
                               </td>
                             </tr>
                           )
@@ -912,6 +1122,7 @@ export default function AgendaDividendosPage() {
                           <th className="text-center py-3 px-4 text-sm font-semibold text-foreground">Posição</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Ticker</th>
                           <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Nome</th>
+                          <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Cotação</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Dividend Yield</th>
                           <th className="text-right py-3 px-4 text-sm font-semibold text-foreground">Valor Dividendo</th>
                         </tr>
@@ -921,7 +1132,18 @@ export default function AgendaDividendosPage() {
                           const tickerNormalizado = normalizeTicker(item.ticker)
                           const logoUrl = logosCache[tickerNormalizado]
                           return (
-                            <tr key={idx} className="border-b border-border hover:bg-muted/50 transition-colors">
+                            <tr 
+                              key={idx} 
+                              ref={(el) => {
+                                if (el) {
+                                  rowRefs.current.set(item.ticker, el)
+                                } else {
+                                  rowRefs.current.delete(item.ticker)
+                                }
+                              }}
+                              data-ticker={item.ticker}
+                              className="border-b border-border hover:bg-muted/50 transition-colors"
+                            >
                               <td className="py-3 px-4 text-center font-bold text-foreground">
                                 <span className={`px-2 py-1 rounded ${
                                   item.posicao <= 3 
@@ -966,10 +1188,37 @@ export default function AgendaDividendosPage() {
                               </td>
                               <td className="py-3 px-4 text-foreground">{item.nome || '-'}</td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'}
+                                {precosRanking[item.ticker] ? (
+                                  formatCurrency(precosRanking[item.ticker])
+                                ) : tickersCarregando.has(item.ticker) ? (
+                                  <span className="text-muted-foreground text-xs">Carregando...</span>
+                                ) : (
+                                  '-'
+                                )}
                               </td>
                               <td className="py-3 px-4 text-right font-semibold text-foreground">
-                                {item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'}
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorDividendo = item.valor_dividendo
+                                  // Se temos cotação e valor do dividendo, calcular DY
+                                  const dyCalculado = calcularDividendYield(valorDividendo, cotacao)
+                                  // Priorizar DY calculado se tiver cotação, senão usar o valor original
+                                  if (dyCalculado !== null) {
+                                    return `${dyCalculado.toFixed(2)}%`
+                                  }
+                                  return item.dividend_yield ? `${item.dividend_yield.toFixed(2)}%` : '-'
+                                })()}
+                              </td>
+                              <td className="py-3 px-4 text-right font-semibold text-foreground">
+                                {(() => {
+                                  const cotacao = precosRanking[item.ticker]
+                                  const valorCalculado = calcularValorDividendo(item.dividend_yield, cotacao)
+                                  // Priorizar valor calculado se tiver cotação, senão usar o valor original
+                                  if (valorCalculado !== null) {
+                                    return formatCurrency(valorCalculado)
+                                  }
+                                  return item.valor_dividendo ? formatCurrency(item.valor_dividendo) : '-'
+                                })()}
                               </td>
                             </tr>
                           )
