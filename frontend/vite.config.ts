@@ -6,7 +6,19 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separar bibliotecas pesadas em chunks próprios
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'recharts': ['recharts'],
+          'framer-motion': ['framer-motion'],
+          'react-query': ['@tanstack/react-query'],
+          'lucide-icons': ['lucide-react']
+        }
+      }
+    }
   },
   publicDir: 'public',
   server: {

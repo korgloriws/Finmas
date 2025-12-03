@@ -624,6 +624,32 @@ export const listasService = {
   }
 }
 
+export const batchService = {
+  /**
+   * Agrupa múltiplas requisições em uma única chamada HTTP.
+   * Reduz latência e overhead de múltiplas conexões.
+   * 
+   * @param requests Array de requisições a serem agrupadas
+   * @returns Objeto com resultados de cada endpoint
+   * 
+   * @example
+   * const results = await batchService.batch([
+   *   { endpoint: '/carteira', method: 'GET' },
+   *   { endpoint: '/indicadores', method: 'GET' },
+   *   { endpoint: '/home/resumo', method: 'GET', params: { mes: '12', ano: '2024' } }
+   * ])
+   */
+  batch: async (requests: Array<{
+    endpoint: string
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    params?: Record<string, any>
+    body?: Record<string, any>
+  }>): Promise<Record<string, any>> => {
+    const response = await api.post('/batch', { requests })
+    return response.data
+  }
+}
+
 export const rfCatalogService = {
   list: async (): Promise<{ items: Array<any> }> => {
     const resp = await api.get('/rf/catalog')

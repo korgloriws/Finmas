@@ -4919,7 +4919,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                     base *= daily_factor
                     lab = f"{dt.year}-{str(dt.month).zfill(2)}"
                     last_by_month[lab] = base
-                # Montar série mensal alinhada a datas_labels, com carry-forward
+                
                 for i, lab in enumerate(datas_labels):
                     if lab in last_by_month:
                         cdi_series.append(last_by_month[lab])

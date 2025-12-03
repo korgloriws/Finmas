@@ -296,8 +296,8 @@ export default function DetalhesVisaoGeralTab({
                   transition: { duration: 0.3 }
                 }}
                 className="relative shrink-0"
-              >
-                {strategyDetails.meets ? (
+            >
+              {strategyDetails.meets ? (
                   // Selo VERDE - Na Estratégia
                   <motion.div
                     className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white overflow-visible cursor-pointer"

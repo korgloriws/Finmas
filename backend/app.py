@@ -1463,6 +1463,273 @@ def api_refresh_indexadores():
         print(f"DEBUG: Erro no refresh de indexadores: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
+# ==================== BATCH REQUESTS ====================
+
+@server.route("/api/batch", methods=["POST"])
+def api_batch():
+    """
+    Endpoint para agrupar múltiplas requisições em uma única chamada HTTP.
+    Reduz latência e overhead de múltiplas conexões.
+    
+    PROTEÇÕES DE SEGURANÇA:
+    1. Valida autenticação do usuário
+    2. Valida header X-User-Expected
+    3. Cada endpoint interno valida usuário novamente
+    4. Isolamento garantido por schema do PostgreSQL
+    """
+    try:
+        # PROTEÇÃO 1: Validar autenticação
+        usuario_atual = get_usuario_atual()
+        if not usuario_atual:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        # PROTEÇÃO 2: Validar header X-User-Expected
+        try:
+            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
+        except Exception:
+            expected_user = ''
+        
+        if expected_user and expected_user != str(usuario_atual).strip().lower():
+            return jsonify({"error": "User mismatch", "current_user": usuario_atual}), 409
+        
+        # Obter lista de requisições
+        data = request.get_json() or {}
+        requests_list = data.get('requests', [])
+        
+        if not requests_list:
+            return jsonify({"error": "Nenhuma requisição especificada"}), 400
+        
+        # Limitar número de requisições por batch (segurança)
+        if len(requests_list) > 20:
+            return jsonify({"error": "Máximo de 20 requisições por batch"}), 400
+        
+        results = {}
+        
+        # Processar cada requisição
+        for req in requests_list:
+            endpoint = req.get('endpoint', '').strip()
+            method = req.get('method', 'GET').upper()
+            params = req.get('params', {})
+            body = req.get('body', {})
+            
+            if not endpoint:
+                continue
+            
+            try:
+                # Mapear endpoints para funções internas
+                # Cada função valida usuário internamente
+                if endpoint == '/carteira' and method == 'GET':
+                    refresh = params.get('refresh', False)
+                    if refresh:
+                        try:
+                            atualizar_precos_indicadores_carteira()
+                            if usuario_atual and cache:
+                                cache.delete(f"carteira:{usuario_atual}")
+                                cache.delete(f"carteira_insights:{usuario_atual}")
+                        except Exception:
+                            pass
+                    carteira = obter_carteira()
+                    results[endpoint] = carteira
+                
+                elif endpoint == '/indicadores' and method == 'GET':
+                    # Função inline do endpoint original
+                    def sgs_last(series_id, use_range=False):
+                        if use_range:
+                            end_date = datetime.now()
+                            start_date = end_date - timedelta(days=90)
+                            url = (f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{series_id}/dados?"
+                                   f"formato=json&dataInicial={start_date.strftime('%d/%m/%Y')}"
+                                   f"&dataFinal={end_date.strftime('%d/%m/%Y')}")
+                            r = requests.get(url, timeout=10)
+                            r.raise_for_status()
+                            arr = r.json()
+                            return arr[-1] if arr else None
+                        else:
+                            url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{series_id}/dados/ultimos/1?formato=json"
+                            r = requests.get(url, timeout=10)
+                            r.raise_for_status()
+                            arr = r.json()
+                            return arr[0] if arr else None
+                    
+                    selic = sgs_last(432, use_range=True)
+                    cdi = sgs_last(12, use_range=True)
+                    ipca = sgs_last(433)
+                    results[endpoint] = {"selic": selic, "cdi": cdi, "ipca": ipca}
+                
+                elif endpoint == '/carteira/proventos-recebidos' and method == 'GET':
+                    # Usar a mesma lógica do endpoint api_get_proventos_recebidos
+                    periodo = params.get('periodo', 'total')
+                    carteira = obter_carteira()
+                    if not carteira:
+                        results[endpoint] = []
+                    else:
+                        # Calcular data de início baseada no período
+                        data_inicio = None
+                        if periodo != 'total':
+                            hoje = datetime.now()
+                            if periodo == 'mes':
+                                data_inicio = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                            elif periodo == '6meses':
+                                data_inicio = hoje - timedelta(days=180)
+                                data_inicio = data_inicio.replace(hour=0, minute=0, second=0, microsecond=0)
+                            elif periodo == '1ano':
+                                data_inicio = hoje - timedelta(days=365)
+                                data_inicio = data_inicio.replace(hour=0, minute=0, second=0, microsecond=0)
+                            elif periodo == '5anos':
+                                data_inicio = hoje - timedelta(days=365*5)
+                                data_inicio = data_inicio.replace(hour=0, minute=0, second=0, microsecond=0)
+                        
+                        # Buscar proventos em paralelo usando função existente
+                        resultado = []
+                        max_workers = min(len(carteira), 10)
+                        
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            future_to_ativo = {
+                                executor.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo 
+                                for ativo in carteira
+                            }
+                            
+                            for future in as_completed(future_to_ativo):
+                                try:
+                                    resultado_ativo = future.result()
+                                    if resultado_ativo:
+                                        resultado.append(resultado_ativo)
+                                except Exception as e:
+                                    print(f"Erro ao buscar proventos: {e}")
+                                    continue
+                        
+                        results[endpoint] = resultado
+                
+                elif endpoint == '/carteira/historico' and method == 'GET':
+                    periodo = params.get('periodo', 'mensal')
+                    historico = obter_historico_carteira(periodo)
+                    results[endpoint] = historico
+                
+                elif endpoint == '/goals' and method == 'GET':
+                    from models import get_goals, _ensure_goals_schema
+                    _ensure_goals_schema()
+                    goals = get_goals() or {}
+                    results[endpoint] = goals
+                
+                elif endpoint == '/home/resumo' and method == 'GET':
+                    # Extrair lógica do endpoint api_home_resumo
+                    mes = params.get('mes')
+                    ano = params.get('ano')
+                    if not mes or not ano:
+                        results[endpoint] = {"error": "Mês e ano são obrigatórios"}
+                    else:
+                        carteira = obter_carteira()
+                        total_investido = sum(ativo.get('valor_total', 0) for ativo in carteira)
+                        ativos_por_tipo = {}
+                        for ativo in carteira:
+                            tipo = ativo.get('tipo', 'Desconhecido')
+                            ativos_por_tipo[tipo] = ativos_por_tipo.get(tipo, 0) + ativo.get('valor_total', 0)
+                        
+                        df_receitas = carregar_receitas_mes_ano(mes, ano)
+                        receitas = df_receitas.to_dict('records') if not df_receitas.empty else []
+                        total_receitas = df_receitas['valor'].sum() if not df_receitas.empty else 0
+                        
+                        total_cartoes = 0
+                        
+                        outros = carregar_outros_mes_ano(mes, ano)
+                        total_outros = sum(outro.get('valor', 0) for outro in outros)
+                        
+                        marmitas = consultar_marmitas(mes, ano)
+                        marmitas_formatted = []
+                        total_marmitas = 0
+                        for registro in marmitas:
+                            marmita = {
+                                'id': registro[0],
+                                'data': registro[1],
+                                'valor': float(registro[2]) if registro[2] else 0,
+                                'comprou': bool(registro[3])
+                            }
+                            marmitas_formatted.append(marmita)
+                            total_marmitas += marmita['valor']
+                        
+                        saldo = calcular_saldo_mes_ano(mes, ano)
+                        
+                        # Evolução diária
+                        df_receita = carregar_receitas_mes_ano(mes, ano)
+                        df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano))
+                        
+                        if not df_receita.empty:
+                            df_receita["data"] = pd.to_datetime(df_receita["data"])
+                            df_receita_grouped = df_receita.groupby("data")["valor"].sum().reset_index(name="receitas")
+                        else:
+                            df_receita_grouped = pd.DataFrame(columns=["data", "receitas"])
+                        
+                        df_outros["data"] = pd.to_datetime(df_outros["data"]) if not df_outros.empty else pd.Series(dtype='datetime64[ns]')
+                        df_outros_ = df_outros[["data", "valor"]] if not df_outros.empty else pd.DataFrame(columns=["data", "valor"])
+                        df_despesas = df_outros_ if not df_outros_.empty else pd.DataFrame(columns=["data", "valor"])
+                        
+                        if df_despesas.empty:
+                            df_despesas_grouped = pd.DataFrame({"data": [], "despesas": []})
+                        else:
+                            df_despesas_grouped = df_despesas.groupby("data")["valor"].sum().reset_index(name="despesas")
+                        
+                        dias = pd.date_range(
+                            start=f"{ano}-{mes.zfill(2)}-01", 
+                            end=pd.Timestamp(f"{ano}-{mes.zfill(2)}-01") + pd.offsets.MonthEnd(0)
+                        )
+                        df_base = pd.DataFrame({"data": dias})
+                        
+                        df_merged = pd.merge(df_base, df_receita_grouped, on="data", how="left").merge(df_despesas_grouped, on="data", how="left")
+                        df_merged["receitas"] = df_merged["receitas"].fillna(0)
+                        df_merged["despesas"] = df_merged["despesas"].fillna(0)
+                        df_merged["saldo_dia"] = df_merged["receitas"] - df_merged["despesas"]
+                        df_merged["saldo_acumulado"] = df_merged["saldo_dia"].cumsum()
+                        
+                        evolucao_diaria = []
+                        for _, row in df_merged.iterrows():
+                            evolucao_diaria.append({
+                                'data': row['data'].strftime('%Y-%m-%d'),
+                                'receitas': float(row['receitas']),
+                                'despesas': float(row['despesas']),
+                                'saldo_dia': float(row['saldo_dia']),
+                                'saldo_acumulado': float(row['saldo_acumulado'])
+                            })
+                        
+                        resumo = {
+                            "carteira": {
+                                "total_investido": float(total_investido),
+                                "ativos_por_tipo": {k: float(v) for k, v in ativos_por_tipo.items()}
+                            },
+                            "receitas": {
+                                "registros": receitas,
+                                "total": float(total_receitas)
+                            },
+                            "cartoes": {
+                                "registros": [],
+                                "total": float(total_cartoes)
+                            },
+                            "outros": {
+                                "registros": outros,
+                                "total": float(total_outros)
+                            },
+                            "marmitas": {
+                                "registros": marmitas_formatted,
+                                "total": float(total_marmitas)
+                            },
+                            "saldo": float(saldo),
+                            "evolucao_diaria": evolucao_diaria
+                        }
+                        
+                        results[endpoint] = resumo
+                
+                else:
+                    results[endpoint] = {"error": f"Endpoint não suportado: {endpoint} {method}"}
+            
+            except Exception as e:
+                print(f"Erro ao processar {endpoint}: {str(e)}")
+                results[endpoint] = {"error": str(e)}
+        
+        return jsonify(results)
+    
+    except Exception as e:
+        print(f"Erro no batch request: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @server.route("/api/carteira/insights", methods=["GET"])
 def api_carteira_insights():
     try:
