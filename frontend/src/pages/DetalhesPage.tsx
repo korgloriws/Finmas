@@ -57,10 +57,13 @@ export default function DetalhesPage() {
     retry: 1, 
   })
 
+  // OTIMIZAÇÃO: Carregar histórico apenas quando necessário (aba charts)
   const { data: historico, isLoading: loadingHistorico } = useQuery<Array<Record<string, any>>>({
     queryKey: ['ativo-historico', ticker, periodo],
     queryFn: () => ativoService.getHistorico(ticker, periodo),
-    enabled: !!ticker,
+    enabled: !!ticker && activeTab === 'charts', // Só carrega na aba de gráficos
+    staleTime: 10 * 60 * 1000, // 10 minutos de cache
+    refetchOnWindowFocus: false,
   })
 
   
@@ -71,11 +74,13 @@ export default function DetalhesPage() {
     '5y': '5y',
     'max': 'max',
   }
+  // OTIMIZAÇÃO: Carregar histórico FI apenas quando necessário (aba charts)
   const { data: historicoFI } = useQuery<Array<Record<string, any>>>({
     queryKey: ['ativo-historico-fi', ticker, fiPeriodo],
     queryFn: () => ativoService.getHistorico(ticker, yfPeriodMap[fiPeriodo]),
-    enabled: !!ticker,
-    staleTime: 60_000,
+    enabled: !!ticker && activeTab === 'charts', // Só carrega na aba de gráficos
+    staleTime: 10 * 60 * 1000, // 10 minutos de cache
+    refetchOnWindowFocus: false,
   })
 
 

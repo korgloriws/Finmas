@@ -166,15 +166,15 @@ export default function CarteiraPage() {
 
 
   // Carregamento prioritário - carteira principal
+  // OTIMIZAÇÃO: Cache de 5 minutos para evitar sobrecarga do servidor
   const { data: carteira, isLoading: loadingCarteira } = useQuery<AtivoCarteira[]>({
     queryKey: ['carteira', user], 
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user, 
-    // Tornar mais responsivo: sempre considerar stale e refetchar ao focar
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    staleTime: 5 * 60 * 1000, // 5 minutos de cache
+    refetchOnWindowFocus: false, // Não refazer ao focar janela
+    refetchOnReconnect: false, // Não refazer ao reconectar
+    refetchOnMount: false, // Usar cache se disponível
   })
 
   const { data: tiposApi } = useQuery({
@@ -280,10 +280,10 @@ export default function CarteiraPage() {
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     enabled: !!user,
     retry: 3,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    staleTime: 10 * 60 * 1000, // 10 minutos de cache (histórico muda pouco)
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false, // Usar cache se disponível
   })
 
 

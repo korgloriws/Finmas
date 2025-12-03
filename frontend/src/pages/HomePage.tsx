@@ -1138,7 +1138,7 @@ export default function HomePage() {
         return configTargets
       }
       
-      // Fallback para alocação padrão se não houver configuração
+
       return {
         'Ações': 60,
         'Fundos Imobiliários': 20,

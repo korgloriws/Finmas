@@ -1542,8 +1542,9 @@ def processar_ativos(lista, tipo):
         return []
     
     # Paralelização: busca informações de múltiplos tickers simultaneamente
+    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
     dados = []
-    max_workers = min(len(lista), 10)  # Limitar a 10 workers
+    max_workers = min(len(lista), 5)  # Limitar a 5 workers (reduz uso de RAM)
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -1553,11 +1554,17 @@ def processar_ativos(lista, tipo):
         }
         
         # Coleta resultados conforme terminam
+        # OTIMIZAÇÃO: Adicionar pequeno delay a cada 3 resultados para evitar sobrecarga
+        completed_count = 0
         for future in as_completed(future_to_ticker):
             try:
                 resultado = future.result()
                 if resultado is not None:
                     dados.append(resultado)
+                completed_count += 1
+                # Delay a cada 3 requisições para evitar sobrecarga de RAM
+                if completed_count % 3 == 0:
+                    time.sleep(0.1)  # 100ms de pausa
             except Exception as e:
                 ticker = future_to_ticker[future]
                 print(f"Erro ao processar {ticker}: {str(e)}")
@@ -1827,8 +1834,9 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
         return []
     
     # Paralelização: busca informações de múltiplos tickers simultaneamente
+    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
     dados = []
-    max_workers = min(len(lista_ativos), 10)  # Limitar a 10 workers
+    max_workers = min(len(lista_ativos), 5)  # Limitar a 5 workers (reduz uso de RAM)
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -1876,8 +1884,9 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
         return []
     
     # Paralelização: busca informações de múltiplos FIIs simultaneamente
+    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
     dados = []
-    max_workers = min(len(fiis), 10)  # Limitar a 10 workers
+    max_workers = min(len(fiis), 5)  # Limitar a 5 workers (reduz uso de RAM)
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -4740,7 +4749,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 return (tk, None)
         
         if tickers:
-            max_workers = min(len(tickers), 10)  # Limitar a 10 workers
+            # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
+            max_workers = min(len(tickers), 5)  # Limitar a 5 workers (reduz uso de RAM)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submete todas as tarefas
                 future_to_ticker = {
