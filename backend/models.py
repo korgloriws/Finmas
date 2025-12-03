@@ -11,6 +11,7 @@ import os
 import json
 import secrets
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     import psycopg
 except Exception:
@@ -1536,9 +1537,31 @@ def aplicar_filtros_fiis(dados):
 
 
 def processar_ativos(lista, tipo):
-
-    dados = [obter_informacoes(ticker, tipo) for ticker in lista]
-    dados = [d for d in dados if d is not None] 
+    """Processa lista de ativos em paralelo para melhor performance"""
+    if not lista:
+        return []
+    
+    # Paralelização: busca informações de múltiplos tickers simultaneamente
+    dados = []
+    max_workers = min(len(lista), 10)  # Limitar a 10 workers
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submete todas as tarefas
+        future_to_ticker = {
+            executor.submit(obter_informacoes, ticker, tipo): ticker 
+            for ticker in lista
+        }
+        
+        # Coleta resultados conforme terminam
+        for future in as_completed(future_to_ticker):
+            try:
+                resultado = future.result()
+                if resultado is not None:
+                    dados.append(resultado)
+            except Exception as e:
+                ticker = future_to_ticker[future]
+                print(f"Erro ao processar {ticker}: {str(e)}")
+                continue 
 
     print(f"🔍 {tipo}: {len(dados)} ativos recuperados antes dos filtros.")
 
@@ -1799,9 +1822,31 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
             conn.close()
 
 def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
-
-    dados = [obter_informacoes(ticker, tipo_ativo) for ticker in lista_ativos]
-    dados = [d for d in dados if d is not None]
+    """Processa lista de ativos com filtros em paralelo para melhor performance"""
+    if not lista_ativos:
+        return []
+    
+    # Paralelização: busca informações de múltiplos tickers simultaneamente
+    dados = []
+    max_workers = min(len(lista_ativos), 10)  # Limitar a 10 workers
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submete todas as tarefas
+        future_to_ticker = {
+            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker 
+            for ticker in lista_ativos
+        }
+        
+        # Coleta resultados conforme terminam
+        for future in as_completed(future_to_ticker):
+            try:
+                resultado = future.result()
+                if resultado is not None:
+                    dados.append(resultado)
+            except Exception as e:
+                ticker = future_to_ticker[future]
+                print(f"Erro ao processar {ticker}: {str(e)}")
+                continue
     filtrados = [
         ativo for ativo in dados if (
             ativo['roe'] >= (roe_min or 0) and
@@ -1825,9 +1870,32 @@ def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, 
     return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
+    """Processa lista de FIIs com filtros em paralelo para melhor performance"""
     fiis = LISTA_FIIS
-    dados = [obter_informacoes(ticker, 'FII') for ticker in fiis]
-    dados = [d for d in dados if d is not None]
+    if not fiis:
+        return []
+    
+    # Paralelização: busca informações de múltiplos FIIs simultaneamente
+    dados = []
+    max_workers = min(len(fiis), 10)  # Limitar a 10 workers
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submete todas as tarefas
+        future_to_ticker = {
+            executor.submit(obter_informacoes, ticker, 'FII'): ticker 
+            for ticker in fiis
+        }
+        
+        # Coleta resultados conforme terminam
+        for future in as_completed(future_to_ticker):
+            try:
+                resultado = future.result()
+                if resultado is not None:
+                    dados.append(resultado)
+            except Exception as e:
+                ticker = future_to_ticker[future]
+                print(f"Erro ao processar FII {ticker}: {str(e)}")
+                continue
     
 
     filtrados = [
@@ -4654,19 +4722,40 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
 
         tickers = sorted(list({m[1] for m in movimentos}))
         ticker_to_hist = {}
-        for tk in tickers:
+        
+        # Paralelização: busca histórico de múltiplos tickers simultaneamente
+        def _buscar_historico_ticker(tk):
+            """Função auxiliar para buscar histórico de um ticker"""
             try:
                 yf_ticker = yf.Ticker(tk)
                 hist = yf_ticker.history(start=data_ini - timedelta(days=5), end=data_fim + timedelta(days=5))
-               
+                
                 try:
                     if hasattr(hist.index, 'tz') and hist.index.tz is not None:
                         hist.index = hist.index.tz_localize(None)
                 except Exception:
                     pass
-                ticker_to_hist[tk] = hist
+                return (tk, hist)
             except Exception:
-                ticker_to_hist[tk] = None
+                return (tk, None)
+        
+        if tickers:
+            max_workers = min(len(tickers), 10)  # Limitar a 10 workers
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submete todas as tarefas
+                future_to_ticker = {
+                    executor.submit(_buscar_historico_ticker, tk): tk 
+                    for tk in tickers
+                }
+                
+                # Coleta resultados conforme terminam
+                for future in as_completed(future_to_ticker):
+                    try:
+                        tk, hist = future.result()
+                        ticker_to_hist[tk] = hist
+                    except Exception:
+                        tk = future_to_ticker[future]
+                        ticker_to_hist[tk] = None
 
 
         def price_on_or_before(hist_df, dt):
@@ -4723,8 +4812,10 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             'ifix': ['^IFIX', 'XFIX11.SA']
         }
         indices_vals = {k: [] for k in indices_map.keys()}
-        for key, candidates in indices_map.items():
-            hist = None
+        
+        # Paralelização: busca histórico de índices simultaneamente
+        def _buscar_indice_historico(key, candidates):
+            """Função auxiliar para buscar histórico de um índice"""
             for cand in candidates:
                 try:
                     h = yf.Ticker(cand).history(start=data_ini - timedelta(days=5), end=data_fim + timedelta(days=5))
@@ -4734,10 +4825,30 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                                 h.index = h.index.tz_localize(None)
                         except Exception:
                             pass
-                        hist = h
-                        break
+                        return (key, h)
                 except Exception:
                     continue
+            return (key, None)
+        
+        # Buscar todos os índices em paralelo
+        indices_hist = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:  # Apenas 3 índices
+            future_to_key = {
+                executor.submit(_buscar_indice_historico, key, candidates): key 
+                for key, candidates in indices_map.items()
+            }
+            
+            for future in as_completed(future_to_key):
+                try:
+                    key, hist = future.result()
+                    indices_hist[key] = hist
+                except Exception:
+                    key = future_to_key[future]
+                    indices_hist[key] = None
+        
+
+        for key in indices_map.keys():
+            hist = indices_hist.get(key)
             for pt in pontos:
                 price = price_on_or_before(hist, pt) if hist is not None else None
                 indices_vals[key].append(float(price) if price is not None else None)
