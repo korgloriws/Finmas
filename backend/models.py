@@ -2022,16 +2022,30 @@ def init_carteira_db(usuario=None):
                         tipo TEXT NOT NULL
                     )
                 ''')
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_data ON movimentacoes(data)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_ticker ON movimentacoes(ticker)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_valor_total ON carteira(valor_total)")
+                # ==================== ÍNDICES OTIMIZADOS PARA PERFORMANCE ====================
+                # OTIMIZAÇÃO: Índices criados dentro do schema do usuário (isolamento garantido)
                 
-                # Índices críticos para performance
+                # CARTEIRA - Índices críticos (maior impacto)
+                # 1. valor_total DESC - usado em ORDER BY (query mais frequente)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_valor_total_desc ON carteira(valor_total DESC)")
+                # 2. ticker - usado em WHERE e UPDATE (busca/atualização de ativos)
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_ticker ON carteira(ticker)")
+                # 3. tipo - usado em WHERE e COUNT (filtros por tipo)
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_tipo ON carteira(tipo)")
+                # 4. data_adicao - usado em ordenações e filtros temporais
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_data_adicao ON carteira(data_adicao)")
+                # 5. indexador - usado em filtros de renda fixa
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_indexador ON carteira(indexador)")
+                # 6. vencimento - usado em filtros de renda fixa
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_vencimento ON carteira(vencimento)")
+                
+                # MOVIMENTACOES - Índices críticos
+                # 7. ticker + data (composto) - usado em WHERE ticker = ? ORDER BY data ASC (busca preço de compra)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_ticker_data ON movimentacoes(ticker, data ASC)")
+                # 8. data - usado em filtros por mês/ano (WHERE data >= ? AND data < ?)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_data ON movimentacoes(data)")
+                # 9. ticker (individual) - usado em queries simples por ticker
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_ticker ON movimentacoes(ticker)")
                 # Configuração de rebalanceamento (uma linha por usuário)
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS rebalance_config (
@@ -2100,9 +2114,13 @@ def init_carteira_db(usuario=None):
             cursor.execute("PRAGMA temp_store=MEMORY;")
         except Exception:
             pass
+        # MOVIMENTACOES - Índices críticos (SQLite)
+        # Índice composto ticker + data (usado em WHERE ticker = ? ORDER BY data ASC)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_ticker_data ON movimentacoes(ticker, data ASC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_data ON movimentacoes(data)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movimentacoes_ticker ON movimentacoes(ticker)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_valor_total ON carteira(valor_total)")
+        # OTIMIZAÇÃO: Índice DESC para ORDER BY valor_total DESC (query mais frequente)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_valor_total_desc ON carteira(valor_total DESC)")
         
         # Índices críticos para performance SQLite
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_carteira_ticker ON carteira(ticker)")
@@ -5137,6 +5155,29 @@ def init_controle_db(usuario=None):
                         observacao TEXT
                     )
                 ''')
+                
+                # ==================== ÍNDICES OTIMIZADOS PARA CONTROLE FINANCEIRO ====================
+                # OTIMIZAÇÃO: Índices criados dentro do schema do usuário (isolamento garantido)
+                
+                # RECEITAS - Índices para filtros por data (carregamento mensal)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_receitas_data ON receitas(data)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_receitas_categoria ON receitas(categoria)")
+                
+                # CARTOES - Índices para filtros por data e status
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_data ON cartoes(data)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_pago ON cartoes(pago)")
+                
+                # OUTROS GASTOS - Índices para filtros por data e categoria
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_outros_gastos_data ON outros_gastos(data)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_outros_gastos_categoria ON outros_gastos(categoria)")
+                
+                # CARTOES CADASTRADOS - Índices para filtros por status
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_cadastrados_ativo ON cartoes_cadastrados(ativo)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_cadastrados_mes_ano ON cartoes_cadastrados(mes_pagamento, ano_pagamento)")
+                
+                # COMPRAS CARTAO - Índices para relacionamento e filtros
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_cartao_id ON compras_cartao(cartao_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_data ON compras_cartao(data)")
                 
                 # Índices críticos para performance - Controle PostgreSQL
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_receitas_data ON receitas(data)")
