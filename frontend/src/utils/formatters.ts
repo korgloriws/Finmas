@@ -42,12 +42,9 @@ export function normalizeTicker(ticker: string): string {
     return normalized + '.SA'
   }
   return normalized
-}
+} 
 
-/**
- * Formata uma data string (formato YYYY-MM-DD) para o formato brasileiro (DD/MM/YYYY)
- * Evita problemas de timezone ao converter strings de data
- */
+
 export function formatDate(dateString: string): string {
   if (!dateString) return '-'
   

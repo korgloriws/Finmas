@@ -239,8 +239,7 @@ export default function AgendaDividendosPage() {
       })
     }, 100)
 
-    // Buscar os primeiros 10 itens imediatamente (os que já estão visíveis)
-    // Logos e cotações começam ao mesmo tempo!
+    
     const primeirosTickers = todosTickers.slice(0, 10)
     primeirosTickers.forEach(ticker => {
       carregarDados(ticker)

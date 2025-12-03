@@ -4,12 +4,11 @@ import HelpTips from '../components/HelpTips'
 import { useQuery } from '@tanstack/react-query'
 import { List, BarChart, Loader2 } from 'lucide-react'
 import { carteiraService } from '../services/api'
-import { AnaliseProvider, useAnalise } from '../contexts/AnaliseContext'
+import { useAnalise } from '../contexts/AnaliseContext'
 import AnaliseListaTab from '../components/analise/AnaliseListaTab'
 import AnaliseGraficosTab from '../components/analise/AnaliseGraficosTab'
 
-
-function AnalisePageContent() {
+export default function AnalisePage() {
   const [activeTab, setActiveTab] = useState<'lista' | 'graficos'>('lista')
   const { ativosAcoes, ativosBdrs, ativosFiis } = useAnalise()
 
@@ -104,14 +103,5 @@ function AnalisePageContent() {
         </div>
       </motion.div>
     </div>
-  )
-}
-
-// Componente principal com provider
-export default function AnalisePage() {
-  return (
-    <AnaliseProvider>
-      <AnalisePageContent />
-    </AnaliseProvider>
   )
 }

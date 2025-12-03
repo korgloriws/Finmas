@@ -15,6 +15,8 @@ import {
 import { ativoService } from '../services/api'
 import { AtivoDetalhes, AtivoInfo } from '../types'
 import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
+import { useAnalise } from '../contexts/AnaliseContext'
+import { verificarEstrategia } from '../utils/strategyChecker'
 import DetalhesVisaoGeralTab from '../components/detalhes/DetalhesVisaoGeralTab'
 import DetalhesFundamentalsTab from '../components/detalhes/DetalhesFundamentalsTab'
 import DetalhesChartsTab from '../components/detalhes/DetalhesChartsTab'
@@ -33,6 +35,9 @@ export default function DetalhesPage() {
   const compararInputRef = useRef<HTMLInputElement>(null)
   const [periodoDividendos, setPeriodoDividendos] = useState('1y')
   const [activeTab, setActiveTab] = useState<'overview' | 'fundamentals' | 'charts' | 'comparison' | 'dividends' | 'history' | 'concepts' | 'fixedincome'>('overview')
+
+  // Obter filtros do contexto de análise
+  const { filtrosAcoes, filtrosBdrs, filtrosFiis } = useAnalise()
 
   const ticker = searchParams.get('ticker') || ''
 
@@ -550,49 +555,34 @@ export default function DetalhesPage() {
     return { label: 'Acima do teto (Bazin)', color: 'red' as const }
   }, [info, bazinCeilingPrice])
 
-  // Regras da estratégia por tipo (declarado antes de qualquer return condicional)
+  // Calcular net_debt/ebitda se disponível
+  const netDebtEbitda = useMemo(() => {
+    if (enterpriseValue == null || ebitComputed == null) return null
+    // Tentar obter dívida líquida dos dados
+    const totalDebt = (info as any)?.totalDebt
+    const cash = (info as any)?.totalCash
+    if (totalDebt != null && cash != null) {
+      const netDebt = totalDebt - cash
+      if (ebitComputed > 0 && isFinite(netDebt) && isFinite(ebitComputed)) {
+        return netDebt / ebitComputed
+      }
+    }
+    return null
+  }, [enterpriseValue, ebitComputed, info])
+
+  // Regras da estratégia por tipo usando filtros do contexto
   const strategyDetails = useMemo(() => {
-    if (tipoAtivo === 'FII') {
-      const c1 = dyPct != null && dyPct >= 12 && dyPct <= 15
-      const c2 = liquidezDiaria > 1_000_000
-      return {
-        meets: Boolean(c1 && c2),
-        criteria: [
-          { label: 'DY entre 12% e 15%', ok: Boolean(c1), value: dyPct != null ? `${dyPct.toFixed(2)}%` : '-' },
-          { label: 'Liquidez diária > 1.000.000', ok: Boolean(c2), value: liquidezDiaria?.toLocaleString('pt-BR') },
-        ],
-      }
-    }
-    if (tipoAtivo === 'BDR') {
-      const c1 = roePct != null && roePct >= 15
-      const c2 = dyPct != null && dyPct > 2
-      const c3 = pl != null && pl >= 1 && pl <= 15
-      const c4 = pvp != null && pvp <= 2
-      return {
-        meets: Boolean(c1 && c2 && c3 && c4),
-        criteria: [
-          { label: 'ROE ≥ 15%', ok: Boolean(c1), value: roePct != null ? `${roePct.toFixed(2)}%` : '-' },
-          { label: 'DY > 2%', ok: Boolean(c2), value: dyPct != null ? `${dyPct.toFixed(2)}%` : '-' },
-          { label: 'P/L entre 1 e 15', ok: Boolean(c3), value: pl != null ? pl.toFixed(2) : '-' },
-          { label: 'P/VP ≤ 2', ok: Boolean(c4), value: pvp != null ? pvp.toFixed(2) : '-' },
-        ],
-      }
-    }
-    // Ação (default)
-    const c1 = roePct != null && roePct >= 15
-    const c2 = dyPct != null && dyPct > 12
-    const c3 = pl != null && pl >= 1 && pl <= 10
-    const c4 = pvp != null && pvp <= 2
-    return {
-      meets: Boolean(c1 && c2 && c3 && c4),
-      criteria: [
-        { label: 'ROE ≥ 15%', ok: Boolean(c1), value: roePct != null ? `${roePct.toFixed(2)}%` : '-' },
-        { label: 'DY > 12%', ok: Boolean(c2), value: dyPct != null ? `${dyPct.toFixed(2)}%` : '-' },
-        { label: 'P/L entre 1 e 10', ok: Boolean(c3), value: pl != null ? pl.toFixed(2) : '-' },
-        { label: 'P/VP ≤ 2', ok: Boolean(c4), value: pvp != null ? pvp.toFixed(2) : '-' },
-      ],
-    }
-  }, [tipoAtivo, roePct, dyPct, pl, pvp, liquidezDiaria])
+    const filtros = tipoAtivo === 'FII' ? filtrosFiis : tipoAtivo === 'BDR' ? filtrosBdrs : filtrosAcoes
+    
+    return verificarEstrategia(tipoAtivo, filtros, {
+      roePct,
+      dyPct,
+      pl,
+      pvp,
+      liquidezDiaria,
+      netDebtEbitda
+    })
+  }, [tipoAtivo, roePct, dyPct, pl, pvp, liquidezDiaria, netDebtEbitda, filtrosAcoes, filtrosBdrs, filtrosFiis])
 
   // Componente de loading animado
   const LoadingSpinner = ({ text }: { text: string }) => (
@@ -679,17 +669,83 @@ export default function DetalhesPage() {
 
   
   const dividendYieldChartData = useMemo(() => {
-    if (!historico || !detalhes?.dividends) return []
+    if (!historico || !detalhes?.dividends || historico.length === 0) return []
     
-    return Object.entries(detalhes.dividends).map(([date, dividend]) => {
-      const price = historico.find(h => h.Date === date)?.Close || 1
-      return {
-        Date: date,
-        Dividend: dividend,
-        DividendYield: (dividend / price) * 100,
-        Price: price
+    // Normalizar datas do histórico para comparação
+    const historicoNormalizado = historico.map(h => {
+      const dateStr = h.Date || h.date || h.DateTime || h.time
+      let date: Date
+      if (typeof dateStr === 'string') {
+        date = new Date(dateStr)
+      } else if (dateStr instanceof Date) {
+        date = dateStr
+      } else {
+        return null
       }
-    }).filter(item => item.DividendYield > 0).sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
+      return {
+        date: date,
+        dateStr: date.toISOString().split('T')[0], // YYYY-MM-DD
+        timestamp: date.getTime(),
+        close: h.Close || h.close || h.price || null
+      }
+    }).filter(h => h !== null && h.close !== null && isFinite(h.close)) as Array<{
+      date: Date
+      dateStr: string
+      timestamp: number
+      close: number
+    }>
+    
+    if (historicoNormalizado.length === 0) return []
+    
+    // Ordenar histórico por data
+    historicoNormalizado.sort((a, b) => a.timestamp - b.timestamp)
+    
+    return Object.entries(detalhes.dividends)
+      .map(([dividendDateStr, dividend]) => {
+        const dividendDate = new Date(dividendDateStr)
+        const dividendTimestamp = dividendDate.getTime()
+        const dividendDateOnly = dividendDate.toISOString().split('T')[0]
+        
+        // Tentar encontrar preço exato na data do dividendo
+        let priceData = historicoNormalizado.find(h => h.dateStr === dividendDateOnly)
+        
+        // Se não encontrar exato, buscar o preço mais próximo (antes ou no dia do dividendo)
+        if (!priceData) {
+          // Buscar o último preço disponível antes ou no dia do dividendo
+          priceData = historicoNormalizado
+            .filter(h => h.timestamp <= dividendTimestamp)
+            .sort((a, b) => b.timestamp - a.timestamp)[0]
+        }
+        
+        // Se ainda não encontrar, buscar o primeiro preço disponível após o dividendo
+        if (!priceData) {
+          priceData = historicoNormalizado
+            .filter(h => h.timestamp >= dividendTimestamp)
+            .sort((a, b) => a.timestamp - b.timestamp)[0]
+        }
+        
+        // Se não encontrar nenhum preço, pular este dividendo
+        if (!priceData || !priceData.close || priceData.close <= 0) {
+          return null
+        }
+        
+        const price = priceData.close
+        const dividendYield = (dividend / price) * 100
+        
+        // Validar se o dividend yield é razoável (entre 0% e 100%)
+        if (!isFinite(dividendYield) || dividendYield <= 0 || dividendYield > 100) {
+          return null
+        }
+        
+        return {
+          Date: dividendDateStr,
+          Dividend: dividend,
+          DividendYield: dividendYield,
+          Price: price
+        }
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
   }, [historico, detalhes])
 
   

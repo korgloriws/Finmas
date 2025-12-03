@@ -101,7 +101,7 @@ export default function CarteiraProjecaoTab({
     
     // Se não tiver carteira_price, usar carteira (rebased) como fallback
     const valoresRebased: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira) ? (historicoMensal as any).carteira : []
-    
+
     // Priorizar carteira_price, senão usar carteira rebased
     const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
     
@@ -145,17 +145,17 @@ export default function CarteiraProjecaoTab({
     
     // Se não tiver dados anuais suficientes, calcular taxa mensal média e anualizar
     if (taxasAnuais.length === 0) {
-      const retornosMensais: number[] = []
-      for (let i = 1; i < valores.length; i++) {
-        const prev = Number(valores[i - 1])
-        const cur = Number(valores[i])
-        if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) continue
-        const r = (cur - prev) / prev
-        if (Number.isFinite(r)) retornosMensais.push(r)
-      }
-      if (retornosMensais.length === 0) return 0
-      const mediaMensal = retornosMensais.reduce((s, r) => s + r, 0) / retornosMensais.length
-      let crescimentoAnual = Math.pow(1 + mediaMensal, 12) - 1
+    const retornosMensais: number[] = []
+    for (let i = 1; i < valores.length; i++) {
+      const prev = Number(valores[i - 1])
+      const cur = Number(valores[i])
+      if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) continue
+      const r = (cur - prev) / prev
+      if (Number.isFinite(r)) retornosMensais.push(r)
+    }
+    if (retornosMensais.length === 0) return 0
+    const mediaMensal = retornosMensais.reduce((s, r) => s + r, 0) / retornosMensais.length
+    let crescimentoAnual = Math.pow(1 + mediaMensal, 12) - 1
       if (!Number.isFinite(crescimentoAnual)) crescimentoAnual = 0
       crescimentoAnual = Math.max(-0.9, Math.min(2.0, crescimentoAnual))
       return Math.max(0, crescimentoAnual)

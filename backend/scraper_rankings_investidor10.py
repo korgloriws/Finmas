@@ -23,7 +23,7 @@ def buscar_rankings_investidor10(tipo: str) -> Dict[str, Any]:
         return {'erro': f'Tipo invalido: {tipo}'}
     
     try:
-        # Headers para simular navegador
+       
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -187,16 +187,15 @@ def buscar_rankings_investidor10(tipo: str) -> Dict[str, Any]:
                                 if 'percent' in classes_str.lower():
                                     tipo_valor = 'percent'
                                 else:
-                                    # Se tem % no texto e não tem R$/US$, é percentual
+                                   
                                     if '%' in valor_texto and 'R$' not in valor_texto and 'US$' not in valor_texto:
                                         tipo_valor = 'percent'
                                     else:
                                         tipo_valor = 'money'
                             
-                            # Manter formato original do site - NÃO adicionar % se não tiver
-                            # Apenas limpar espaços extras, manter tudo como está
+
                             valor_formatado = valor_texto
-                            valor = valor_texto  # Manter como string original
+                            valor = valor_texto  
                         
                         ranking_items.append({
                             'ticker': ticker,

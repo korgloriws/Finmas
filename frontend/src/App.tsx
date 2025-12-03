@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider } from './contexts/AuthContext'
+import { AnaliseProvider } from './contexts/AnaliseContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import SecurityCheck from './components/SecurityCheck'
@@ -25,6 +26,7 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
+        <AnaliseProvider>
         <Routes>
           {/* Rotas públicas */}
           <Route path="/login" element={<Suspense fallback={<LoadingSpinner text="Carregando página de login..." />}> <LoginPage /> </Suspense>} />
@@ -138,6 +140,7 @@ function App() {
           <Route path="/rankings-teste" element={<Navigate to="/rankings" replace />} />
 
         </Routes>
+        </AnaliseProvider>
       </ThemeProvider>
     </AuthProvider>
   )

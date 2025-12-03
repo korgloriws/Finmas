@@ -17,6 +17,27 @@ import {
   Line,
 } from 'recharts'
 
+// Tooltip customizado para Dividend Yield (apenas percentual)
+function DividendYieldTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    const data = payload[0]
+    if (data.dataKey === 'DividendYield' || data.name === 'Dividend Yield') {
+      return (
+        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+          <p className="text-sm font-semibold text-foreground mb-2">
+            {new Date(label).toLocaleDateString('pt-BR')}
+          </p>
+          <p className="text-sm text-foreground">
+            <span className="text-muted-foreground">Dividend Yield: </span>
+            <span className="font-semibold text-primary">{Number(data.value).toFixed(2)}%</span>
+          </p>
+        </div>
+      )
+    }
+  }
+  return null
+}
+
 // Componente para loading spinner
 function LoadingSpinner({ text }: { text: string }) {
   return (
@@ -154,20 +175,17 @@ export default function DetalhesChartsTab({
                   stroke="hsl(var(--muted-foreground))"
                   tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR')}
                 />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))', 
-                    borderRadius: '8px',
-                    color: 'hsl(var(--foreground))'
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(value) => `${value.toFixed(1)}%`}
+                  label={{ 
+                    value: 'Dividend Yield (%)', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' }
                   }}
-                  labelFormatter={(value) => new Date(value).toLocaleDateString('pt-BR')}
-                  formatter={(value: number, name: string) => [
-                    name === 'DividendYield' ? `${value.toFixed(2)}%` : formatCurrency(value), 
-                    name === 'DividendYield' ? 'Dividend Yield' : name === 'Dividend' ? 'Dividendo' : 'Preço'
-                  ]}
                 />
+                <Tooltip content={<DividendYieldTooltip />} />
                 <Bar dataKey="DividendYield" fill="hsl(var(--primary))" name="Dividend Yield" />
               </RechartsBarChart>
             </ResponsiveContainer>

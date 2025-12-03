@@ -1165,31 +1165,8 @@ export default function AnaliseListaTab() {
   } = useAnalise()
   
 
-  const [filtrosAcoes, setFiltrosAcoes] = useState<FiltrosAnalise>({
-    roe_min: 15,
-    dy_min: 12,
-    pl_min: 1,
-    pl_max: 15,
-    pvp_max: 2,
-    net_debt_ebitda_max: 3,
-    liq_min: 100000
-  })
-  
-  const [filtrosBdrs, setFiltrosBdrs] = useState<FiltrosAnalise>({
-    roe_min: 15,
-    dy_min: 3,
-    pl_min: 1,
-    pl_max: 15,
-    pvp_max: 2,
-    net_debt_ebitda_max: 3,
-    liq_min: 10000
-  })
-
-  const [filtrosFiis, setFiltrosFiis] = useState<FiltrosAnalise>({
-    dy_min: 12,
-    dy_max: 15,
-    liq_min: 500000
-  })
+  // Usar filtros do contexto
+  const { filtrosAcoes, filtrosBdrs, filtrosFiis, setFiltrosAcoes, setFiltrosBdrs, setFiltrosFiis } = useAnalise()
 
  
   const [loadingAcoes, setLoadingAcoes] = useState(false)
@@ -1263,14 +1240,7 @@ export default function AnaliseListaTab() {
     buscarMetadados()
   }, [ativosFiis])
 
-
-  const handleFiltroAcoesChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosAcoes(prev => ({ ...prev, [key]: value }))
-    if (autoSearchAcoes) {
-      setTimeout(() => handleBuscarAcoes(), 500)
-    }
-  }, [autoSearchAcoes])
-
+  // Funções de busca (declaradas primeiro para serem usadas nas funções de mudança de filtro)
   const handleBuscarAcoes = useCallback(async () => {
     setLoadingAcoes(true)
     setErrorAcoes(null)
@@ -1297,41 +1267,6 @@ export default function AnaliseListaTab() {
     }
   }, [filtrosBdrs])
 
-  const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosAcoes(prev => ({ ...prev, [key]: value }))
-    if (autoSearchAcoes) {
-      setTimeout(() => handleBuscarAcoes(), 500)
-    }
-  }, [autoSearchAcoes, handleBuscarAcoes])
-
-  const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosBdrs(prev => ({ ...prev, [key]: value }))
-    if (autoSearchBdrs) {
-      setTimeout(() => handleBuscarBdrs(), 500)
-    }
-  }, [autoSearchBdrs, handleBuscarBdrs])
-
-  const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosBdrs(prev => ({ ...prev, [key]: value }))
-    if (autoSearchBdrs) {
-      setTimeout(() => handleBuscarBdrs(), 500)
-    }
-  }, [autoSearchBdrs, handleBuscarBdrs])
-
-  const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
-    if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
-    }
-  }, [autoSearchFiis])
-
-  const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosFiis(prev => ({ ...prev, [key]: value }))
-    if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
-    }
-  }, [autoSearchFiis])
-
   const handleBuscarFiis = useCallback(async () => {
     setLoadingFiis(true)
     setErrorFiis(null)
@@ -1344,6 +1279,49 @@ export default function AnaliseListaTab() {
       setLoadingFiis(false)
     }
   }, [filtrosFiis])
+
+  // Funções de mudança de filtro
+  const handleFiltroAcoesChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
+    setFiltrosAcoes({ ...filtrosAcoes, [key]: value })
+    if (autoSearchAcoes) {
+      setTimeout(() => handleBuscarAcoes(), 500)
+    }
+  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
+
+  const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosAcoes({ ...filtrosAcoes, [key]: value })
+    if (autoSearchAcoes) {
+      setTimeout(() => handleBuscarAcoes(), 500)
+    }
+  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
+
+  const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
+    setFiltrosBdrs({ ...filtrosBdrs, [key]: value })
+    if (autoSearchBdrs) {
+      setTimeout(() => handleBuscarBdrs(), 500)
+    }
+  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
+
+  const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosBdrs({ ...filtrosBdrs, [key]: value })
+    if (autoSearchBdrs) {
+      setTimeout(() => handleBuscarBdrs(), 500)
+    }
+  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
+
+  const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
+    setFiltrosFiis({ ...filtrosFiis, [key]: value })
+    if (autoSearchFiis) {
+      setTimeout(() => handleBuscarFiis(), 500)
+    }
+  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
+
+  const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
+    setFiltrosFiis({ ...filtrosFiis, [key]: value })
+    if (autoSearchFiis) {
+      setTimeout(() => handleBuscarFiis(), 500)
+    }
+  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
 
   return (
     <div>

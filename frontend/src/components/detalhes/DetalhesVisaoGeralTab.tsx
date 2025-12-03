@@ -246,8 +246,8 @@ export default function DetalhesVisaoGeralTab({
             >
               <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
               <motion.img 
-                src={logoUrl} 
-                alt={ticker} 
+              src={logoUrl} 
+              alt={ticker} 
                 className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl sm:rounded-2xl object-cover border-2 border-primary/30 shadow-xl group-hover:shadow-2xl group-hover:border-primary/50 transition-all duration-500"
                 style={{ transformStyle: 'preserve-3d', objectFit: 'cover' }}
               />
@@ -266,33 +266,341 @@ export default function DetalhesVisaoGeralTab({
                 className="relative w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-primary via-primary/80 to-primary/60 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold text-xl sm:text-2xl shadow-xl group-hover:shadow-2xl transition-all duration-500"
                 style={{ transformStyle: 'preserve-3d' }}
               >
-                {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
+              {ticker.replace('.SA', '').replace('.sa', '').slice(0, 4)}
               </motion.div>
             </motion.div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap mb-2">
               <h2 className="text-xl sm:text-2xl font-bold text-foreground min-w-0 break-words">{info.longName}</h2>
-              <motion.span
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2 }}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border shrink-0 ${
-                strategyDetails.meets
-                  ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
-                  : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
-              }`}
-              title={strategyDetails.meets ? 'Dentro da estratégia' : 'Fora da estratégia'}
-            >
-              {strategyDetails.meets ? (
-                <CheckCircle className="w-3.5 h-3.5" />
-              ) : (
-                <XCircle className="w-3.5 h-3.5" />
-              )}
-                  <span className="hidden sm:inline whitespace-nowrap">
-                    {strategyDetails.meets ? 'Dentro da estratégia' : 'Fora da estratégia'}
-                  </span>
-                </motion.span>
+              
+              {/* Selo Dinâmico da Estratégia */}
+              <motion.div
+                key={strategyDetails.meets ? 'in-strategy' : 'out-strategy'}
+                initial={{ opacity: 0, scale: 0, rotate: -180, y: -20 }}
+                animate={{ 
+                  opacity: 1, 
+                  scale: 1,
+                  rotate: 0,
+                  y: 0
+                }}
+                transition={{ 
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 20,
+                  duration: 0.6
+                }}
+                whileHover={{ 
+                  scale: 1.08,
+                  rotate: [0, -3, 3, 0],
+                  transition: { duration: 0.3 }
+                }}
+                className="relative shrink-0"
+              >
+                {strategyDetails.meets ? (
+                  // Selo VERDE - Na Estratégia
+                  <motion.div
+                    className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white overflow-visible cursor-pointer"
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)',
+                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      borderRadius: '8px 8px 8px 8px',
+                    }}
+                    animate={{
+                      boxShadow: [
+                        '0 0 20px rgba(16, 185, 129, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.1)',
+                        '0 0 35px rgba(16, 185, 129, 0.7), inset 0 0 25px rgba(255, 255, 255, 0.2)',
+                        '0 0 20px rgba(16, 185, 129, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.1)',
+                      ],
+                    }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    title="✅ Está dentro da estratégia"
+                  >
+                    {/* Brilho metálico animado */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent"
+                      animate={{
+                        opacity: [0.3, 0.6, 0.3],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Brilho deslizante */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent"
+                      animate={{
+                        x: ['-100%', '200%'],
+                      }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 3,
+                        ease: 'linear'
+                      }}
+                    />
+                    
+                    {/* Efeito de pulso externo */}
+                    <motion.div
+                      className="absolute -inset-2 bg-green-400/30 blur-md rounded-lg"
+                      style={{
+                        clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      }}
+                      animate={{
+                        opacity: [0.3, 0.6, 0.3],
+                        scale: [1, 1.1, 1]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Partículas de brilho */}
+                    {[...Array(3)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute w-1 h-1 bg-white rounded-full"
+                        style={{
+                          left: `${20 + i * 30}%`,
+                          top: `${30 + i * 20}%`,
+                        }}
+                        animate={{
+                          opacity: [0, 1, 0],
+                          scale: [0, 1.5, 0],
+                          y: [0, -10, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: i * 0.3,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    ))}
+                    
+                    <span className="relative z-10 flex items-center gap-2">
+                      <motion.div
+                        animate={{ 
+                          rotate: [0, 360],
+                          scale: [1, 1.1, 1]
+                        }}
+                        transition={{
+                          rotate: {
+                            duration: 3,
+                            repeat: Infinity,
+                            ease: "linear"
+                          },
+                          scale: {
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                          }
+                        }}
+                      >
+                        <CheckCircle className="w-5 h-5" strokeWidth={3} />
+                      </motion.div>
+                      <motion.span 
+                        className="hidden sm:inline whitespace-nowrap"
+                        animate={{
+                          textShadow: [
+                            '0 0 5px rgba(255,255,255,0.5)',
+                            '0 0 10px rgba(255,255,255,0.8)',
+                            '0 0 5px rgba(255,255,255,0.5)',
+                          ]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        Na Estratégia
+                      </motion.span>
+                      <motion.span 
+                        className="sm:hidden"
+                        animate={{
+                          scale: [1, 1.2, 1]
+                        }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        ✓
+                      </motion.span>
+                    </span>
+                  </motion.div>
+                ) : (
+                  // Selo VERMELHO - Fora da Estratégia
+                  <motion.div
+                    className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white overflow-visible cursor-pointer"
+                    style={{
+                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%)',
+                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      borderRadius: '8px 8px 8px 8px',
+                    }}
+                    animate={{
+                      boxShadow: [
+                        '0 0 15px rgba(239, 68, 68, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.1)',
+                        '0 0 30px rgba(239, 68, 68, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.15)',
+                        '0 0 15px rgba(239, 68, 68, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.1)',
+                      ],
+                    }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    title="❌ Está fora da estratégia"
+                  >
+                    {/* Brilho metálico animado */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-transparent"
+                      animate={{
+                        opacity: [0.2, 0.4, 0.2],
+                      }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Efeito de ondas */}
+                    <motion.div
+                      className="absolute inset-0"
+                      animate={{
+                        background: [
+                          'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.15) 0%, transparent 50%)',
+                          'radial-gradient(circle at 70% 50%, rgba(255,255,255,0.15) 0%, transparent 50%)',
+                          'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.15) 0%, transparent 50%)',
+                        ],
+                      }}
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Linha de brilho deslizante */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                      animate={{
+                        x: ['-100%', '200%'],
+                      }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 3.5,
+                        ease: 'linear'
+                      }}
+                    />
+                    
+                    {/* Efeito de pulso externo */}
+                    <motion.div
+                      className="absolute -inset-2 bg-red-400/20 blur-md rounded-lg"
+                      style={{
+                        clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      }}
+                      animate={{
+                        opacity: [0.2, 0.4, 0.2],
+                        scale: [1, 1.05, 1]
+                      }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Partículas de alerta */}
+                    {[...Array(3)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute w-1 h-1 bg-white/60 rounded-full"
+                        style={{
+                          left: `${20 + i * 30}%`,
+                          top: `${30 + i * 20}%`,
+                        }}
+                        animate={{
+                          opacity: [0, 0.8, 0],
+                          scale: [0, 1.2, 0],
+                          y: [0, -8, 0],
+                        }}
+                        transition={{
+                          duration: 2.5,
+                          repeat: Infinity,
+                          delay: i * 0.4,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    ))}
+                    
+                    <span className="relative z-10 flex items-center gap-2">
+                      <motion.div
+                        animate={{ 
+                          rotate: [0, -10, 10, 0],
+                          scale: [1, 1.1, 1]
+                        }}
+                        transition={{
+                          rotate: {
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                          },
+                          scale: {
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                          }
+                        }}
+                      >
+                        <XCircle className="w-5 h-5" strokeWidth={3} />
+                      </motion.div>
+                      <motion.span 
+                        className="hidden sm:inline whitespace-nowrap"
+                        animate={{
+                          textShadow: [
+                            '0 0 5px rgba(255,255,255,0.3)',
+                            '0 0 8px rgba(255,255,255,0.5)',
+                            '0 0 5px rgba(255,255,255,0.3)',
+                          ]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        Fora da Estratégia
+                      </motion.span>
+                      <motion.span 
+                        className="sm:hidden"
+                        animate={{
+                          scale: [1, 1.2, 1],
+                          rotate: [0, -5, 5, 0]
+                        }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        ✗
+                      </motion.span>
+                    </span>
+                  </motion.div>
+                )}
+              </motion.div>
             </div>
             <div className="w-full mt-2 flex items-center gap-1 sm:gap-2 text-xs text-muted-foreground flex-wrap">
               <span className="hidden md:inline">Critérios:</span>
