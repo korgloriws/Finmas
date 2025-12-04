@@ -4780,10 +4780,10 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 for future in as_completed(future_to_ticker):
                     try:
                         tk, hist = future.result()
-                ticker_to_hist[tk] = hist
-            except Exception:
+                        ticker_to_hist[tk] = hist
+                    except Exception:
                         tk = future_to_ticker[future]
-                ticker_to_hist[tk] = None
+                        ticker_to_hist[tk] = None
 
 
         def price_on_or_before(hist_df, dt):
