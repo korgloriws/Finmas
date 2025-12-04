@@ -2715,14 +2715,14 @@ def api_get_proventos():
                 try:
                     resultado_ativo = future.result()
                     resultado.append(resultado_ativo)
-            except Exception as e:
+                except Exception as e:
                     ticker = future_to_ticker[future]
-                resultado.append({
-                    'ticker': ticker,
-                    'nome': ticker,
-                    'proventos': [],
+                    resultado.append({
+                        'ticker': ticker,
+                        'nome': ticker,
+                        'proventos': [],
                         'erro': f'Erro ao processar: {str(e)}'
-                })
+                    })
         
         return jsonify(resultado)
         
