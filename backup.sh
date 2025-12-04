@@ -4,8 +4,8 @@
 # Executar via cron: 0 2 * * * /caminho/para/backup.sh
 
 # Configurações
-BACKUP_DIR="/root/backups/finmas"
-DATA_DIR="./data/bancos_usuarios"
+BACKUP_DIR="/opt/finmas/backups"
+DATA_DIR="/opt/finmas/data/bancos_usuarios"
 DATE=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=7
 
