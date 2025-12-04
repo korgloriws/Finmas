@@ -744,10 +744,10 @@ export default function DetalhesPage() {
         
         return {
           Date: dividendDateStr,
-          Dividend: dividend,
+        Dividend: dividend,
           DividendYield: dividendYield,
-          Price: price
-        }
+        Price: price
+      }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())

@@ -4756,7 +4756,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             try:
                 yf_ticker = yf.Ticker(tk)
                 hist = yf_ticker.history(start=data_ini - timedelta(days=5), end=data_fim + timedelta(days=5))
-                
+               
                 try:
                     if hasattr(hist.index, 'tz') and hist.index.tz is not None:
                         hist.index = hist.index.tz_localize(None)
@@ -4780,10 +4780,10 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 for future in as_completed(future_to_ticker):
                     try:
                         tk, hist = future.result()
-                        ticker_to_hist[tk] = hist
-                    except Exception:
+                ticker_to_hist[tk] = hist
+            except Exception:
                         tk = future_to_ticker[future]
-                        ticker_to_hist[tk] = None
+                ticker_to_hist[tk] = None
 
 
         def price_on_or_before(hist_df, dt):

@@ -1162,31 +1162,31 @@ def _buscar_info_ticker_para_comparacao(ticker):
     Função auxiliar para buscar informações de um ticker.
     Usada para paralelização no endpoint /api/comparar.
     """
-    try:
+            try:
         ticker_original = ticker.strip().upper()
         if '.' not in ticker_original and len(ticker_original) <= 6:
             ticker_yf = ticker_original + '.SA'
-        else:
+                else:
             ticker_yf = ticker_original
-        
-        acao = yf.Ticker(ticker_yf)
-        info = acao.info or {}
-        
+                
+                acao = yf.Ticker(ticker_yf)
+                info = acao.info or {}
+                
         return {
             "ticker": ticker_original,
-            "nome": info.get('longName', '-'),
-            "preco_atual": info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose'),
-            "pl": info.get('trailingPE'),
-            "pvp": info.get('priceToBook'),
-            "dy": info.get('dividendYield'),
-            "roe": info.get('returnOnEquity'),
-            "setor": info.get('sector', '-'),
-            "pais": info.get('country', '-'),
+                    "nome": info.get('longName', '-'),
+                    "preco_atual": info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose'),
+                    "pl": info.get('trailingPE'),
+                    "pvp": info.get('priceToBook'),
+                    "dy": info.get('dividendYield'),
+                    "roe": info.get('returnOnEquity'),
+                    "setor": info.get('sector', '-'),
+                    "pais": info.get('country', '-'),
         }
-    except Exception as e:
+            except Exception as e:
         return {
             "ticker": ticker.strip().upper(),
-            "nome": f"Erro: {str(e)}",
+                    "nome": f"Erro: {str(e)}",
             "preco_atual": None,
             "pl": None,
             "pvp": None,
@@ -1240,14 +1240,14 @@ def api_comparar_ativos():
                     resultados.append({
                         "ticker": ticker_normalized,
                         "nome": "Erro: Ticker não processado",
-                        "preco_atual": None,
-                        "pl": None,
-                        "pvp": None,
-                        "dy": None,
-                        "roe": None,
-                        "setor": "-",
-                        "pais": "-"
-                    })
+                    "preco_atual": None,
+                    "pl": None,
+                    "pvp": None,
+                    "dy": None,
+                    "roe": None,
+                    "setor": "-",
+                    "pais": "-"
+                })
         
         return jsonify(resultados)
     except Exception as e:
@@ -2662,7 +2662,7 @@ def api_get_proventos():
                     ticker_normalizado = f"{ticker}.SA"
                 else:
                     ticker_normalizado = ticker
-                
+
                 ativo = yf.Ticker(ticker_normalizado)
                 dividendos = ativo.dividends
                 
@@ -2670,14 +2670,14 @@ def api_get_proventos():
                     proventos = []
                     for data, valor in dividendos.items():
                         data_sem_timezone = data.replace(tzinfo=None)
-                        
+
                         if data_inicio is None or data_sem_timezone >= data_inicio:
                             proventos.append({
                                 'data': data.strftime('%Y-%m-%d'),
                                 'valor': float(valor),
                                 'tipo': 'Dividendo'
                             })
-                    
+
                     info = ativo.info
                     nome = info.get('longName', ticker_normalizado)
                     
@@ -2715,14 +2715,14 @@ def api_get_proventos():
                 try:
                     resultado_ativo = future.result()
                     resultado.append(resultado_ativo)
-                except Exception as e:
+            except Exception as e:
                     ticker = future_to_ticker[future]
-                    resultado.append({
-                        'ticker': ticker,
-                        'nome': ticker,
-                        'proventos': [],
+                resultado.append({
+                    'ticker': ticker,
+                    'nome': ticker,
+                    'proventos': [],
                         'erro': f'Erro ao processar: {str(e)}'
-                    })
+                })
         
         return jsonify(resultado)
         
@@ -2734,62 +2734,62 @@ def _buscar_proventos_ativo(ativo, data_inicio):
     Função auxiliar para buscar proventos de um ativo.
     Usada para paralelização no endpoint /api/carteira/proventos-recebidos.
     """
-    try:
-        ticker = ativo['ticker']
-        quantidade = ativo['quantidade']
+            try:
+                ticker = ativo['ticker']
+                quantidade = ativo['quantidade']
         data_aquisicao = ativo.get('data_adicao')
-        
-        if not ticker.endswith('.SA') and not '.' in ticker:
-            ticker_normalizado = f"{ticker}.SA"
-        else:
-            ticker_normalizado = ticker
-        
-        ativo_yf = yf.Ticker(ticker_normalizado)
-        dividendos = ativo_yf.dividends
-        
-        if dividendos is not None and not dividendos.empty:
-            proventos_recebidos = []
-            for data, valor in dividendos.items():
-                # Converter para datetime sem timezone para comparação
-                data_sem_timezone = data.replace(tzinfo=None)
                 
-                # Só considerar dividendos pagos após a data de aquisição
-                if data_aquisicao:
-                    try:
-                        data_aquisicao_dt = datetime.strptime(data_aquisicao, '%Y-%m-%d %H:%M:%S')
-                        if data_sem_timezone < data_aquisicao_dt:
-                            continue  # Pular dividendos pagos antes da aquisição
-                    except ValueError:
-                        # Se não conseguir fazer o parse, tentar só a data
-                        try:
-                            data_aquisicao_dt = datetime.strptime(data_aquisicao, '%Y-%m-%d')
-                            if data_sem_timezone < data_aquisicao_dt:
-                                continue  # Pular dividendos pagos antes da aquisição
-                        except ValueError:
-                            # Se ainda não conseguir, ignorar a data de aquisição
-                            pass
+                if not ticker.endswith('.SA') and not '.' in ticker:
+                    ticker_normalizado = f"{ticker}.SA"
+                else:
+                    ticker_normalizado = ticker
                 
-                if data_inicio is None or data_sem_timezone >= data_inicio:
-                    valor_recebido = float(valor) * quantidade
-                    proventos_recebidos.append({
-                        'data': data.strftime('%Y-%m-%d'),
-                        'valor_unitario': float(valor),
-                        'quantidade': quantidade,
-                        'valor_recebido': valor_recebido,
-                        'tipo': 'Dividendo'
-                    })
-            
-            if proventos_recebidos:
-                info = ativo_yf.info
-                nome = info.get('longName', ticker_normalizado)
+                ativo_yf = yf.Ticker(ticker_normalizado)
+                dividendos = ativo_yf.dividends
                 
+                if dividendos is not None and not dividendos.empty:
+                    proventos_recebidos = []
+                    for data, valor in dividendos.items():
+                        # Converter para datetime sem timezone para comparação
+                        data_sem_timezone = data.replace(tzinfo=None)
+                        
+                        # Só considerar dividendos pagos após a data de aquisição
+                        if data_aquisicao:
+                            try:
+                                data_aquisicao_dt = datetime.strptime(data_aquisicao, '%Y-%m-%d %H:%M:%S')
+                                if data_sem_timezone < data_aquisicao_dt:
+                                    continue  # Pular dividendos pagos antes da aquisição
+                            except ValueError:
+                                # Se não conseguir fazer o parse, tentar só a data
+                                try:
+                                    data_aquisicao_dt = datetime.strptime(data_aquisicao, '%Y-%m-%d')
+                                    if data_sem_timezone < data_aquisicao_dt:
+                                        continue  # Pular dividendos pagos antes da aquisição
+                                except ValueError:
+                                    # Se ainda não conseguir, ignorar a data de aquisição
+                                    pass
+                        
+                        if data_inicio is None or data_sem_timezone >= data_inicio:
+                            valor_recebido = float(valor) * quantidade
+                            proventos_recebidos.append({
+                                'data': data.strftime('%Y-%m-%d'),
+                                'valor_unitario': float(valor),
+                                'quantidade': quantidade,
+                                'valor_recebido': valor_recebido,
+                                'tipo': 'Dividendo'
+                            })
+                    
+                    if proventos_recebidos:
+                        info = ativo_yf.info
+                        nome = info.get('longName', ticker_normalizado)
+                        
                 return {
-                    'ticker': ticker,
-                    'nome': nome,
-                    'quantidade_carteira': quantidade,
-                    'data_aquisicao': data_aquisicao,
-                    'proventos_recebidos': proventos_recebidos,
-                    'total_recebido': sum(p['valor_recebido'] for p in proventos_recebidos)
+                            'ticker': ticker,
+                            'nome': nome,
+                            'quantidade_carteira': quantidade,
+                            'data_aquisicao': data_aquisicao,
+                            'proventos_recebidos': proventos_recebidos,
+                            'total_recebido': sum(p['valor_recebido'] for p in proventos_recebidos)
                 }
         return None
     except Exception as e:
@@ -2841,10 +2841,10 @@ def api_get_proventos_recebidos():
                     resultado_ativo = future.result()
                     if resultado_ativo is not None:
                         resultado.append(resultado_ativo)
-                except Exception as e:
+            except Exception as e:
                     ativo = future_to_ativo[future]
                     print(f"Erro ao processar proventos para {ativo.get('ticker', 'desconhecido')}: {str(e)}")
-                    continue
+                continue
         
         return jsonify(resultado)
         

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: finmas-app
+    ports:
+      - "127.0.0.1:8080:8080"  # Apenas localhost (Nginx vai expor)
+    volumes:
+      # Persistência dos bancos SQLite
+      - ./data/bancos_usuarios:/app/backend/bancos_usuarios
+      # Logs
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=production
+      - PORT=8080
+      # NÃO definir DATABASE_URL = sistema usa SQLite automaticamente
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+

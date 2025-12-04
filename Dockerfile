@@ -42,7 +42,10 @@ RUN mkdir -p /app/frontend/dist/icons \
 
 EXPOSE 8080
 
-# Rodar via gunicorn na porta $PORT (Fly.io define automaticamente)
+# Rodar via gunicorn otimizado para KVM2 (2 vCPUs, 8GB RAM)
+# -w 2: 2 workers (otimizado para 2 vCPUs)
+# -k gthread: threads para I/O bound (yfinance)
+# --threads 4: 4 threads por worker (total: 8 threads simultâneas)
 CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 4 -t 120 -b 0.0.0.0:${PORT:-8080} app:server"]
 
 
