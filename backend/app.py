@@ -1162,31 +1162,31 @@ def _buscar_info_ticker_para_comparacao(ticker):
     Função auxiliar para buscar informações de um ticker.
     Usada para paralelização no endpoint /api/comparar.
     """
-            try:
+    try:
         ticker_original = ticker.strip().upper()
         if '.' not in ticker_original and len(ticker_original) <= 6:
             ticker_yf = ticker_original + '.SA'
-                else:
+        else:
             ticker_yf = ticker_original
-                
-                acao = yf.Ticker(ticker_yf)
-                info = acao.info or {}
-                
+            
+        acao = yf.Ticker(ticker_yf)
+        info = acao.info or {}
+        
         return {
             "ticker": ticker_original,
-                    "nome": info.get('longName', '-'),
-                    "preco_atual": info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose'),
-                    "pl": info.get('trailingPE'),
-                    "pvp": info.get('priceToBook'),
-                    "dy": info.get('dividendYield'),
-                    "roe": info.get('returnOnEquity'),
-                    "setor": info.get('sector', '-'),
-                    "pais": info.get('country', '-'),
+            "nome": info.get('longName', '-'),
+            "preco_atual": info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose'),
+            "pl": info.get('trailingPE'),
+            "pvp": info.get('priceToBook'),
+            "dy": info.get('dividendYield'),
+            "roe": info.get('returnOnEquity'),
+            "setor": info.get('sector', '-'),
+            "pais": info.get('country', '-'),
         }
-            except Exception as e:
+    except Exception as e:
         return {
             "ticker": ticker.strip().upper(),
-                    "nome": f"Erro: {str(e)}",
+            "nome": f"Erro: {str(e)}",
             "preco_atual": None,
             "pl": None,
             "pvp": None,
