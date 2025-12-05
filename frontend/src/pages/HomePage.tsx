@@ -201,14 +201,15 @@ export default function HomePage() {
   })
 
   
-  // Histórico da carteira - carregamento sob demanda
+  // OTIMIZAÇÃO: Histórico da carteira - carregar junto no batch inicial para exibir gráficos imediatamente
+  // Mas usar cache se já estiver disponível
   const { data: historicoCarteira } = useQuery({
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: 'always',
+    refetchOnMount: false, // Usar cache se disponível (já carregado antes)
     enabled: !!user && !!carteira, 
     staleTime: 10 * 60 * 1000, // 10 minutos
   })

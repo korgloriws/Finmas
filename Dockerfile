@@ -42,10 +42,11 @@ RUN mkdir -p /app/frontend/dist/icons \
 
 EXPOSE 8080
 
-# Rodar via gunicorn otimizado para KVM2 (2 vCPUs, 8GB RAM)
-# -w 2: 2 workers (otimizado para 2 vCPUs)
-# -k gthread: threads para I/O bound (yfinance)
-# --threads 4: 4 threads por worker (total: 8 threads simultâneas)
-CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 4 -t 120 -b 0.0.0.0:${PORT:-8080} app:server"]
+# Rodar via gunicorn otimizado para Hostinger KVM (2 vCPUs, 8GB RAM)
+# -w 2: 2 workers (um por vCPU - aproveita todos os núcleos)
+# -k gthread: threads para I/O bound (yfinance, requisições HTTP)
+# --threads 8: 8 threads por worker (total: 16 threads simultâneas)
+# Com 8GB RAM e baixo uso atual, podemos usar mais threads por worker
+CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 8 -t 120 -b 0.0.0.0:${PORT:-8080} app:server"]
 
 

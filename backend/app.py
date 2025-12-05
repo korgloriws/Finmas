@@ -1205,10 +1205,9 @@ def api_comparar_ativos():
         if not tickers:
             return jsonify({"error": "Nenhum ticker fornecido"}), 400
         
-        # Paralelização: busca todos os tickers ao mesmo tempo
-        # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
+        # OTIMIZAÇÃO: Aumentado para 200 workers para processar muito mais rápido
         resultados = []
-        max_workers = min(len(tickers), 5)  # Limitar a 5 workers (reduz uso de RAM ~50%)
+        max_workers = min(len(tickers), 200)  # Até 200 workers simultâneos
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submete todas as tarefas de uma vez
@@ -1218,7 +1217,7 @@ def api_comparar_ativos():
             }
             
             # Coleta resultados conforme terminam (mantém ordem original)
-            # OTIMIZAÇÃO: Adicionar pequeno delay a cada 3 resultados para evitar sobrecarga
+            # Delay menor (a cada 50 requisições) para não sobrecarregar yfinance
             import time
             ticker_to_result = {}
             completed_count = 0
@@ -1226,8 +1225,8 @@ def api_comparar_ativos():
                 resultado = future.result()
                 ticker_to_result[resultado["ticker"]] = resultado
                 completed_count += 1
-                # Delay a cada 3 requisições para evitar sobrecarga de RAM
-                if completed_count % 3 == 0:
+                # Delay a cada 50 requisições para evitar rate limit do yfinance
+                if completed_count % 50 == 0:
                     time.sleep(0.1)  # 100ms de pausa
             
             # Reordena resultados para manter ordem original dos tickers
@@ -1590,7 +1589,7 @@ def api_batch():
                         # Buscar proventos em paralelo usando função existente
                         # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
                         resultado = []
-                        max_workers = min(len(carteira), 5)  # Limitar a 5 workers (reduz uso de RAM ~50%)
+                        max_workers = min(len(carteira), 200)  # Até 200 workers simultâneos
                         
                         with ThreadPoolExecutor(max_workers=max_workers) as executor:
                             future_to_ativo = {
@@ -2702,7 +2701,7 @@ def api_get_proventos():
                 }
         
         # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
-        max_workers = min(len(tickers), 5)  # Limitar a 5 workers (reduz uso de RAM ~50%)
+        max_workers = min(len(tickers), 200)  # Até 200 workers simultâneos
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submete todas as tarefas
             future_to_ticker = {

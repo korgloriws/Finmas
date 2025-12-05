@@ -1541,10 +1541,10 @@ def processar_ativos(lista, tipo):
     if not lista:
         return []
     
-    # Paralelização: busca informações de múltiplos tickers simultaneamente
-    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
+    # OTIMIZAÇÃO: Aumentado para 200 workers (com 8GB RAM e 2 vCPUs, suporta bem)
+    # Processa muito mais rápido sem sobrecarregar o yfinance
     dados = []
-    max_workers = min(len(lista), 5)  # Limitar a 5 workers (reduz uso de RAM)
+    max_workers = min(len(lista), 200)  # Até 200 workers simultâneos
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -1554,7 +1554,7 @@ def processar_ativos(lista, tipo):
         }
         
         # Coleta resultados conforme terminam
-        # OTIMIZAÇÃO: Adicionar pequeno delay a cada 3 resultados para evitar sobrecarga
+        # Delay menor (a cada 50 requisições) para não sobrecarregar yfinance
         completed_count = 0
         for future in as_completed(future_to_ticker):
             try:
@@ -1562,8 +1562,8 @@ def processar_ativos(lista, tipo):
                 if resultado is not None:
                     dados.append(resultado)
                 completed_count += 1
-                # Delay a cada 3 requisições para evitar sobrecarga de RAM
-                if completed_count % 3 == 0:
+                # Delay a cada 50 requisições para evitar rate limit do yfinance
+                if completed_count % 50 == 0:
                     time.sleep(0.1)  # 100ms de pausa
             except Exception as e:
                 ticker = future_to_ticker[future]
@@ -1833,10 +1833,9 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
     if not lista_ativos:
         return []
     
-    # Paralelização: busca informações de múltiplos tickers simultaneamente
-    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
+    # OTIMIZAÇÃO: Aumentado para 200 workers para processar muito mais rápido
     dados = []
-    max_workers = min(len(lista_ativos), 5)  # Limitar a 5 workers (reduz uso de RAM)
+    max_workers = min(len(lista_ativos), 200)  # Até 200 workers simultâneos
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -1883,10 +1882,9 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
     if not fiis:
         return []
     
-    # Paralelização: busca informações de múltiplos FIIs simultaneamente
-    # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
+    # OTIMIZAÇÃO: Aumentado para 200 workers para processar muito mais rápido
     dados = []
-    max_workers = min(len(fiis), 5)  # Limitar a 5 workers (reduz uso de RAM)
+    max_workers = min(len(fiis), 200)  # Até 200 workers simultâneos
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submete todas as tarefas
@@ -2705,8 +2703,9 @@ def obter_precos_batch(tickers):
         if tem_crypto:
             taxa_usd_brl = obter_taxa_usd_brl()
         
-        # Rate limiting: processar em lotes de 20 tickers para evitar rate limits
-        batch_size = 20
+        # OTIMIZAÇÃO: Processar em lotes de 200 tickers (limite seguro do yfinance)
+        # yfinance suporta até ~2000 req/min, então 200 por batch com delay de 0.1s é seguro
+        batch_size = 200
         precos_totais = {}
         
         for i in range(0, len(tickers), batch_size):
@@ -2716,13 +2715,13 @@ def obter_precos_batch(tickers):
             # Normalizar tickers para o formato do Yahoo Finance
             normalized_tickers = [_normalize_ticker_for_yf(ticker) for ticker in batch_tickers]
             
-            # Buscar todos os preços de uma vez usando yfinance
+            # Buscar todos os preços de uma vez usando yfinance (batch nativo)
             ticker_objects = yf.Tickers(' '.join(normalized_tickers))
             
-            # Processar cada ticker do lote atual
-            for i, ticker in enumerate(batch_tickers):
+            # Processar cada ticker do lote atual em paralelo usando ThreadPoolExecutor
+            def processar_ticker(idx, ticker):
                 try:
-                    normalized = normalized_tickers[i]
+                    normalized = normalized_tickers[idx]
                     ticker_obj = ticker_objects.tickers[normalized]
                 
                     # Obter informações do ticker
@@ -2746,23 +2745,38 @@ def obter_precos_batch(tickers):
                         else:
                             preco_final = preco_usd
                         
-                        precos_totais[ticker] = {
+                        return (ticker, {
                             'preco_atual': preco_final,
                             'dy': info.get('dividendYield', None) if info else None,
                             'pl': info.get('trailingPE', None) if info else None,
                             'pvp': info.get('priceToBook', None) if info else None,
                             'roe': info.get('returnOnEquity', None) if info else None
-                        }
+                        })
                     else:
                         print(f"[AVISO] Nao foi possivel obter preco para {ticker}")
+                        return None
                             
                 except Exception as e:
                     print(f"[AVISO] Erro ao obter preco para {ticker}: {e}")
-                    continue
+                    return None
             
-            # Pequena pausa entre lotes para evitar rate limits
+            # Processar em paralelo com até 200 workers (um por ticker no batch)
+            max_workers = min(len(batch_tickers), 200)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(processar_ticker, idx, ticker): ticker 
+                    for idx, ticker in enumerate(batch_tickers)
+                }
+                
+                for future in as_completed(futures):
+                    resultado = future.result()
+                    if resultado:
+                        ticker, dados = resultado
+                        precos_totais[ticker] = dados
+            
+            # Pequena pausa entre lotes para evitar rate limits (reduzido para 0.1s)
             if i + batch_size < len(tickers):
-                time.sleep(0.5)  # 500ms de pausa entre lotes
+                time.sleep(0.1)  # 100ms de pausa entre lotes (suficiente com batch maior)
         
         print(f"[OK] Batch concluido: {len(precos_totais)} precos obtidos de {len(tickers)} tickers")
         return precos_totais
@@ -4767,8 +4781,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 return (tk, None)
         
         if tickers:
-            # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
-            max_workers = min(len(tickers), 5)  # Limitar a 5 workers (reduz uso de RAM)
+            # OTIMIZAÇÃO: Aumentado para 200 workers para processar histórico muito mais rápido
+            max_workers = min(len(tickers), 200)  # Até 200 workers simultâneos
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submete todas as tarefas
                 future_to_ticker = {
@@ -4843,7 +4857,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         
         # Paralelização: busca histórico de índices simultaneamente
         def _buscar_indice_historico(key, candidates):
-            """Função auxiliar para buscar histórico de um índice"""
+           
             for cand in candidates:
                 try:
                     h = yf.Ticker(cand).history(start=data_ini - timedelta(days=5), end=data_fim + timedelta(days=5))
@@ -4858,9 +4872,9 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                     continue
             return (key, None)
         
-        # Buscar todos os índices em paralelo
+
         indices_hist = {}
-        with ThreadPoolExecutor(max_workers=3) as executor:  # Apenas 3 índices
+        with ThreadPoolExecutor(max_workers=200) as executor:  
             future_to_key = {
                 executor.submit(_buscar_indice_historico, key, candidates): key 
                 for key, candidates in indices_map.items()
@@ -4906,7 +4920,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         except Exception:
             ipca_series = [None for _ in datas_labels]
 
-        # CDI acumulado (base 100) por mês usando série diária (SGS 12)
+
         cdi_series = []
         try:
             import requests
@@ -4919,7 +4933,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             r = requests.get(url_cdi, timeout=10)
             if r.ok:
                 arr = r.json() or []
-                # Ordenar por data
+                
                 def _parse_br_date(d):
                     try:
                         dd, mm, yy = d.split('/')
@@ -4939,7 +4953,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                         taxa_aa = float(str(valor).replace(',', '.'))
                     except Exception:
                         continue
-                    # Fator diário aproximado com base 252
+                    
                     try:
                         daily_factor = (1.0 + taxa_aa/100.0) ** (1.0/252.0)
                     except Exception:
@@ -4968,7 +4982,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
 
 
         def reduce_by_granularity(labels, series_dict, gran):
-            # semanal não reduz; mensal/maximo não reduzem
+
             if gran in ('mensal', 'maximo', 'semanal'):
                 return labels, series_dict
             keep_months = {
@@ -4981,11 +4995,11 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             idxs = []
             for i, lab in enumerate(labels):
                 try:
-                    if '-' in lab and len(lab) == 7:  # YYYY-MM
+                    if '-' in lab and len(lab) == 7:  
                         _, m = lab.split('-')
                         m_int = int(m)
                     else:
-                        # weekly labels YYYY-MM-DD -> usar mês
+                        
                         parts = lab.split('-')
                         m_int = int(parts[1]) if len(parts) >= 2 else 12
                 except Exception:
@@ -5006,9 +5020,6 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         }
         datas_labels, series_dict = reduce_by_granularity(datas_labels, series_dict, gran)
 
-        # Construir série de retorno por preço (exclui aportes/retiradas)
-        # Método: mantém alocação do início do subperíodo e calcula retorno do subperíodo
-        # carteia_price_base começa em 100 e multiplica por (V_curr/V_prev) usando quantidades no início do subperíodo
         carteira_price_base = []
         if pontos:
             base_val = 100.0
@@ -5031,15 +5042,14 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 if V_prev and V_prev > 0:
                     sub_return = V_cur / V_prev
                     base_val = base_val * sub_return
-                # Se não há V_prev, mantém base
+               
                 carteira_price_base.append(base_val)
-        # Ajustar carteira_price_base à mesma granularidade e labels
+
         if gran == 'semanal':
             labels_full = [pt.strftime('%Y-%m-%d') for pt in pontos]
         else:
             labels_full = [pt.strftime('%Y-%m') for pt in pontos]
-        # Mapear labels_full -> carteira_price_base e reduzir por gran (mesmo filtro já foi aplicado acima para outras séries)
-        # Como reduce_by_granularity pode ter reduzido datas_labels, precisamos alinhar
+      
         carteira_price_series = []
         label_to_price = {labels_full[i]: carteira_price_base[i] for i in range(len(labels_full))} if pontos else {}
         for lab in datas_labels:

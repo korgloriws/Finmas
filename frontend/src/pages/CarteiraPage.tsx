@@ -218,9 +218,11 @@ export default function CarteiraPage() {
   })
 
   
+  // OTIMIZAÇÃO: Carregar indicadores apenas na aba de ativos (onde são usados)
   const { data: indicadores } = useQuery({
     queryKey: ['indicadores'],
     queryFn: carteiraService.getIndicadores,
+    enabled: activeTab === 'ativos', // Só carrega na aba principal
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   })
@@ -258,27 +260,31 @@ export default function CarteiraPage() {
   }, [user, queryClient])
 
 
+  // OTIMIZAÇÃO: Carregar dados do tesouro apenas quando necessário (aba de ativos para renda fixa)
   const { data: tesouroData } = useQuery({
     queryKey: ['tesouro-titulos'],
     queryFn: carteiraService.getTesouroTitulos,
+    enabled: activeTab === 'ativos', // Só carrega na aba principal
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   })
 
   
+  // OTIMIZAÇÃO: Carregar proventos recebidos apenas nas abas que precisam (proventos, projecao)
   const { data: proventosRecebidos, isLoading: loadingProventosRecebidos } = useQuery({
     queryKey: ['proventos-recebidos', user, filtroProventos],
     queryFn: () => carteiraService.getProventosRecebidos(filtroProventos),
-    enabled: !!user && !!carteira && carteira.length > 0,
+    enabled: !!user && !!carteira && carteira.length > 0 && (activeTab === 'proventos' || activeTab === 'projecao'),
     retry: 1,
     refetchOnWindowFocus: false,
   })
 
 
+  // OTIMIZAÇÃO: Carregar histórico apenas nas abas que precisam (projecao, graficos)
   const { data: historicoCarteira, isLoading: loadingHistorico } = useQuery({
     queryKey: ['historico-carteira', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
-    enabled: !!user,
+    enabled: !!user && (activeTab === 'projecao' || activeTab === 'graficos'),
     retry: 3,
     staleTime: 10 * 60 * 1000, // 10 minutos de cache (histórico muda pouco)
     refetchOnWindowFocus: false,
