@@ -1361,7 +1361,7 @@ def spa_404_fallback(_e):
 def api_get_carteira():
     
     try:
-        # Proteção contra troca de usuário entre abas: valida o usuário esperado (opcional)
+     
         try:
             expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
         except Exception:
