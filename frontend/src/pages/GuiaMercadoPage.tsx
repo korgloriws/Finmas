@@ -10,7 +10,7 @@ import GuiaRendaVariavelInternacionalTab from '../components/guia/GuiaRendaVaria
 import GuiaRendaFixaInternacionalTab from '../components/guia/GuiaRendaFixaInternacionalTab'
 import GuiaTesouroDiretoTab from '../components/guia/GuiaTesouroDiretoTab'
 import { TrendingUp, BarChart3 } from 'lucide-react'
-import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,  Legend } from 'recharts'
+import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from '../components/LazyChart'
 
 type Strategy = {
   key: string

@@ -1,4 +1,4 @@
-import  { useState, useMemo, useEffect, useRef, memo } from 'react'
+import  { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 // import { useLazyData } from '../hooks/useLazyData' // Para uso futuro
 import { Link } from 'react-router-dom'
@@ -10,7 +10,6 @@ import {
   Wallet, 
   CreditCard, 
   ArrowUpRight,
-  ArrowDownRight,
   Building2,
   Eye,
   EyeOff,
@@ -55,10 +54,15 @@ import {
   Legend,
   Label
 } from '../components/LazyChart'
-import { carteiraService, homeService, rankingService, ativoService, batchService } from '../services/api'
-import { formatCurrency, formatPercentage } from '../utils/formatters'
-import { normalizeTicker } from '../utils/tickerUtils'
-import AtivosDetalhesModal from '../components/carteira/AtivosDetalhesModal'
+import { carteiraService, homeService, batchService } from '../services/api'
+import { formatCurrency } from '../utils/formatters'
+// Lazy loading de componentes pesados
+import { lazy, Suspense } from 'react'
+import CardPrincipal from '../components/home/CardPrincipal'
+import InsightCard from '../components/home/InsightCard'
+
+const AtivosDetalhesModal = lazy(() => import('../components/carteira/AtivosDetalhesModal'))
+const TopRankingsCarousel = lazy(() => import('../components/home/TopRankingsCarousel'))
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -109,9 +113,7 @@ export default function HomePage() {
   }
 
   
-  // Batch request: agrupa carteira, indicadores e resumo em uma única requisição
-  // OTIMIZAÇÃO: Cache agressivo - carrega apenas uma vez por login
-  // Reduz latência de ~400-600ms para ~150ms (3-4x mais rápido)
+
   const { data: batchData, isLoading: loadingBatch, isFetching: isFetchingBatch } = useQuery({
     queryKey: ['batch-home', user, mesAtual, anoAtual],
     queryFn: async () => {
@@ -202,7 +204,7 @@ export default function HomePage() {
   })
 
   
-  // OTIMIZAÇÃO: Histórico da carteira - cache agressivo, só recarrega quando mudar período
+  
   const { data: historicoCarteira } = useQuery({
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
@@ -516,145 +518,6 @@ export default function HomePage() {
     return insights
   }
 
-  const CardPrincipal = ({ 
-    title, 
-    value, 
-    subtitle, 
-    icon: Icon, 
-    to, 
-    trend,
-    loading = false,
-    delay = 0
-  }: {
-    title: string
-    value: string
-    subtitle?: string
-    icon: any
-    to: string
-    trend?: { value: number; isPositive: boolean }
-    loading?: boolean
-    delay?: number
-  }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-    >
-      <Link to={to} className="block touch-manipulation">
-        <div className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:shadow-lg sm:hover:shadow-2xl transition-all duration-300 cursor-pointer min-h-[100px] sm:min-h-[120px] touch-manipulation">
-          {/* Background pattern */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        
-          <div className="relative z-10 h-full flex flex-col">
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
-                <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
-              </div>
-              {trend && !loading && (
-                <motion.div 
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className={`flex items-center gap-1 px-2 sm:px-2 py-1 rounded-full text-xs font-semibold ${
-                    trend.isPositive 
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                  }`}
-                >
-                  {trend.isPositive ? <ArrowUpRight size={10} className="sm:w-3 sm:h-3" /> : <ArrowDownRight size={10} className="sm:w-3 sm:h-3" />}
-                  <span className="hidden xs:inline">{trend.value}%</span>
-                </motion.div>
-              )}
-            </div>
-            
-            <div className="space-y-1 flex-1">
-              <h3 className="text-sm sm:text-base font-semibold text-foreground leading-tight">{title}</h3>
-              {loading ? (
-                <div className="animate-pulse">
-                  <div className="h-4 sm:h-6 bg-muted rounded w-16 sm:w-24"></div>
-                </div>
-              ) : (
-                <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">{value}</p>
-              )}
-              {subtitle && <p className="text-xs sm:text-sm text-muted-foreground leading-tight">{subtitle}</p>}
-            </div>
-            
-            <div className="mt-2 sm:mt-3 flex items-center text-xs text-muted-foreground">
-              <span>Ver detalhes</span>
-              <ArrowUpRight className="w-3 h-3 sm:w-3 sm:h-3 ml-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-            </div>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-  )
-
-  // Componente de estatística melhorado
-
-  // Componente de insight melhorado
-  const InsightCard = ({ 
-    title, 
-    message, 
-    type = 'info',
-    icon: Icon,
-    delay = 0
-  }: {
-    title: string
-    message: string
-    type?: 'success' | 'warning' | 'info'
-    icon: any
-    delay?: number
-  }) => {
-    const colors = {
-      success: {
-        bg: 'bg-primary/5',
-        border: 'border-primary/20',
-        iconBg: 'bg-primary/10',
-        iconColor: 'text-primary',
-        titleColor: 'text-foreground',
-        messageColor: 'text-muted-foreground'
-      },
-      warning: {
-        bg: 'bg-destructive/5',
-        border: 'border-destructive/20',
-        iconBg: 'bg-destructive/10',
-        iconColor: 'text-destructive',
-        titleColor: 'text-foreground',
-        messageColor: 'text-muted-foreground'
-      },
-      info: {
-        bg: 'bg-primary/5',
-        border: 'border-primary/20',
-        iconBg: 'bg-primary/10',
-        iconColor: 'text-primary',
-        titleColor: 'text-foreground',
-        messageColor: 'text-muted-foreground'
-      }
-    }
-    const color = colors[type]
-    
-    return (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay }}
-        whileHover={{ scale: 1.02 }}
-        className={`p-3 sm:p-4 ${color.bg} rounded-lg sm:rounded-xl border ${color.border} hover:shadow-lg transition-all duration-200`}
-      >
-        <div className="flex items-start gap-2 sm:gap-3">
-          <div className={`p-1.5 sm:p-2 rounded-md sm:rounded-lg ${color.iconBg} flex-shrink-0`}>
-            <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${color.iconColor}`} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold ${color.titleColor} mb-1 sm:mb-2 text-sm sm:text-base leading-tight`}>{title}</h3>
-            <p className={`text-xs sm:text-sm ${color.messageColor} leading-relaxed`}>{message}</p>
-          </div>
-        </div>
-      </motion.div>
-    )
-  }
 
 
 
@@ -1464,301 +1327,7 @@ export default function HomePage() {
     )
   }
 
-  // Componente de carrossel com melhores ativos dos rankings
-  // Memoizado para evitar re-renders desnecessários
-  const TopRankingsCarousel = memo(({ delay = 0 }: { delay?: number }) => {
-    const carouselRef = useRef<HTMLDivElement>(null)
-    const scrollInitializedRef = useRef(false)
-    const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-    // Buscar rankings de todos os tipos
-    const { data: rankingsAcoes } = useQuery({
-      queryKey: ['rankings-top-acoes'],
-      queryFn: () => rankingService.getRankingsInvestidor10('acoes'),
-      staleTime: 10 * 60 * 1000,
-      retry: 2,
-    })
-
-    const { data: rankingsFiis } = useQuery({
-      queryKey: ['rankings-top-fiis'],
-      queryFn: () => rankingService.getRankingsInvestidor10('fiis'),
-      staleTime: 10 * 60 * 1000,
-      retry: 2,
-    })
-
-    const { data: rankingsBdrs } = useQuery({
-      queryKey: ['rankings-top-bdrs'],
-      queryFn: () => rankingService.getRankingsInvestidor10('bdrs'),
-      staleTime: 10 * 60 * 1000,
-      retry: 2,
-    })
-
-    const { data: rankingsCriptos } = useQuery({
-      queryKey: ['rankings-top-criptos'],
-      queryFn: () => rankingService.getRankingsInvestidor10('criptos'),
-      staleTime: 10 * 60 * 1000,
-      retry: 2,
-    })
-
-    // Pegar o primeiro item de cada tipo de ranking de cada categoria
-    // Usar uma chave estável baseada no conteúdo para evitar reinicializações
-    const topAtivos = useMemo(() => {
-      const ativos: Array<{
-        ticker: string
-        nome: string
-        rankingTipo: string
-        valor: string | number | null
-        tipo_valor: 'percent' | 'money' | null
-        categoria: string
-      }> = []
-      
-      // Função auxiliar para pegar o primeiro item de cada ranking
-      const processarRankings = (rankings: any, categoria: string) => {
-        if (!rankings?.rankings_por_tipo) return
-        
-        Object.entries(rankings.rankings_por_tipo).forEach(([tipoRanking, items]) => {
-          if (items && Array.isArray(items) && items.length > 0) {
-            ativos.push({
-              ticker: items[0].ticker,
-              nome: items[0].nome,
-              rankingTipo: tipoRanking,
-              valor: items[0].valor,
-              tipo_valor: items[0].tipo_valor,
-              categoria: categoria
-            })
-          }
-        })
-      }
-      
-      // Processar todos os tipos
-      processarRankings(rankingsAcoes, 'Ações')
-      processarRankings(rankingsFiis, 'FIIs')
-      processarRankings(rankingsBdrs, 'BDRs')
-      processarRankings(rankingsCriptos, 'Criptos')
-      
-      return ativos
-    }, [rankingsAcoes, rankingsFiis, rankingsBdrs, rankingsCriptos])
-
-
-    // Buscar logos dos top ativos
-    const tickersParaBuscar = useMemo(() => {
-      return topAtivos.map(a => normalizeTicker(a.ticker))
-    }, [topAtivos])
-
-    const { data: logos } = useQuery({
-      queryKey: ['logos-top-rankings', tickersParaBuscar.length],
-      queryFn: async () => {
-        if (tickersParaBuscar.length === 0) return {}
-        return await ativoService.getLogosBatch(tickersParaBuscar)
-      },
-      enabled: tickersParaBuscar.length > 0,
-      staleTime: 60 * 60 * 1000,
-    })
-
-    // Buscar cotações e variações
-    const { data: precosData } = useQuery({
-      queryKey: ['precos-top-rankings', tickersParaBuscar.join(',')],
-      queryFn: async () => {
-        if (tickersParaBuscar.length === 0) return {}
-        
-        const precos: Record<string, { preco: number; variacao: number }> = {}
-        
-        // Buscar preços em paralelo
-        await Promise.all(
-          tickersParaBuscar.map(async (ticker) => {
-            try {
-              const detalhes = await ativoService.getDetalhes(ticker)
-              if (detalhes?.info?.currentPrice) {
-                precos[ticker] = {
-                  preco: detalhes.info.currentPrice,
-                  variacao: detalhes.info.regularMarketChangePercent || 0
-                }
-              }
-            } catch (e) {
-              // Ignorar erros individuais
-            }
-          })
-        )
-        
-        return precos
-      },
-      enabled: tickersParaBuscar.length > 0,
-      staleTime: 2 * 60 * 1000, // 2 minutos
-    })
-
-    // Refs para manter estado do scroll
-    const isPausedRef = useRef(false)
-    const handlersRef = useRef<{
-      mouseEnter: (() => void) | null
-      mouseLeave: (() => void) | null
-    }>({ mouseEnter: null, mouseLeave: null })
-
-    // Auto-scroll do carrossel (girando continuamente)
-    // Só inicializa uma vez quando os dados são carregados pela primeira vez
-    useEffect(() => {
-      // Se já foi inicializado, não fazer nada
-      if (scrollInitializedRef.current) return
-      if (!topAtivos || topAtivos.length === 0) return
-
-      // Limpar timeout anterior se existir
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-
-      // Aguardar um pouco para garantir que o elemento está renderizado
-      timeoutRef.current = setTimeout(() => {
-        if (!carouselRef.current) return
-        if (scrollInitializedRef.current) return // Verificar novamente
-
-        const container = carouselRef.current
-        scrollInitializedRef.current = true // Marcar como inicializado
-
-        const scroll = () => {
-          if (!container || isPausedRef.current) return
-
-          const maxScroll = container.scrollWidth - container.clientWidth
-
-          // Se não há scroll necessário, não fazer nada
-          if (maxScroll <= 0) return
-
-          // Scroll suave de 1 pixel a cada 16ms (aproximadamente 60fps)
-          container.scrollLeft += 1
-
-          // Se chegou ao fim, volta ao início
-          if (container.scrollLeft >= maxScroll) {
-            container.scrollLeft = 0
-          }
-        }
-
-        // Pausar ao passar o mouse
-        const handleMouseEnter = () => {
-          isPausedRef.current = true
-        }
-        const handleMouseLeave = () => {
-          isPausedRef.current = false
-        }
-
-        handlersRef.current.mouseEnter = handleMouseEnter
-        handlersRef.current.mouseLeave = handleMouseLeave
-
-        container.addEventListener('mouseenter', handleMouseEnter)
-        container.addEventListener('mouseleave', handleMouseLeave)
-
-        // Iniciar o scroll a cada 16ms (60fps)
-        intervalIdRef.current = setInterval(scroll, 16)
-      }, 500) // Aguardar 500ms para garantir renderização
-
-      // Cleanup apenas quando o componente for desmontado
-      return () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
-      }
-    }, []) // Array vazio - só executa uma vez na montagem
-
-    // Cleanup apenas quando o componente for desmontado
-    useEffect(() => {
-      return () => {
-        if (intervalIdRef.current) {
-          clearInterval(intervalIdRef.current)
-          intervalIdRef.current = null
-        }
-        if (carouselRef.current && handlersRef.current.mouseEnter && handlersRef.current.mouseLeave) {
-          carouselRef.current.removeEventListener('mouseenter', handlersRef.current.mouseEnter)
-          carouselRef.current.removeEventListener('mouseleave', handlersRef.current.mouseLeave)
-        }
-        scrollInitializedRef.current = false
-      }
-    }, [])
-
-    if (!topAtivos || topAtivos.length === 0) {
-      return null
-    }
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay }}
-        className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg sm:shadow-xl"
-      >
-        {/* Carrossel estreito horizontal com auto-scroll */}
-        <div 
-          ref={carouselRef}
-          className="overflow-x-auto scrollbar-hide"
-          style={{ scrollBehavior: 'smooth' }}
-        >
-          <div className="flex gap-3 pb-2" style={{ minWidth: 'max-content' }}>
-            {topAtivos.map((ativo, index) => {
-              const tickerNormalizado = normalizeTicker(ativo.ticker)
-              const logoUrl = logos?.[tickerNormalizado] || logos?.[ativo.ticker] || null
-              const precoInfo = precosData?.[tickerNormalizado] || precosData?.[ativo.ticker]
-              const variacao = precoInfo?.variacao || 0
-              const preco = precoInfo?.preco
-
-              return (
-                <motion.div
-                  key={`${ativo.ticker}-${index}`}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: delay + index * 0.1 }}
-                  onClick={() => window.location.href = `/detalhes?ticker=${tickerNormalizado}`}
-                  className="flex-shrink-0 w-32 sm:w-40 bg-background border border-border rounded-lg p-3 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group"
-                >
-                  {/* Logo */}
-                  <div className="flex justify-center mb-2">
-                    {logoUrl ? (
-                      <img
-                        src={logoUrl}
-                        alt={ativo.ticker}
-                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover"
-                        style={{ objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white font-bold text-xs">
-                        {ativo.ticker.replace('.SA', '').replace('.sa', '').replace('-USD', '').slice(0, 4)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Ticker */}
-                  <div className="text-center mb-2">
-                    <p className="text-xs sm:text-sm font-bold text-foreground truncate">{ativo.ticker}</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{ativo.rankingTipo}</p>
-                  </div>
-
-                  {/* Cotação e Variação */}
-                  <div className="space-y-1">
-                    {preco ? (
-                      <p className="text-xs sm:text-sm font-semibold text-foreground text-center">
-                        {formatCurrency(preco)}
-                      </p>
-                    ) : null}
-                    {variacao !== 0 && (
-                      <div className={`flex items-center justify-center gap-1 ${
-                        variacao >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {variacao >= 0 ? (
-                          <ArrowUpRight className="w-3 h-3" />
-                        ) : (
-                          <ArrowDownRight className="w-3 h-3" />
-                        )}
-                        <span className="text-xs font-semibold">
-                          {formatPercentage(Math.abs(variacao))}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
-      </motion.div>
-    )
-  })
+  // TopRankingsCarousel foi extraído para componente separado com lazy loading
 
   // Componente para atalhos inteligentes baseados no contexto
   const SmartQuickActions = ({ delay = 0 }: { delay?: number }) => {
@@ -1996,8 +1565,10 @@ export default function HomePage() {
           </div>
         </motion.div>
 
-        {/* Carrossel de Melhores Ativos dos Rankings */}
-        <TopRankingsCarousel delay={0.3} />
+        {/* Carrossel de Melhores Ativos dos Rankings - Lazy Loaded */}
+        <Suspense fallback={<div className="h-32 bg-muted rounded-xl animate-pulse" />}>
+          <TopRankingsCarousel delay={0.3} />
+        </Suspense>
 
         {/* Cards principais com animações - Mobile First */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
@@ -2546,13 +2117,15 @@ export default function HomePage() {
       </div>
 
       {/* Modal de Detalhes dos Ativos */}
-      <AtivosDetalhesModal
-        isOpen={modalAberto}
-        onClose={() => setModalAberto(false)}
-        titulo={modalTitulo}
-        ativos={modalAtivos}
-        tipoFiltro={modalTipo}
-      />
+      <Suspense fallback={null}>
+        <AtivosDetalhesModal
+          isOpen={modalAberto}
+          onClose={() => setModalAberto(false)}
+          titulo={modalTitulo}
+          ativos={modalAtivos}
+          tipoFiltro={modalTipo}
+        />
+      </Suspense>
     </div>
   )
 } 

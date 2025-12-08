@@ -4,7 +4,7 @@ import { Plus, Trash2, Calendar, DollarSign, TrendingUp, TrendingDown, BarChart3
 import { marmitasService } from '../services/api'
 import { formatCurrency } from '../utils/formatters'
 import { Marmita, GastoMensal } from '../types'
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from '../components/LazyChart'
 
 export default function MarmitasPage() {
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])

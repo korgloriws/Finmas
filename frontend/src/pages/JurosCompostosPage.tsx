@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from '../components/LazyChart'
 
 type NumberInputEvent = React.ChangeEvent<HTMLInputElement>
 
