@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
@@ -157,6 +157,17 @@ export default function Layout({ children }: LayoutProps) {
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
             <span className="text-sm">Modo Escuro</span>
           </button>
+          <Link
+            to="/configuracoes"
+            className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
+              location.pathname === '/configuracoes'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+            }`}
+          >
+            <Settings size={18} />
+            <span className="text-sm">Configurações</span>
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -228,6 +239,17 @@ export default function Layout({ children }: LayoutProps) {
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
                 <span className="text-sm">Modo Escuro</span>
               </button>
+              <Link
+                to="/configuracoes"
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
+                  location.pathname === '/configuracoes'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Settings size={18} />
+                <span className="text-sm">Configurações</span>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

@@ -5,6 +5,8 @@ import api from '../services/api'
 
 interface AuthContextType {
   user: string | null
+  userRole: 'usuario' | 'admin' | null
+  isAdmin: boolean
   login: (username: string, password: string) => Promise<void>
   register: (nome: string, username: string, password: string, pergunta_seguranca?: string, resposta_seguranca?: string) => Promise<void>
   logout: () => Promise<void>
@@ -32,9 +34,12 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'usuario' | 'admin' | null>(null)
   const [loading, setLoading] = useState(true)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  
+  const isAdmin = userRole === 'admin'
 
   
   useEffect(() => {
@@ -71,12 +76,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const response = await api.get('/auth/usuario-atual')
       if (response.data.username) {
         setUser(response.data.username)
+        setUserRole(response.data.role || 'usuario')
       } else {
         setUser(null)
+        setUserRole(null)
       }
     } catch (error) {
-   
       setUser(null)
+      setUserRole(null)
     } finally {
       setLoading(false)
     }
@@ -104,6 +111,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       if (response.data.username) {
         setUser(response.data.username)
+        setUserRole(response.data.role || 'usuario')
       } else {
         throw new Error('Erro no login')
       }
@@ -202,6 +210,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await api.post('/auth/logout')
       setUser(null)
+      setUserRole(null)
       
       // Invalidar todo o cache do React Query para forçar recarregamento
       queryClient.clear()
@@ -212,6 +221,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error('Erro ao fazer logout:', error)
       // Mesmo com erro, limpar o estado local
       setUser(null)
+      setUserRole(null)
       queryClient.clear()
       navigate('/login', { replace: true })
     }
@@ -219,6 +229,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const value = {
     user,
+    userRole,
+    isAdmin,
     login,
     register,
     logout,

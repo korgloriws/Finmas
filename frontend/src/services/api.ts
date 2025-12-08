@@ -144,6 +144,40 @@ export const ativoService = {
   },
 }
 
+export const perfilService = {
+  obterPerfil: async () => {
+    const response = await api.get('/perfil')
+    return response.data
+  },
+  
+  atualizarPerfil: async (nome?: string, email?: string) => {
+    const response = await api.put('/perfil', { nome, email })
+    return response.data
+  },
+  
+  atualizarSenha: async (senhaAtual: string, novaSenha: string) => {
+    const response = await api.put('/perfil/senha', { senha_atual: senhaAtual, nova_senha: novaSenha })
+    return response.data
+  },
+  
+  excluirConta: async (confirmacao: string) => {
+    const response = await api.delete('/perfil/excluir', { data: { confirmacao } })
+    return response.data
+  },
+}
+
+export const adminService = {
+  listarUsuarios: async () => {
+    const response = await api.get('/admin/usuarios')
+    return response.data
+  },
+  
+  definirRole: async (username: string, role: 'usuario' | 'admin') => {
+    const response = await api.put(`/admin/usuarios/${username}/role`, { role })
+    return response.data
+  },
+}
+
 export const carteiraService = {
 
   getCarteira: async (): Promise<AtivoCarteira[]> => {

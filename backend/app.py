@@ -29,6 +29,9 @@ from models import (
 
     verificar_resposta_seguranca, alterar_senha_direta, atualizar_pergunta_seguranca,
     invalidar_todas_sessoes,
+    
+    obter_perfil_usuario, atualizar_perfil_usuario, atualizar_senha_usuario,
+    verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -121,6 +124,16 @@ except Exception:
 
 try:
     criar_tabela_usuarios()
+    # Garantir que o usuário "Mateus" seja admin
+    try:
+        usuario_mateus = buscar_usuario_por_username('Mateus')
+        if usuario_mateus and usuario_mateus.get('role') != 'admin':
+            definir_role_usuario('Mateus', 'admin')
+            print(" Usuário 'Mateus' definido como administrador")
+        elif usuario_mateus:
+            print(" Usuário 'Mateus' já é administrador")
+    except Exception as e:
+        print(f"INFO: Não foi possível verificar/definir admin para Mateus: {e}")
 except Exception as e:
     try:
         print(f"WARN: falha ao criar tabela de usuários na inicialização: {e}")
@@ -205,10 +218,15 @@ def api_login():
             set_usuario_atual(username)
            
             session_token = criar_sessao(username, duracao_segundos=3600)
+            
+            # Obter informações do perfil, incluindo role
+            perfil = obter_perfil_usuario(username)
+            role = perfil.get('role', 'usuario') if perfil else 'usuario'
            
             response = make_response(jsonify({
                 "message": "Login realizado com sucesso",
-                "username": username
+                "username": username,
+                "role": role
             }), 200)
 
            
@@ -287,13 +305,145 @@ def api_logout():
 
 @server.route("/api/auth/usuario-atual", methods=["GET"])
 def api_usuario_atual():
-
+    """Retorna informações do usuário atual, incluindo role"""
     try:
         usuario = get_usuario_atual()
         if usuario:
-            return jsonify({"username": usuario}), 200
+            perfil = obter_perfil_usuario(usuario)
+            if perfil:
+                return jsonify({
+                    "username": usuario,
+                    "nome": perfil.get('nome'),
+                    "email": perfil.get('email'),
+                    "role": perfil.get('role', 'usuario')
+                }), 200
+            return jsonify({"username": usuario, "role": "usuario"}), 200
         else:
             return jsonify({"error": "Nenhum usuário logado"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ==================== ENDPOINTS DE PERFIL E CONFIGURAÇÕES ====================
+
+@server.route("/api/perfil", methods=["GET"])
+def api_obter_perfil():
+    """Obtém o perfil do usuário atual"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        perfil = obter_perfil_usuario(usuario)
+        if perfil:
+            return jsonify(perfil), 200
+        return jsonify({"error": "Perfil não encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/perfil", methods=["PUT"])
+def api_atualizar_perfil():
+    """Atualiza o perfil do usuário atual"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        data = request.get_json()
+        nome = data.get('nome')
+        email = data.get('email')
+        
+        if atualizar_perfil_usuario(usuario, nome=nome, email=email):
+            perfil = obter_perfil_usuario(usuario)
+            return jsonify(perfil), 200
+        return jsonify({"error": "Erro ao atualizar perfil"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/perfil/senha", methods=["PUT"])
+def api_atualizar_senha():
+    """Atualiza a senha do usuário atual"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        data = request.get_json()
+        senha_atual = data.get('senha_atual')
+        nova_senha = data.get('nova_senha')
+        
+        if not senha_atual or not nova_senha:
+            return jsonify({"error": "Senha atual e nova senha são obrigatórias"}), 400
+        
+        # Verificar senha atual
+        if not verificar_senha(usuario, senha_atual):
+            return jsonify({"error": "Senha atual incorreta"}), 400
+        
+        if atualizar_senha_usuario(usuario, nova_senha):
+            return jsonify({"message": "Senha atualizada com sucesso"}), 200
+        return jsonify({"error": "Erro ao atualizar senha"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/perfil/excluir", methods=["DELETE"])
+def api_excluir_conta():
+    """Exclui a conta do usuário atual (LGPD)"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        data = request.get_json()
+        confirmacao = data.get('confirmacao')
+        
+        if confirmacao != 'EXCLUIR':
+            return jsonify({"error": "Confirmação inválida. Digite 'EXCLUIR' para confirmar"}), 400
+        
+        if excluir_conta_usuario(usuario):
+            # Fazer logout
+            invalidar_sessao(request.cookies.get('session_token'))
+            return jsonify({"message": "Conta excluída com sucesso"}), 200
+        return jsonify({"error": "Erro ao excluir conta"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ==================== ENDPOINTS ADMINISTRATIVOS ====================
+
+@server.route("/api/admin/usuarios", methods=["GET"])
+def api_listar_usuarios():
+    """Lista todos os usuários (apenas para admins)"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        
+        usuarios = listar_usuarios()
+        return jsonify(usuarios), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/admin/usuarios/<username>/role", methods=["PUT"])
+def api_definir_role(username):
+    """Define o role de um usuário (apenas para admins)"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        
+        data = request.get_json()
+        novo_role = data.get('role')
+        
+        if novo_role not in ['usuario', 'admin']:
+            return jsonify({"error": "Role inválido. Use 'usuario' ou 'admin'"}), 400
+        
+        if definir_role_usuario(username, novo_role):
+            return jsonify({"message": f"Role de {username} atualizado para {novo_role}"}), 200
+        return jsonify({"error": "Erro ao atualizar role"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2805,16 +2955,16 @@ def _buscar_proventos_ativo(ativo, data_inicio):
 
 @server.route("/api/carteira/proventos-recebidos", methods=["GET"])
 def api_get_proventos_recebidos():
-    """API para obter proventos recebidos baseado na carteira do usuário"""
+    
     try:
         periodo = request.args.get('periodo', 'total')
         
-        # Obter carteira do usuário
+
         carteira = obter_carteira()
         if not carteira:
             return jsonify([])
         
-        # Calcular data de início baseada no período
+       
         data_inicio = None
         if periodo != 'total':
             hoje = datetime.now()
@@ -2830,13 +2980,13 @@ def api_get_proventos_recebidos():
                 data_inicio = hoje - timedelta(days=365*5)
                 data_inicio = data_inicio.replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Paralelização: busca proventos de todos os ativos simultaneamente
+       
         resultado = []
-        # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
-        max_workers = min(len(carteira), 5)  # Limitar a 5 workers (reduz uso de RAM ~50%)
+    
+        max_workers = min(len(carteira), 5)  
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submete todas as tarefas
+ 
             future_to_ativo = {
                 executor.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo 
                 for ativo in carteira

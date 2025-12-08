@@ -19,6 +19,7 @@ const GuiaMercadoPage = lazy(() => import('./pages/GuiaMercadoPage'))
 const ConversorMoedasPage = lazy(() => import('./pages/ConversorMoedasPage'))
 const AgendaDividendosPage = lazy(() => import('./pages/AgendaDividendosPage'))
 const RankingsPage = lazy(() => import('./pages/RankingsPage'))
+const ConfiguracoesPage = lazy(() => import('./pages/ConfiguracoesPage'))
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 
@@ -130,6 +131,18 @@ function App() {
                 <Layout>
                   <Suspense fallback={<LoadingSpinner text="Carregando rankings..." />}>
                     <RankingsPage />
+                  </Suspense>
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/configuracoes" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <Suspense fallback={<LoadingSpinner text="Carregando configurações..." />}>
+                    <ConfiguracoesPage />
                   </Suspense>
                 </Layout>
               </SecurityCheck>

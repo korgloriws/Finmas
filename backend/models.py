@@ -1646,6 +1646,7 @@ def obter_todas_informacoes(ticker):
 
 
 def criar_tabela_usuarios():
+    """Cria a tabela de usuários e adiciona campos role e email se não existirem (migration)"""
     if _is_postgres():
         conn = _get_pg_conn()
         try:
@@ -1661,6 +1662,16 @@ def criar_tabela_usuarios():
                         data_cadastro TIMESTAMP NOT NULL
                     )
                 ''')
+                # Adicionar campos role e email se não existirem (migration)
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS role TEXT DEFAULT \'usuario\'')
+                except Exception:
+                    pass
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS email TEXT')
+                except Exception:
+                    pass
+                conn.commit()
         finally:
             conn.close()
     else:
@@ -1678,12 +1689,26 @@ def criar_tabela_usuarios():
             )
         ''')
         conn.commit()
+        
+        # Adicionar campos role e email se não existirem (migration)
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN role TEXT DEFAULT \'usuario\'')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Coluna já existe
+        
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN email TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Coluna já existe
+        
         conn.close()
 
-def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_seguranca=None):
+def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_seguranca=None, email=None, role='usuario'):
+    """Cadastra um novo usuário. Por padrão, role é 'usuario'. Admins devem ser criados manualmente."""
     senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     data_cadastro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
 
     resposta_hash = None
     if pergunta_seguranca and resposta_seguranca:
@@ -1695,9 +1720,10 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
             with conn.cursor() as c:
                 try:
                     c.execute('''
-                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro))
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role))
+                    conn.commit()
                     return True
                 except Exception:
                     return False
@@ -1707,8 +1733,8 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro) VALUES (?, ?, ?, ?, ?, ?)''',
-                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro))
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -1717,11 +1743,17 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
             conn.close()
 
 def buscar_usuario_por_username(username):
+    """Busca usuário por username, incluindo role e email"""
     if _is_postgres():
         conn = _get_pg_conn()
         try:
             with conn.cursor() as c:
-                c.execute('SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro FROM public.usuarios WHERE username = %s', (username,))
+                # Buscar todos os campos, incluindo role e email (se existirem)
+                c.execute('''
+                    SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
+                           COALESCE(role, 'usuario') as role, email
+                    FROM public.usuarios WHERE username = %s
+                ''', (username,))
                 row = c.fetchone()
                 if row:
                     return {
@@ -1731,7 +1763,9 @@ def buscar_usuario_por_username(username):
                         'senha_hash': row[3],
                         'pergunta_seguranca': row[4],
                         'resposta_seguranca_hash': row[5],
-                        'data_cadastro': row[6]
+                        'data_cadastro': row[6],
+                        'role': row[7] if len(row) > 7 else 'usuario',
+                        'email': row[8] if len(row) > 8 else None
                     }
                 return None
         finally:
@@ -1739,7 +1773,12 @@ def buscar_usuario_por_username(username):
     else:
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
-        c.execute('SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro FROM usuarios WHERE username = ?', (username,))
+        # Buscar todos os campos, incluindo role e email (se existirem)
+        c.execute('''
+            SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
+                   COALESCE(role, 'usuario') as role, email
+            FROM usuarios WHERE username = ?
+        ''', (username,))
         row = c.fetchone()
         conn.close()
         if row:
@@ -1750,7 +1789,9 @@ def buscar_usuario_por_username(username):
                 'senha_hash': row[3],
                 'pergunta_seguranca': row[4],
                 'resposta_seguranca_hash': row[5],
-                'data_cadastro': row[6]
+                'data_cadastro': row[6],
+                'role': row[7] if len(row) > 7 else 'usuario',
+                'email': row[8] if len(row) > 8 else None
             }
         return None
 
@@ -4781,7 +4822,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 return (tk, None)
         
         if tickers:
-            # OTIMIZAÇÃO: Aumentado para 200 workers para processar histórico muito mais rápido
+            
             max_workers = min(len(tickers), 200)  # Até 200 workers simultâneos
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submete todas as tarefas
@@ -4855,7 +4896,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         }
         indices_vals = {k: [] for k in indices_map.keys()}
         
-        # Paralelização: busca histórico de índices simultaneamente
+        
         def _buscar_indice_historico(key, candidates):
            
             for cand in candidates:
@@ -7022,3 +7063,185 @@ def executar_monte_carlo(n_simulacoes=10000, periodo_anos=5, confianca=95):
     except Exception as e:
         print(f"Erro na simulação Monte Carlo: {e}")
         return {"error": str(e)}
+
+
+# ==================== FUNÇÕES DE GERENCIAMENTO DE ROLES E PERFIL ====================
+
+def obter_perfil_usuario(username):
+    """Obtém informações do perfil do usuário (sem senha)"""
+    usuario = buscar_usuario_por_username(username)
+    if not usuario:
+        return None
+    return {
+        'id': usuario['id'],
+        'nome': usuario['nome'],
+        'username': usuario['username'],
+        'email': usuario.get('email'),
+        'role': usuario.get('role', 'usuario'),
+        'data_cadastro': usuario['data_cadastro']
+    }
+
+def atualizar_perfil_usuario(username, nome=None, email=None):
+    """Atualiza informações do perfil do usuário"""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                updates = []
+                params = []
+                if nome is not None:
+                    updates.append('nome = %s')
+                    params.append(nome)
+                if email is not None:
+                    updates.append('email = %s')
+                    params.append(email)
+                if not updates:
+                    return False
+                params.append(username)
+                c.execute(f'''
+                    UPDATE public.usuarios 
+                    SET {', '.join(updates)}
+                    WHERE username = %s
+                ''', params)
+                conn.commit()
+                return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            updates = []
+            params = []
+            if nome is not None:
+                updates.append('nome = ?')
+                params.append(nome)
+            if email is not None:
+                updates.append('email = ?')
+                params.append(email)
+            if not updates:
+                return False
+            params.append(username)
+            c.execute(f'''
+                UPDATE usuarios 
+                SET {', '.join(updates)}
+                WHERE username = ?
+            ''', params)
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def atualizar_senha_usuario(username, nova_senha):
+    """Atualiza a senha do usuário"""
+    senha_hash = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute('UPDATE public.usuarios SET senha_hash = %s WHERE username = %s', (senha_hash, username))
+                conn.commit()
+                return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute('UPDATE usuarios SET senha_hash = ? WHERE username = ?', (senha_hash, username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def verificar_role(username, role_requerido='admin'):
+    """Verifica se o usuário tem o role necessário"""
+    usuario = buscar_usuario_por_username(username)
+    if not usuario:
+        return False
+    role_usuario = usuario.get('role', 'usuario')
+    return role_usuario == role_requerido
+
+def definir_role_usuario(username, novo_role):
+    """Define o role de um usuário (apenas admin pode fazer isso)"""
+    if novo_role not in ['usuario', 'admin']:
+        return False
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute('UPDATE public.usuarios SET role = %s WHERE username = %s', (novo_role, username))
+                conn.commit()
+                return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute('UPDATE usuarios SET role = ? WHERE username = ?', (novo_role, username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def listar_usuarios(admin_only=False):
+    """Lista todos os usuários (apenas para admins)"""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                if admin_only:
+                    c.execute('SELECT id, nome, username, email, role, data_cadastro FROM public.usuarios WHERE role = %s', ('admin',))
+                else:
+                    c.execute('SELECT id, nome, username, email, role, data_cadastro FROM public.usuarios')
+                rows = c.fetchall()
+                return [{
+                    'id': row[0],
+                    'nome': row[1],
+                    'username': row[2],
+                    'email': row[3],
+                    'role': row[4] if len(row) > 4 else 'usuario',
+                    'data_cadastro': row[5]
+                } for row in rows]
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        if admin_only:
+            c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios WHERE role = ?', ('admin',))
+        else:
+            c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios')
+        rows = c.fetchall()
+        conn.close()
+        return [{
+            'id': row[0],
+            'nome': row[1],
+            'username': row[2],
+            'email': row[3],
+            'role': row[4] if len(row) > 4 else 'usuario',
+            'data_cadastro': row[5]
+        } for row in rows]
+
+def excluir_conta_usuario(username):
+    """Exclui a conta do usuário (LGPD)"""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                # Excluir usuário
+                c.execute('DELETE FROM public.usuarios WHERE username = %s', (username,))
+                conn.commit()
+                return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute('DELETE FROM usuarios WHERE username = ?', (username,))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
