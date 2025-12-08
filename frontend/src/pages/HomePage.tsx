@@ -40,7 +40,7 @@ import {
 // Lazy loading de componentes pesados do Recharts
 import { 
   AreaChart, 
-  PieChart as RechartsPieChart,
+  PieChart as RechartsPieChart, 
   BarChart,
   Area, 
   Pie, 
@@ -266,9 +266,9 @@ export default function HomePage() {
   const dadosPizza = Object.entries(ativosPorTipo).map(([tipo, valor]) => {
     const valorNumerico = typeof valor === 'number' ? valor : 0
     return {
-      name: tipo,
+    name: tipo,
       value: valorNumerico,
-      fill: getRandomColor(tipo),
+    fill: getRandomColor(tipo),
       percentage: totalInvestido > 0 ? ((valorNumerico / totalInvestido) * 100).toFixed(1) : '0'
     }
   })
@@ -1567,7 +1567,7 @@ export default function HomePage() {
 
         {/* Carrossel de Melhores Ativos dos Rankings - Lazy Loaded */}
         <Suspense fallback={<div className="h-32 bg-muted rounded-xl animate-pulse" />}>
-          <TopRankingsCarousel delay={0.3} />
+        <TopRankingsCarousel delay={0.3} />
         </Suspense>
 
         {/* Cards principais com animações - Mobile First */}
@@ -2118,13 +2118,13 @@ export default function HomePage() {
 
       {/* Modal de Detalhes dos Ativos */}
       <Suspense fallback={null}>
-        <AtivosDetalhesModal
-          isOpen={modalAberto}
-          onClose={() => setModalAberto(false)}
-          titulo={modalTitulo}
-          ativos={modalAtivos}
-          tipoFiltro={modalTipo}
-        />
+      <AtivosDetalhesModal
+        isOpen={modalAberto}
+        onClose={() => setModalAberto(false)}
+        titulo={modalTitulo}
+        ativos={modalAtivos}
+        tipoFiltro={modalTipo}
+      />
       </Suspense>
     </div>
   )

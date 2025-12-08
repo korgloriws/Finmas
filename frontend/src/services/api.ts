@@ -119,7 +119,7 @@ export const ativoService = {
     return response.data
   },
 
-  getFiiMetadata: async (ticker: string): Promise<{
+  getFiiMetadata: async (ticker: string, includePortfolio: boolean = false): Promise<{
     ticker: string
     tipo?: string
     segmento?: string
@@ -131,7 +131,11 @@ export const ativoService = {
   } | null> => {
     try {
       const normalizedTicker = normalizeTicker(ticker)
-      const response = await api.get(`/fii-metadata/${normalizedTicker}`)
+      // Por padrão, não inclui portfólio (otimização). Só inclui quando solicitado.
+      const url = includePortfolio 
+        ? `/fii-metadata/${normalizedTicker}?portfolio=true`
+        : `/fii-metadata/${normalizedTicker}`
+      const response = await api.get(url)
       return response.data
     } catch (error) {
       console.error('Erro ao buscar metadados de FII:', error)

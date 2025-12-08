@@ -166,15 +166,16 @@ export default function CarteiraPage() {
 
 
   // Carregamento prioritário - carteira principal
-  // OTIMIZAÇÃO: Cache de 5 minutos para evitar sobrecarga do servidor
+  // OTIMIZAÇÃO: Atualiza sempre que a aba é acessada (preços precisam estar atualizados)
   const { data: carteira, isLoading: loadingCarteira } = useQuery<AtivoCarteira[]>({
     queryKey: ['carteira', user], 
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user, 
-    staleTime: 5 * 60 * 1000, // 5 minutos de cache
+    staleTime: 2 * 60 * 1000, // 2 minutos - cache curto para preços atualizados
+    gcTime: 10 * 60 * 1000, // 10 minutos - mantém em cache por um tempo razoável
     refetchOnWindowFocus: false, // Não refazer ao focar janela
     refetchOnReconnect: false, // Não refazer ao reconectar
-    refetchOnMount: false, // Usar cache se disponível
+    refetchOnMount: true, // SEMPRE recarrega ao montar a aba para atualizar preços
   })
 
   const { data: tiposApi } = useQuery({
@@ -514,13 +515,15 @@ export default function CarteiraPage() {
     valor, 
     variacao, 
     icon: Icon, 
-    color = 'blue' 
+    color = 'blue',
+    loading = false
   }: { 
     label: string
     valor: string
     variacao?: number
     icon: any
     color?: string
+    loading?: boolean
   }) => (
     <div className="bg-card border border-border rounded-lg p-4 hover:shadow-lg transition-all duration-200">
       <div className="flex items-center justify-between mb-2">
@@ -528,7 +531,7 @@ export default function CarteiraPage() {
           <Icon className={`w-5 h-5 text-${color}-500`} />
           <span className="font-medium text-sm text-muted-foreground">{label}</span>
         </div>
-        {variacao !== undefined && (
+        {variacao !== undefined && !loading && (
           <div className={`flex items-center gap-1 text-sm ${
             variacao > 0 ? 'text-green-500' : variacao < 0 ? 'text-red-500' : 'text-gray-500'
           }`}>
@@ -537,7 +540,13 @@ export default function CarteiraPage() {
           </div>
         )}
       </div>
-      <div className="text-2xl font-bold">{valor}</div>
+      {loading ? (
+        <div className="animate-pulse">
+          <div className="h-8 bg-muted rounded w-24"></div>
+        </div>
+      ) : (
+        <div className="text-2xl font-bold">{valor}</div>
+      )}
     </div>
   )
 
@@ -588,31 +597,35 @@ export default function CarteiraPage() {
         </div>
       </div>
 
-      {/* Indicadores Visuais */}
+      {/* Indicadores Visuais - Renderizam imediatamente com skeletons */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <IndicadorVisual
           label="Valor Total"
           valor={ocultarValor ? '•••••••' : formatCurrency(valorTotal)}
           icon={DollarSign}
           color="green"
+          loading={loadingCarteira}
         />
         <IndicadorVisual
           label="Total de Ativos"
           valor={carteira?.length.toString() || '0'}
           icon={Target}
           color="blue"
+          loading={loadingCarteira}
         />
         <IndicadorVisual
           label="Ativos com DY"
           valor={`${ativosPositivos} / ${carteira?.length || 0}`}
           icon={TrendingUp}
           color="purple"
+          loading={loadingCarteira}
         />
         <IndicadorVisual
           label="Movimentações"
           valor={movimentacoes?.length.toString() || '0'}
           icon={Activity}
           color="orange"
+          loading={loadingCarteira}
         />
       </div>
 

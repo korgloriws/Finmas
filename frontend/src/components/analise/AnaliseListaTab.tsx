@@ -1213,7 +1213,7 @@ export default function AnaliseListaTab() {
         
         const promises = batch.map(async (fii) => {
           try {
-            const metadata = await ativoService.getFiiMetadata(fii.ticker)
+            const metadata = await ativoService.getFiiMetadata(fii.ticker, false) // false = sem portfólio (otimização)
             if (metadata) {
               newMetadataMap[fii.ticker] = {
                 tipo: metadata.tipo,

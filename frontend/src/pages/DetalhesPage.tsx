@@ -49,13 +49,27 @@ export default function DetalhesPage() {
 
   
   const isFiiBrasileiro = ticker && (ticker.toUpperCase().endsWith('11.SA') || ticker.toUpperCase().endsWith('11'))
+  
+  // OTIMIZAÇÃO: Carregar metadados básicos do FII sem portfólio (mais rápido)
   const { data: fiiMetadata } = useQuery({
     queryKey: ['fii-metadata', ticker],
-    queryFn: () => ativoService.getFiiMetadata(ticker),
+    queryFn: () => ativoService.getFiiMetadata(ticker, false), // false = sem portfólio
     enabled: Boolean(ticker) && Boolean(isFiiBrasileiro),
     staleTime: 60 * 60 * 1000, 
     retry: 1, 
   })
+
+  // OTIMIZAÇÃO: Carregar portfólio apenas quando necessário (aba overview ativa e é FII de tijolo)
+  const { data: fiiMetadataComPortfolio } = useQuery({
+    queryKey: ['fii-metadata-portfolio', ticker],
+    queryFn: () => ativoService.getFiiMetadata(ticker, true), // true = com portfólio
+    enabled: Boolean(ticker) && Boolean(isFiiBrasileiro) && activeTab === 'overview' && fiiMetadata?.tipo === 'Tijolo',
+    staleTime: 60 * 60 * 1000, 
+    retry: 1, 
+  })
+  
+  // Usar metadados com portfólio se disponível, senão usar os básicos
+  const fiiMetadataFinal = fiiMetadataComPortfolio || fiiMetadata
 
   // OTIMIZAÇÃO: Carregar histórico apenas quando necessário (aba charts)
   const { data: historico, isLoading: loadingHistorico } = useQuery<Array<Record<string, any>>>({
@@ -947,7 +961,7 @@ export default function DetalhesPage() {
                 strategyDetails={strategyDetails}
                 tipoAtivo={tipoAtivo}
                 fiiInfo={fiiInfo}
-                fiiMetadata={fiiMetadata}
+                fiiMetadata={fiiMetadataFinal}
                 grahamBadge={grahamBadge}
                 bazinBadge={bazinBadge}
                 enterpriseValue={enterpriseValue}

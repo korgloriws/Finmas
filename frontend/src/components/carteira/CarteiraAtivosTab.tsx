@@ -762,8 +762,23 @@ export default function CarteiraAtivosTab({
     <div className="space-y-6">
       {/* Formulário original removido: a adição de ativos acontece via modal */}
 
-      {/* Resumo da Carteira */}
-      {!loadingCarteira && carteira && carteira.length > 0 && (
+      {/* Resumo da Carteira - Renderiza imediatamente com skeleton */}
+      {loadingCarteira && (!carteira || carteira.length === 0) ? (
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-border rounded-lg p-3 sm:p-4 md:p-6 mb-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="animate-pulse h-6 bg-muted rounded w-40"></div>
+            <div className="animate-pulse h-8 bg-muted rounded w-32"></div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-card border border-border rounded-lg p-2 sm:p-3 md:p-4">
+                <div className="animate-pulse h-4 bg-muted rounded w-20 mb-2"></div>
+                <div className="animate-pulse h-8 bg-muted rounded w-16"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : carteira && carteira.length > 0 && (
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-border rounded-lg p-3 sm:p-4 md:p-6 mb-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
@@ -807,9 +822,49 @@ export default function CarteiraAtivosTab({
       )}
 
       {/* Tabelas por Tipo */}
-      {loadingCarteira ? (
-        <div className="text-center text-muted-foreground py-8">
-          Carregando carteira...
+      {/* Renderiza estrutura imediatamente com skeletons enquanto carrega */}
+      {loadingCarteira && (!carteira || carteira.length === 0) ? (
+        <div className="space-y-6">
+          {/* Skeleton do Resumo */}
+          <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-border rounded-lg p-3 sm:p-4 md:p-6 mb-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="animate-pulse h-6 bg-muted rounded w-40"></div>
+              <div className="animate-pulse h-8 bg-muted rounded w-32"></div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="bg-card border border-border rounded-lg p-2 sm:p-3 md:p-4">
+                  <div className="animate-pulse h-4 bg-muted rounded w-20 mb-2"></div>
+                  <div className="animate-pulse h-8 bg-muted rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Skeleton das Tabelas por Tipo */}
+          {[1, 2].map((i) => (
+            <div key={i} className="bg-card border border-border rounded-lg overflow-hidden shadow-lg mb-6">
+              <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="animate-pulse h-5 w-5 bg-muted rounded"></div>
+                    <div className="animate-pulse h-5 w-5 bg-muted rounded"></div>
+                    <div>
+                      <div className="animate-pulse h-5 bg-muted rounded w-32 mb-2"></div>
+                      <div className="animate-pulse h-4 bg-muted rounded w-48"></div>
+                    </div>
+                  </div>
+                  <div className="animate-pulse h-6 bg-muted rounded w-24"></div>
+                </div>
+              </div>
+              <div className="p-3 sm:p-4 md:p-6">
+                <div className="space-y-3">
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="animate-pulse h-16 bg-muted rounded"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : carteira && carteira.length > 0 ? (
         <div className="space-y-6">

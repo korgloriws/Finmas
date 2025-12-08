@@ -1062,7 +1062,11 @@ def api_get_ativo_details(ticker):
 @server.route("/api/fii-metadata/<ticker>", methods=["GET"])
 @cache.cached(timeout=3600, query_string=True)  # Cache de 1 hora
 def api_get_fii_metadata(ticker):
-
+    """
+    Obtém metadados do FII. 
+    Por padrão, NÃO inclui o portfólio (otimização de performance).
+    Para incluir o portfólio, use: ?portfolio=true
+    """
     try:
         ticker = ticker.strip().upper()
         
@@ -1071,8 +1075,11 @@ def api_get_fii_metadata(ticker):
         if not is_fii:
             return jsonify({"error": "Ticker não parece ser um FII brasileiro"}), 400
         
-        # Buscar metadados via scraping
-        metadata = obter_metadata_fii(ticker)
+        # Verificar se deve incluir portfólio (apenas quando solicitado)
+        include_portfolio = request.args.get('portfolio', 'false').lower() == 'true'
+        
+        # Buscar metadados via scraping (sem portfólio por padrão)
+        metadata = obter_metadata_fii(ticker, include_portfolio=include_portfolio)
         
         if metadata:
             return jsonify(metadata), 200
@@ -1193,9 +1200,9 @@ def _buscar_info_ticker_para_comparacao(ticker):
             "dy": None,
             "roe": None,
             "setor": "-",
-            "pais": "-"
+            "pais": "-",
         }
-
+          
 @server.route("/api/comparar", methods=["POST"])
 def api_comparar_ativos():
     try:
@@ -2844,7 +2851,7 @@ def api_get_proventos_recebidos():
                 except Exception as e:
                     ativo = future_to_ativo[future]
                     print(f"Erro ao processar proventos para {ativo.get('ticker', 'desconhecido')}: {str(e)}")
-                    continue
+                continue
         
         return jsonify(resultado)
         
