@@ -270,7 +270,7 @@ export default function CarteiraPage() {
   })
 
   
-  // OTIMIZAÇÃO: Carregar proventos recebidos apenas nas abas que precisam (proventos, projecao)
+  
   const { data: proventosRecebidos, isLoading: loadingProventosRecebidos } = useQuery({
     queryKey: ['proventos-recebidos', user, filtroProventos],
     queryFn: () => carteiraService.getProventosRecebidos(filtroProventos),
@@ -280,16 +280,16 @@ export default function CarteiraPage() {
   })
 
 
-  // OTIMIZAÇÃO: Carregar histórico apenas nas abas que precisam (projecao, graficos)
+
   const { data: historicoCarteira, isLoading: loadingHistorico } = useQuery({
     queryKey: ['historico-carteira', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     enabled: !!user && (activeTab === 'projecao' || activeTab === 'graficos'),
     retry: 3,
-    staleTime: 10 * 60 * 1000, // 10 minutos de cache (histórico muda pouco)
+    staleTime: 10 * 60 * 1000, 
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, // Usar cache se disponível
+    refetchOnMount: false, 
   })
 
 
@@ -404,7 +404,7 @@ export default function CarteiraPage() {
       setInputIndexadorPct(typeof item?.taxa_compra_aa === 'number' ? String(item.taxa_compra_aa) : '')
     } else if (idxNorm === 'IPCA') {
       setInputIndexador('IPCA')
-      // spread não disponível; manter vazio para cálculo aproximado
+      
       setInputIndexadorPct('')
     } else if (idxNorm === 'SELIC') {
       setInputIndexador('SELIC')

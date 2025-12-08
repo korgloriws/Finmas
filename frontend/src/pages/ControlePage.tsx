@@ -20,7 +20,22 @@ const ControleDespesaTab = lazy(() => import('../components/controle/ControleDes
 const ControleCartaoTab = lazy(() => import('../components/controle/ControleCartaoTab'))
 import { formatCurrency } from '../utils/formatters'
 import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, PieChart as RechartsPieChart, Pie, Cell, Area, ComposedChart, BarChart, Bar } from 'recharts'
+// Lazy loading de gráficos pesados
+import { 
+  ComposedChart,
+  PieChart as RechartsPieChart,
+  BarChart,
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Line, 
+  Pie, 
+  Cell, 
+  Area, 
+  Bar 
+} from '../components/LazyChart'
 
 // Categorias de despesas com ícones (copiado da ControleDespesaTab)
 const CATEGORIAS_DESPESAS = [
@@ -80,7 +95,7 @@ export default function ControlePage() {
   }, [])
 
 
-  // Carregamento prioritário - dados essenciais da aba financeiro
+  // Dados sempre carregam (são rápidos, estão no mesmo servidor)
   const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
     queryKey: ['receitas-despesas', filtroMes, filtroAno],
     queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),
@@ -97,17 +112,14 @@ export default function ControlePage() {
     staleTime: 1 * 60 * 1000, // 1 minuto
   })
 
-  // Carregamento secundário - gráficos (só quando necessário)
   const { data: dadosGraficoEvolucao } = useQuery<EvolucaoFinanceira[]>({
     queryKey: ['evolucao-financeira', filtroMes, filtroAno, periodoEvolucao],
     queryFn: () => controleService.getEvolucaoFinanceira(filtroMes, filtroAno),
     retry: 1,
     refetchOnWindowFocus: false,
-    enabled: abaAtiva === 'financeiro', // Só carrega na aba financeiro
     staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
-  // Query para comparação com mês anterior (sempre ativa)
   const { data: dadosComparacao } = useQuery<EvolucaoFinanceira[]>({
     queryKey: ['evolucao-financeira-comparacao', filtroMes, filtroAno],
     queryFn: () => {
@@ -117,16 +129,16 @@ export default function ControlePage() {
       return controleService.getEvolucaoFinanceira(mesAnteriorStr, anoAnterior.toString())
     },
     retry: 1,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
-  // Carregamento sob demanda - dados das abas específicas
+  // Dados das abas específicas - sempre carregam
   const { data: outros } = useQuery({
     queryKey: ['outros', filtroMes, filtroAno],
     queryFn: () => controleService.getOutros(filtroMes, filtroAno),
     retry: 1,
     refetchOnWindowFocus: false,
-    enabled: abaAtiva === 'despesas', // Só carrega na aba despesas
     staleTime: 2 * 60 * 1000, // 2 minutos
   })
 
@@ -135,7 +147,6 @@ export default function ControlePage() {
     queryFn: () => cartaoService.getCartoesCadastrados(),
     retry: 1,
     refetchOnWindowFocus: false,
-    enabled: abaAtiva === 'cartoes', // Só carrega na aba cartões
     staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
@@ -144,7 +155,6 @@ export default function ControlePage() {
     queryFn: () => marmitasService.getMarmitas(parseInt(filtroMes), parseInt(filtroAno)),
     retry: 1,
     refetchOnWindowFocus: false,
-    enabled: abaAtiva === 'alimentacao', // Só carrega na aba alimentação
     staleTime: 2 * 60 * 1000, // 2 minutos
   })
 

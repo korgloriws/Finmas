@@ -1904,6 +1904,89 @@ export default function HomePage() {
     )
   }
 
+  // Mostrar loading completo enquanto carrega dados iniciais
+  if (loadingBatch && !carteira && !resumoHome) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="text-center space-y-8 px-4 max-w-md w-full"
+        >
+          {/* Spinner principal */}
+          <div className="flex justify-center">
+            <div className="relative">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full"
+              />
+              <motion.div
+                animate={{ rotate: -360 }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 w-16 h-16 border-4 border-transparent border-r-primary/40 rounded-full"
+              />
+            </div>
+          </div>
+
+          {/* Texto principal */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-3"
+          >
+            <h2 className="text-xl font-semibold text-foreground">
+              Carregando Dashboard
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Preparando seus dados financeiros...
+            </p>
+          </motion.div>
+
+          {/* Indicadores de progresso */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="space-y-3"
+          >
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Activity className="w-4 h-4 animate-pulse text-primary" />
+              <span>Buscando informações da carteira</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <BarChart3 className="w-4 h-4 animate-pulse text-primary" style={{ animationDelay: '0.2s' }} />
+              <span>Carregando indicadores</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Wallet className="w-4 h-4 animate-pulse text-primary" style={{ animationDelay: '0.4s' }} />
+              <span>Preparando resumo financeiro</span>
+            </div>
+          </motion.div>
+
+          {/* Barra de progresso animada */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="w-full"
+          >
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-primary rounded-full"
+                initial={{ width: '0%' }}
+                animate={{ width: '100%' }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background scroll-smooth">
       <div className="container mx-auto px-2 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-8 safe-area-inset">
