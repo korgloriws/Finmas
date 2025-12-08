@@ -110,6 +110,7 @@ export default function HomePage() {
 
   
   // Batch request: agrupa carteira, indicadores e resumo em uma única requisição
+  // OTIMIZAÇÃO: Cache agressivo - carrega apenas uma vez por login
   // Reduz latência de ~400-600ms para ~150ms (3-4x mais rápido)
   const { data: batchData, isLoading: loadingBatch, isFetching: isFetchingBatch } = useQuery({
     queryKey: ['batch-home', user, mesAtual, anoAtual],
@@ -135,9 +136,10 @@ export default function HomePage() {
     retry: 3,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: 'always',
+    refetchOnMount: false, // Não recarrega ao montar - usa cache se disponível
     enabled: !!user,
-    staleTime: 10 * 60 * 1000, // 10 minutos
+    staleTime: 30 * 60 * 1000, // 30 minutos - cache mais longo
+    gcTime: 60 * 60 * 1000, // 1 hora - mantém em cache por mais tempo
   })
 
   // Extrair dados do batch com validação de tipo
@@ -176,9 +178,6 @@ export default function HomePage() {
     }
   }, [carteira])
 
-  // ==================== REFRESH AUTOMÁTICO REMOVIDO ====================
-  // Agora os dados só são carregados quando a página é aberta/clicada
-  // Sem atualizações periódicas automáticas
 
 
 
@@ -190,28 +189,30 @@ export default function HomePage() {
   }, [mesAtual, anoAtual])
 
 
-  // Resumo anterior (não precisa de batch, carrega sob demanda)
+  // Resumo anterior (cache agressivo - dados históricos não mudam)
   const { data: resumoAnterior } = useQuery({
     queryKey: ['home-resumo', user, prev.mes, prev.ano],
     queryFn: () => homeService.getResumo(prev.mes.toString(), prev.ano.toString()),
     retry: 3,
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // Usar cache se disponível
     enabled: !!user && !!resumoHome, 
-    staleTime: 5 * 60 * 1000, 
+    staleTime: 60 * 60 * 1000, // 1 hora - dados históricos não mudam
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas - mantém em cache por mais tempo
   })
 
   
-  // OTIMIZAÇÃO: Histórico da carteira - carregar junto no batch inicial para exibir gráficos imediatamente
-  // Mas usar cache se já estiver disponível
+  // OTIMIZAÇÃO: Histórico da carteira - cache agressivo, só recarrega quando mudar período
   const { data: historicoCarteira } = useQuery({
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, // Usar cache se disponível (já carregado antes)
+    refetchOnMount: false, // Usar cache se disponível - não recarrega ao montar
     enabled: !!user && !!carteira, 
-    staleTime: 10 * 60 * 1000, // 10 minutos
+    staleTime: 30 * 60 * 1000, // 30 minutos - cache mais longo
+    gcTime: 60 * 60 * 1000, // 1 hora - mantém em cache por mais tempo
   })
 
 
@@ -1904,89 +1905,7 @@ export default function HomePage() {
     )
   }
 
-  // Mostrar loading completo enquanto carrega dados iniciais
-  if (loadingBatch && !carteira && !resumoHome) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          className="text-center space-y-8 px-4 max-w-md w-full"
-        >
-          {/* Spinner principal */}
-          <div className="flex justify-center">
-            <div className="relative">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full"
-              />
-              <motion.div
-                animate={{ rotate: -360 }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 w-16 h-16 border-4 border-transparent border-r-primary/40 rounded-full"
-              />
-            </div>
-          </div>
-
-          {/* Texto principal */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-3"
-          >
-            <h2 className="text-xl font-semibold text-foreground">
-              Carregando Dashboard
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Preparando seus dados financeiros...
-            </p>
-          </motion.div>
-
-          {/* Indicadores de progresso */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="space-y-3"
-          >
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Activity className="w-4 h-4 animate-pulse text-primary" />
-              <span>Buscando informações da carteira</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <BarChart3 className="w-4 h-4 animate-pulse text-primary" style={{ animationDelay: '0.2s' }} />
-              <span>Carregando indicadores</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Wallet className="w-4 h-4 animate-pulse text-primary" style={{ animationDelay: '0.4s' }} />
-              <span>Preparando resumo financeiro</span>
-            </div>
-          </motion.div>
-
-          {/* Barra de progresso animada */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="w-full"
-          >
-            <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-primary rounded-full"
-                initial={{ width: '0%' }}
-                animate={{ width: '100%' }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              />
-            </div>
-          </motion.div>
-        </motion.div>
-      </div>
-    )
-  }
-
+  // Renderizar estrutura imediatamente - dados carregam em background
   return (
     <div className="min-h-screen bg-background scroll-smooth">
       <div className="container mx-auto px-2 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-8 safe-area-inset">
