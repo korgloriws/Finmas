@@ -203,10 +203,10 @@ def obter_dados_fii_fundsexplorer(ticker: str, include_portfolio: bool = False) 
         
         # Extrair PORTFÓLIO apenas se solicitado (otimização: não carrega automaticamente)
         if include_portfolio:
-        portfolio = extrair_portfolio_fundsexplorer(html, ticker_limpo)
-        if portfolio:
-            resultado['portfolio'] = portfolio
-            print(f"[PORTFÓLIO] Encontrado: {len(portfolio.get('imoveis', []))} imóveis, {len(portfolio.get('titulos', []))} títulos")
+            portfolio = extrair_portfolio_fundsexplorer(html, ticker_limpo)
+            if portfolio:
+                resultado['portfolio'] = portfolio
+                print(f"[PORTFÓLIO] Encontrado: {len(portfolio.get('imoveis', []))} imóveis, {len(portfolio.get('titulos', []))} títulos")
         
 
         if 'tipo' in resultado or 'segmento' in resultado:
