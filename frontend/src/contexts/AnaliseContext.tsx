@@ -60,7 +60,7 @@ export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
     roe_min: 15,
     dy_min: 3,
     pl_min: 1,
-    pl_max: 15,
+    pl_max: 30,
     pvp_max: 2,
     net_debt_ebitda_max: 3,
     liq_min: 10000
