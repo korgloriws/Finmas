@@ -33,6 +33,10 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copiar backend
 COPY backend /app/backend
 
+# Copiar script de entrypoint
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Copiar frontend build para ser servido pelo Flask
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 # Garantir ícones PWA no build caso não existam
@@ -41,6 +45,9 @@ RUN mkdir -p /app/frontend/dist/icons \
     && [ -f /app/frontend/dist/icons/icon-512.png ] || convert -size 512x512 canvas:#0f172a /app/frontend/dist/icons/icon-512.png
 
 EXPOSE 8080
+
+# Usar entrypoint para executar backup antes de iniciar
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Rodar via gunicorn otimizado para Hostinger KVM (2 vCPUs, 8GB RAM)
 # -w 2: 2 workers (um por vCPU - aproveita todos os núcleos)

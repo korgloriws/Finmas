@@ -1,0 +1,12 @@
+# Docker Compose para desenvolvimento local
+# Uso: docker-compose -f docker-compose.yml -f docker-compose.local.yml up
+
+version: '3.8'
+
+services:
+  app:
+    environment:
+      # Desabilitar backup automático em desenvolvimento local
+      - ENABLE_STARTUP_BACKUP=false
+      - ENVIRONMENT=development
+

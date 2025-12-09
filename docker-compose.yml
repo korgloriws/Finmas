@@ -9,11 +9,15 @@ services:
     volumes:
       # Persistência dos bancos SQLite
       - ./data/bancos_usuarios:/app/backend/bancos_usuarios
+      # Backups automáticos
+      - ./backups:/app/backups
       # Logs
       - ./logs:/app/logs
     environment:
       - ENVIRONMENT=production
       - PORT=8080
+      # Backup automático no startup (true para produção, false para desenvolvimento local)
+      - ENABLE_STARTUP_BACKUP=${ENABLE_STARTUP_BACKUP:-true}
       # NÃO definir DATABASE_URL = sistema usa SQLite automaticamente
     restart: unless-stopped
     healthcheck:
