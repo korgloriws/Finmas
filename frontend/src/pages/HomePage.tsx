@@ -1666,7 +1666,7 @@ export default function HomePage() {
                   
                   return {
                     data: d,
-                    carteira: carteiraValorPrecoSeries?.[i] ?? null, // Usar série de preço (sem aportes)
+                    carteira: carteiraValorPrecoSeries?.[i] ?? null, 
                     ibov: ibovValor,
                     ivvb11: historicoCarteira?.ivvb11?.[i] != null && initialWealth > 0 
                       ? initialWealth * (Number(historicoCarteira.ivvb11[i]) / 100) 
