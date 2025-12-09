@@ -27,3 +27,14 @@ services:
       retries: 3
       start_period: 40s
 
+  # Adminer - Visualizador de banco de dados SQLite
+  adminer:
+    image: adminer:latest
+    container_name: finmas-adminer
+    ports:
+      - "127.0.0.1:8081:8080"  # Apenas localhost (acesso via SSH tunnel ou Nginx)
+    volumes:
+      # Acesso aos bancos SQLite (montado em /db para acesso direto)
+      - ./data/bancos_usuarios:/db:ro  # Read-only para segurança
+    restart: unless-stopped
+
