@@ -15,6 +15,7 @@ interface AuthContextType {
   redefinirSenha: (username: string, novaSenha: string) => Promise<void>
   atualizarPergunta: (username: string, pergunta: string, resposta: string) => Promise<void>
   verificarPergunta: (username: string) => Promise<{tem_pergunta: boolean, pergunta?: string}>
+  setUserFromToken: (username: string, role: string) => void
   loading: boolean
 }
 
@@ -227,6 +228,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
+  const setUserFromToken = (username: string, role: string) => {
+    setUser(username)
+    setUserRole(role as 'usuario' | 'admin')
+    setLoading(false)
+    // Limpar cache do React Query para forçar refresh
+    queryClient.clear()
+  }
+
   const value = {
     user,
     userRole,
@@ -239,6 +248,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     redefinirSenha,
     atualizarPergunta,
     verificarPergunta,
+    setUserFromToken,
     loading
   }
 

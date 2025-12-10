@@ -20,6 +20,7 @@ const ConversorMoedasPage = lazy(() => import('./pages/ConversorMoedasPage'))
 const AgendaDividendosPage = lazy(() => import('./pages/AgendaDividendosPage'))
 const RankingsPage = lazy(() => import('./pages/RankingsPage'))
 const ConfiguracoesPage = lazy(() => import('./pages/ConfiguracoesPage'))
+const GoogleCallbackPage = lazy(() => import('./pages/GoogleCallbackPage'))
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 
@@ -31,6 +32,7 @@ function App() {
         <Routes>
           {/* Rotas públicas */}
           <Route path="/login" element={<Suspense fallback={<LoadingSpinner text="Carregando página de login..." />}> <LoginPage /> </Suspense>} />
+          <Route path="/auth/google/callback" element={<Suspense fallback={<LoadingSpinner text="Processando login..." />}> <GoogleCallbackPage /> </Suspense>} />
           <Route path="/recuperar-senha" element={<Suspense fallback={<LoadingSpinner text="Carregando recuperação de senha..." />}> <RecuperacaoSenhaPage /> </Suspense>} />
           <Route path="/configurar-seguranca" element={<Suspense fallback={<LoadingSpinner text="Carregando configurações..." />}> <ConfigurarSegurancaPage /> </Suspense>} />
           

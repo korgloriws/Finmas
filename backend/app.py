@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, make_response, send_from_directory, send_file
+from flask import Flask, jsonify, request, make_response, send_from_directory, send_file, session, redirect, url_for
 from flask_cors import CORS
 import pandas as pd
 import yfinance as yf
@@ -7,6 +7,7 @@ import json
 import sys
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from authlib.integrations.flask_client import OAuth
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import (
@@ -32,6 +33,7 @@ from models import (
     
     obter_perfil_usuario, atualizar_perfil_usuario, atualizar_senha_usuario,
     verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
+    buscar_usuario_por_email, criar_usuario_google,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -77,6 +79,21 @@ server = Flask(
     __name__,
     static_folder=FRONTEND_DIST,
     static_url_path=''
+)
+
+# Configurar secret key para sessões (necessário para OAuth)
+server.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24).hex())
+
+# Configurar OAuth Google
+oauth = OAuth(server)
+google = oauth.register(
+    name='google',
+    client_id=os.getenv('GOOGLE_CLIENT_ID', '445622555665-h9ve288738aah02dhf90o2hkq2281ero.apps.googleusercontent.com'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET', ''),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={
+        'scope': 'openid email profile'
+    }
 )
 
 
@@ -273,13 +290,10 @@ def api_login():
 
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
-
     try:
-       
         from models import limpar_sessoes_expiradas, SESSION_LOCK
         import threading
         
-     
         try:
             token = request.cookies.get('session_token')
             if token:
@@ -287,19 +301,167 @@ def api_logout():
         except Exception:
             pass
         
-        
         limpar_sessoes_expiradas()
         
-     
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
-      
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
         return response
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/auth/google/login", methods=["GET"])
+def api_google_login():
+    """Inicia o fluxo de login com Google OAuth"""
+    print(f"[GOOGLE OAUTH] Rota chamada - Path: {request.path}, Method: {request.method}")
+    try:
+        print(f"[GOOGLE OAUTH] Iniciando login Google - URL: {request.url}")
+        print(f"[GOOGLE OAUTH] Headers: {dict(request.headers)}")
+        
+        # Determinar URL de callback baseada no ambiente
+        is_production = os.getenv('ENVIRONMENT') == 'production'
+        
+        if is_production:
+            # Em produção, usar HTTPS e domínio configurado (backend está no mesmo domínio via Nginx)
+            backend_url = os.getenv('BACKEND_URL', 'https://finmas.com.br')
+            redirect_uri = f"{backend_url}/api/auth/google/callback"
+        else:
+            # Em desenvolvimento, usar HTTP e localhost com porta do backend
+            # IMPORTANTE: Esta URL deve corresponder EXATAMENTE ao que está no Google Cloud Console
+            backend_port = os.getenv('PORT', '5005')
+            redirect_uri = f"http://localhost:{backend_port}/api/auth/google/callback"
+        
+        print(f"[GOOGLE OAUTH] ========================================")
+        print(f"[GOOGLE OAUTH] Redirect URI sendo enviada: {redirect_uri}")
+        print(f"[GOOGLE OAUTH] ========================================")
+        print(f"[GOOGLE OAUTH] Client ID: {os.getenv('GOOGLE_CLIENT_ID', 'NÃO CONFIGURADO')[:20]}...")
+        print(f"[GOOGLE OAUTH] Ambiente: {'PRODUÇÃO' if is_production else 'DESENVOLVIMENTO'}")
+        print(f"[GOOGLE OAUTH] ========================================")
+        
+        return google.authorize_redirect(redirect_uri)
+    except Exception as e:
+        print(f"[GOOGLE OAUTH] Erro: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Erro ao iniciar login Google: {str(e)}"}), 500
+
+@server.route("/api/auth/google/callback", methods=["GET"])
+def api_google_callback():
+    """Callback do Google OAuth - recebe o token e faz login"""
+    try:
+        # Obter token do Google
+        token = google.authorize_access_token()
+        
+        # Obter informações do usuário do Google
+        user_info = token.get('userinfo')
+        if not user_info:
+            # Se não vier no token, fazer requisição para obter
+            resp = google.get('https://www.googleapis.com/oauth2/v2/userinfo')
+            user_info = resp.json()
+        
+        email = user_info.get('email')
+        nome = user_info.get('name', email.split('@')[0])
+        
+        if not email:
+            return jsonify({"error": "Email não fornecido pelo Google"}), 400
+        
+        # Buscar usuário por email
+        usuario = buscar_usuario_por_email(email)
+        
+        if not usuario:
+            # Criar novo usuário
+            username = criar_usuario_google(nome, email)
+            if not username:
+                return jsonify({"error": "Erro ao criar usuário"}), 500
+            
+            # Inicializar bancos do usuário
+            try:
+                inicializar_bancos_usuario(username)
+            except Exception as e:
+                print(f"Erro ao inicializar bancos para {username}: {e}")
+                pass
+        else:
+            username = usuario['username']
+        
+        # Verificar e corrigir bancos se necessário
+        try:
+            from models import verificar_e_corrigir_bancos_usuario
+            verificar_e_corrigir_bancos_usuario(username)
+        except Exception as e:
+            print(f"Erro ao verificar bancos para {username}: {e}")
+            pass
+        
+        # Criar sessão
+        set_usuario_atual(username)
+        session_token = criar_sessao(username, duracao_segundos=3600)
+        
+        # Obter informações do perfil, incluindo role
+        perfil = obter_perfil_usuario(username)
+        role = perfil.get('role', 'usuario') if perfil else 'usuario'
+        
+        # Determinar se é produção para configurar cookies
+        is_production = os.getenv('ENVIRONMENT') == 'production'
+        try:
+            forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+        except Exception:
+            forwarded_proto = ''
+        is_secure_req = False
+        try:
+            is_secure_req = bool(request.is_secure) or (forwarded_proto == 'https')
+        except Exception:
+            is_secure_req = (forwarded_proto == 'https')
+        cookie_secure = True if is_secure_req else False
+        
+        try:
+            req_origin = (request.headers.get('Origin') or '').strip().lower()
+            host_url = (request.host_url or '').strip().lower()
+        except Exception:
+            req_origin = ''
+            host_url = ''
+        is_cross_site = bool(req_origin and (req_origin not in host_url))
+        cookie_samesite = 'None' if (is_production and is_cross_site) else 'Lax'
+        
+        if cookie_samesite == 'None' and not cookie_secure:
+            cookie_secure = True
+        
+        # Redirecionar para o frontend com token na URL (será capturado pelo frontend)
+        is_production = os.getenv('ENVIRONMENT') == 'production'
+        if is_production:
+            frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br')
+        else:
+            # Em desenvolvimento, SEMPRE usar porta 3000 (configurada no vite.config.ts)
+            # Ignorar FRONTEND_URL se estiver configurado com porta errada
+            frontend_url = 'http://localhost:3000'
+            print(f"[GOOGLE OAUTH] Desenvolvimento detectado - forçando porta 3000")
+        
+        redirect_url = f"{frontend_url}/auth/google/callback?token={session_token}&username={username}&role={role}"
+        print(f"[GOOGLE OAUTH] ========================================")
+        print(f"[GOOGLE OAUTH] Redirecionando para frontend: {redirect_url}")
+        print(f"[GOOGLE OAUTH] Frontend URL final: {frontend_url}")
+        print(f"[GOOGLE OAUTH] ========================================")
+        
+        # Log para debug (remover em produção se necessário)
+        print(f"[GOOGLE OAUTH] Login bem-sucedido para {username} ({email})")
+        
+        response = redirect(redirect_url)
+        response.set_cookie(
+            'session_token',
+            session_token,
+            httponly=True,
+            samesite=cookie_samesite,
+            secure=cookie_secure
+        )
+        
+        return response
+        
+    except Exception as e:
+        print(f"Erro no callback Google: {e}")
+        frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br')
+        return redirect(f"{frontend_url}/login?error=google_auth_failed")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1472,8 +1634,10 @@ def api_get_logos_batch():
 @server.route('/', defaults={'path': ''})
 @server.route('/<path:path>')
 def serve_frontend(path):
-    
+    # Não interceptar rotas de API - elas devem ser tratadas antes desta rota catch-all
     if path.startswith('api/'):
+        # Se chegou aqui, a rota de API não foi encontrada
+        print(f"[WARN] Rota API não encontrada: {path}")
         return jsonify({"error": "Not Found"}), 404
 
  

@@ -1795,6 +1795,104 @@ def buscar_usuario_por_username(username):
             }
         return None
 
+def buscar_usuario_por_email(email):
+    """Busca usuário por email (para Google OAuth)"""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute('''
+                    SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
+                           COALESCE(role, 'usuario') as role, email
+                    FROM public.usuarios WHERE email = %s
+                ''', (email,))
+                row = c.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'nome': row[1],
+                        'username': row[2],
+                        'senha_hash': row[3],
+                        'pergunta_seguranca': row[4],
+                        'resposta_seguranca_hash': row[5],
+                        'data_cadastro': row[6],
+                        'role': row[7] if len(row) > 7 else 'usuario',
+                        'email': row[8] if len(row) > 8 else None
+                    }
+                return None
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
+                   COALESCE(role, 'usuario') as role, email
+            FROM usuarios WHERE email = ?
+        ''', (email,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return {
+                'id': row[0],
+                'nome': row[1],
+                'username': row[2],
+                'senha_hash': row[3],
+                'pergunta_seguranca': row[4],
+                'resposta_seguranca_hash': row[5],
+                'data_cadastro': row[6],
+                'role': row[7] if len(row) > 7 else 'usuario',
+                'email': row[8] if len(row) > 8 else None
+            }
+        return None
+
+def criar_usuario_google(nome, email, google_id=None):
+    """Cria um novo usuário a partir do login Google. Username será derivado do email."""
+    # Gerar username a partir do email (parte antes do @)
+    username_base = email.split('@')[0].lower()
+    username = username_base
+    
+    # Se username já existe, adicionar sufixo numérico
+    contador = 1
+    while buscar_usuario_por_username(username):
+        username = f"{username_base}{contador}"
+        contador += 1
+    
+    # Criar senha hash vazio (usuários Google não têm senha)
+    # Usar um hash aleatório para evitar problemas com NULL
+    senha_hash = bcrypt.hashpw(b"google_oauth_no_password", bcrypt.gensalt()).decode('utf-8')
+    data_cadastro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                try:
+                    c.execute('''
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario'))
+                    conn.commit()
+                    return username
+                except Exception as e:
+                    print(f"Erro ao criar usuário Google: {e}")
+                    return None
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario'))
+            conn.commit()
+            return username
+        except sqlite3.IntegrityError as e:
+            print(f"Erro ao criar usuário Google: {e}")
+            return None
+        finally:
+            conn.close()
+
 def verificar_senha(username, senha):
     usuario = buscar_usuario_por_username(username)
     if usuario:

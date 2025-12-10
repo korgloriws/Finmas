@@ -201,7 +201,7 @@ def obter_dados_fii_fundsexplorer(ticker: str, include_portfolio: bool = False) 
                     resultado['gestora'] = gestora
                     break
         
-        # Extrair PORTFÓLIO apenas se solicitado (otimização: não carrega automaticamente)
+       
         if include_portfolio:
             portfolio = extrair_portfolio_fundsexplorer(html, ticker_limpo)
             if portfolio:

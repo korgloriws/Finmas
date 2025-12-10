@@ -9,4 +9,6 @@ services:
       # Desabilitar backup automático em desenvolvimento local
       - ENABLE_STARTUP_BACKUP=false
       - ENVIRONMENT=development
+      # URLs locais para desenvolvimento
+      - FRONTEND_URL=http://localhost:3000
 

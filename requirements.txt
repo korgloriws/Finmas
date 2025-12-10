@@ -14,3 +14,4 @@ numpy
 beautifulsoup4
 tesouro-direto-br
 mercados
+authlib

@@ -19,6 +19,11 @@ services:
       # Backup automático no startup (true para produção, false para desenvolvimento local)
       - ENABLE_STARTUP_BACKUP=${ENABLE_STARTUP_BACKUP:-true}
       # NÃO definir DATABASE_URL = sistema usa SQLite automaticamente
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-445622555665-h9ve288738aah02dhf90o2hkq2281ero.apps.googleusercontent.com}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-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}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-finmas_secret_key_change_in_production}
+      - FRONTEND_URL=${FRONTEND_URL:-https://finmas.com.br}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -37,4 +42,5 @@ services:
       # Acesso aos bancos SQLite (read-write necessário para SQLite criar arquivos temporários)
       - ./data/bancos_usuarios:/db:rw
     restart: unless-stopped
+    
 
