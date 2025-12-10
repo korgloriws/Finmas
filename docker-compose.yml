@@ -34,7 +34,7 @@ services:
     ports:
       - "127.0.0.1:8081:8080"  # Apenas localhost (acesso via SSH tunnel ou Nginx)
     volumes:
-      # Acesso aos bancos SQLite (montado em /db para acesso direto)
-      - ./data/bancos_usuarios:/db:ro  # Read-only para segurança
+      # Acesso aos bancos SQLite (read-write necessário para SQLite criar arquivos temporários)
+      - ./data/bancos_usuarios:/db:rw
     restart: unless-stopped
 
