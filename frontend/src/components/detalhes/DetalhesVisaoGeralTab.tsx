@@ -43,15 +43,15 @@ function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ scale: 1.02 }}
       transition={{ duration: 0.2 }}
-      className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300"
+      className="relative overflow-hidden bg-card border border-border rounded-lg sm:rounded-xl lg:rounded-2xl p-3 sm:p-4 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300"
     >
       {/* Background pattern */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
       <div className="relative z-10">
-        <div className="flex items-start justify-between mb-3">
-          <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-primary text-primary-foreground shadow-lg">
-            <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+        <div className="flex items-start justify-between mb-2 sm:mb-3">
+          <div className="p-1 sm:p-1.5 lg:p-2 rounded-md bg-primary text-primary-foreground shadow-lg">
+            <Icon className="w-3 h-3 sm:w-3.5 lg:w-4 lg:h-4" />
           </div>
           {trend && !loading && (
             <motion.div 
@@ -74,17 +74,17 @@ function MetricCard({
           )}
         </div>
         
-        <div className="space-y-1">
-          <h3 className="text-sm sm:text-base font-semibold text-muted-foreground leading-tight">{title}</h3>
+        <div className="space-y-0.5 sm:space-y-1">
+          <h3 className="text-xs sm:text-sm lg:text-base font-semibold text-muted-foreground leading-tight line-clamp-1">{title}</h3>
           {loading ? (
             <div className="animate-pulse">
-              <div className="h-6 bg-muted rounded w-24"></div>
+              <div className="h-5 sm:h-6 bg-muted rounded w-16 sm:w-24"></div>
             </div>
           ) : (
-            <p className="text-xl sm:text-2xl font-bold text-foreground leading-tight">{value}</p>
+            <p className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-foreground leading-tight line-clamp-2">{value}</p>
           )}
           {subtitle && (
-            <p className="text-xs sm:text-sm text-muted-foreground leading-tight">{subtitle}</p>
+            <p className="text-[10px] sm:text-xs lg:text-sm text-muted-foreground leading-tight line-clamp-1">{subtitle}</p>
           )}
         </div>
       </div>
@@ -725,49 +725,6 @@ export default function DetalhesVisaoGeralTab({
         </div>
       </motion.div>
 
-      {/* Métricas principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-        <MetricCard
-          title="Preço Atual"
-          value={formatCurrency(info.currentPrice)}
-          icon={DollarSign}
-          trend={historico && historico.length > 1 ? {
-            value: calcularVariacao(historico[historico.length - 1].Close, historico[historico.length - 2].Close),
-            isPositive: historico[historico.length - 1].Close > historico[historico.length - 2].Close
-          } : undefined}
-          loading={loadingHistorico}
-        />
-        <MetricCard
-          title="P/L"
-          value={formatNumber(info.trailingPE)}
-          subtitle="Price/Earnings"
-          icon={Target}
-        />
-        <MetricCard
-          title="P/VP"
-          value={formatNumber(info.priceToBook)}
-          subtitle="Price/Book Value"
-          icon={FileText}
-        />
-        <MetricCard
-          title="Dividend Yield"
-          value={formatDividendYield(info.dividendYield)}
-          icon={TrendingUp}
-        />
-        <MetricCard
-          title="ROE"
-          value={formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)}
-          subtitle="Return on Equity"
-          icon={Activity}
-        />
-        <MetricCard
-          title="Liquidez Diária"
-          value={formatCurrency(liquidezDiaria)}
-
-          icon={BarChart3}
-        />
-      </div>
-
       {/* Gráfico de Crescimento - Estilo Google Finance */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -953,6 +910,48 @@ export default function DetalhesVisaoGeralTab({
           </div>
         )}
       </motion.div>
+
+      {/* Métricas principais */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        <MetricCard
+          title="Preço Atual"
+          value={formatCurrency(info.currentPrice)}
+          icon={DollarSign}
+          trend={historico && historico.length > 1 ? {
+            value: calcularVariacao(historico[historico.length - 1].Close, historico[historico.length - 2].Close),
+            isPositive: historico[historico.length - 1].Close > historico[historico.length - 2].Close
+          } : undefined}
+          loading={loadingHistorico}
+        />
+        <MetricCard
+          title="P/L"
+          value={formatNumber(info.trailingPE)}
+          subtitle="Price/Earnings"
+          icon={Target}
+        />
+        <MetricCard
+          title="P/VP"
+          value={formatNumber(info.priceToBook)}
+          subtitle="Price/Book Value"
+          icon={FileText}
+        />
+        <MetricCard
+          title="Dividend Yield"
+          value={formatDividendYield(info.dividendYield)}
+          icon={TrendingUp}
+        />
+        <MetricCard
+          title="ROE"
+          value={formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)}
+          subtitle="Return on Equity"
+          icon={Activity}
+        />
+        <MetricCard
+          title="Liquidez Diária"
+          value={formatCurrency(liquidezDiaria)}
+          icon={BarChart3}
+        />
+      </div>
 
       {/* Informações da empresa / FII */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
