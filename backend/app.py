@@ -568,12 +568,17 @@ def api_atualizar_perfil():
 
 @server.route("/api/perfil/senha", methods=["PUT"])
 def api_atualizar_senha():
-    """Atualiza a senha do usuário atual"""
+    """Atualiza a senha do usuário atual (apenas para usuários proprietários)"""
     try:
         # SEGURANCA: Validação dupla de segurança
         usuario, erro = validar_usuario_autenticado(validar_token=True)
         if erro:
             return erro[0], erro[1]
+        
+        # Verificar se é usuário Google (não pode trocar senha)
+        usuario_data = buscar_usuario_por_username(usuario)
+        if usuario_data and usuario_data.get('auth_provider') == 'google':
+            return jsonify({"error": "Usuários que fazem login com Google não podem trocar senha. A senha é gerenciada pelo Google."}), 403
         
         data = request.get_json()
         senha_atual = data.get('senha_atual')
@@ -804,7 +809,7 @@ def api_verificar_resposta():
 
 @server.route("/api/auth/redefinir-senha", methods=["POST"])
 def api_redefinir_senha():
-   
+    """Redefine a senha do usuário (apenas para usuários proprietários)"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -813,9 +818,13 @@ def api_redefinir_senha():
         if not username or not nova_senha:
             return jsonify({"error": "Username e nova senha são obrigatórios"}), 400
         
+        # Verificar se é usuário Google (não pode redefinir senha)
+        usuario_data = buscar_usuario_por_username(username)
+        if usuario_data and usuario_data.get('auth_provider') == 'google':
+            return jsonify({"error": "Usuários que fazem login com Google não podem redefinir senha. Use a recuperação de senha do Google."}), 403
+        
         if len(nova_senha) < 6:
             return jsonify({"error": "A senha deve ter pelo menos 6 caracteres"}), 400
-        
         
         if alterar_senha_direta(username, nova_senha):
             return jsonify({"message": "Senha alterada com sucesso"}), 200
@@ -827,7 +836,7 @@ def api_redefinir_senha():
 
 @server.route("/api/auth/atualizar-pergunta", methods=["POST"])
 def api_atualizar_pergunta():
-    
+    """Atualiza pergunta de segurança (apenas para usuários proprietários)"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -836,6 +845,11 @@ def api_atualizar_pergunta():
         
         if not username or not pergunta or not resposta:
             return jsonify({"error": "Username, pergunta e resposta são obrigatórios"}), 400
+        
+        # Verificar se é usuário Google (não pode ter pergunta de segurança)
+        usuario_data = buscar_usuario_por_username(username)
+        if usuario_data and usuario_data.get('auth_provider') == 'google':
+            return jsonify({"error": "Usuários que fazem login com Google não precisam de pergunta de segurança. A autenticação é feita pelo Google."}), 403
         
         # Atualizar pergunta de segurança
         if atualizar_pergunta_seguranca(username, pergunta, resposta):
@@ -848,7 +862,7 @@ def api_atualizar_pergunta():
 
 @server.route("/api/auth/verificar-pergunta", methods=["POST"])
 def api_verificar_pergunta():
-   
+    """Verifica se usuário tem pergunta de segurança (apenas para usuários proprietários)"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -856,16 +870,20 @@ def api_verificar_pergunta():
         if not username:
             return jsonify({"error": "Username é obrigatório"}), 400
         
-
         usuario = buscar_usuario_por_username(username)
         if not usuario:
             return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        # Usuários Google não precisam de pergunta de segurança
+        if usuario.get('auth_provider') == 'google':
+            return jsonify({"tem_pergunta": True, "auth_provider": "google"}), 200
         
        
         tem_pergunta = bool(usuario.get('pergunta_seguranca'))
         
         return jsonify({
             "tem_pergunta": tem_pergunta,
+            "auth_provider": usuario.get('auth_provider', 'proprietario'),
             "pergunta": usuario.get('pergunta_seguranca') if tem_pergunta else None
         }), 200
         
@@ -1539,9 +1557,12 @@ def api_get_ativo_historico(ticker):
         if '-' not in ticker and '.' not in ticker and len(ticker) <= 6:
             ticker += '.SA'
         
+        # yfinance aceita: 1d, 5d, 1wk, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+        # O frontend já mapeia os períodos, mas garantimos compatibilidade aqui também
         acao = yf.Ticker(ticker)
         historico = acao.history(period=periodo)
         
+        # Filtrar histórico se necessário (yfinance já faz isso, mas garantimos)
         if periodo != "max" and historico is not None and not historico.empty:
             if periodo.endswith("mo"):
                 meses = int(periodo.replace("mo", ""))
@@ -1549,6 +1570,9 @@ def api_get_ativo_historico(ticker):
             elif periodo.endswith("y"):
                 anos = int(periodo.replace("y", ""))
                 dt_ini = historico.index.max() - timedelta(days=365*anos)
+            elif periodo.endswith("d") and periodo != "1d":
+                # Para períodos como '5d', não filtrar (yfinance já retorna o período correto)
+                dt_ini = historico.index.min()
             else:
                 dt_ini = historico.index.min()
             
@@ -1563,6 +1587,9 @@ def api_get_ativo_historico(ticker):
         
         return jsonify(historico_json)
     except Exception as e:
+        print(f"[ERRO] Erro ao buscar histórico para {ticker} com período {periodo}: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/ativo/<ticker>/preco-historico", methods=["GET"])

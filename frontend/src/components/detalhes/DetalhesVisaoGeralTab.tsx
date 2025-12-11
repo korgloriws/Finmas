@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatNumber, formatDividendYield } from '../../utils/formatters'
 import PortfolioFIIComponent from './PortfolioFII'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 
 function MetricCard({ 
@@ -168,6 +169,8 @@ interface DetalhesVisaoGeralTabProps {
   logoUrl: string | null | undefined
   historico: Array<Record<string, any>> | undefined
   loadingHistorico: boolean
+  periodo: '1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'
+  onPeriodoChange: (periodo: '1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max') => void
   strategyDetails: {
     meets: boolean
     criteria: Array<{ label: string; value: string; ok: boolean }>
@@ -189,6 +192,8 @@ export default function DetalhesVisaoGeralTab({
   logoUrl,
   historico,
   loadingHistorico,
+  periodo,
+  onPeriodoChange,
   strategyDetails,
   tipoAtivo,
   fiiInfo,
@@ -200,6 +205,18 @@ export default function DetalhesVisaoGeralTab({
   evToEbit,
   liquidezDiaria
 }: DetalhesVisaoGeralTabProps) {
+  
+  // Períodos disponíveis (estilo Google Finance)
+  const periodos: Array<{ value: '1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'; label: string }> = [
+    { value: '1d', label: '1D' },
+    { value: '1w', label: '1S' },
+    { value: '1m', label: '1M' },
+    { value: '3m', label: '3M' },
+    { value: '6m', label: '6M' },
+    { value: '1y', label: '1A' },
+    { value: '5y', label: '5A' },
+    { value: 'max', label: 'Máx' },
+  ]
   return (
     <motion.div
       key="overview"
@@ -750,6 +767,192 @@ export default function DetalhesVisaoGeralTab({
           icon={BarChart3}
         />
       </div>
+
+      {/* Gráfico de Crescimento - Estilo Google Finance */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+        className="relative overflow-hidden bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300"
+      >
+        {/* Header com filtros de período */}
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h3 className="text-lg sm:text-xl font-semibold text-foreground flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            Evolução do Preço
+          </h3>
+          
+          {/* Filtros de período - Estilo Google Finance */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+            {periodos.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => onPeriodoChange(p.value)}
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded transition-all duration-200 ${
+                  periodo === p.value
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Estatísticas do período */}
+        {historico && historico.length > 1 && (
+          <div className="mb-4 flex flex-wrap items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Variação:</span>
+              <span className={`font-semibold ${
+                calcularVariacao(historico[historico.length - 1].Close, historico[0].Close) >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+              }`}>
+                {calcularVariacao(historico[historico.length - 1].Close, historico[0].Close) >= 0 ? '+' : ''}
+                {calcularVariacao(historico[historico.length - 1].Close, historico[0].Close).toFixed(2)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Pontos:</span>
+              <span className="font-medium text-foreground">{historico.length}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Gráfico */}
+        {loadingHistorico ? (
+          <div className="w-full flex items-center justify-center" style={{ height: '300px' }}>
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+            </div>
+          </div>
+        ) : historico && historico.length > 0 ? (
+          
+          <div className="w-full" style={{ height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={historico.map((item) => {
+                  const date = new Date(item.Date)
+                  // Formatação de data baseada no período (estilo Google Finance)
+                  let dateLabel = ''
+                  if (periodo === '1d') {
+                    // 1 dia: mostrar hora
+                    dateLabel = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                  } else if (periodo === '1w') {
+                    // 1 semana: mostrar dia e hora
+                    dateLabel = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' ' + 
+                               date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                  } else if (periodo === '1m' || periodo === '3m') {
+                    // 1-3 meses: mostrar dia/mês
+                    dateLabel = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                  } else if (periodo === '6m' || periodo === '1y') {
+                    // 6 meses - 1 ano: mostrar mês/ano
+                    dateLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                  } else {
+                    // 5 anos ou máximo: mostrar mês/ano
+                    dateLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+                  }
+                  
+                  return {
+                    date: dateLabel,
+                    value: item.Close,
+                    fullDate: date.toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      ...(periodo === '1d' || periodo === '1w' ? { hour: '2-digit', minute: '2-digit' } : {})
+                    }),
+                    timestamp: date.getTime()
+                  }
+                }).sort((a, b) => a.timestamp - b.timestamp)}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop 
+                      offset="0%" 
+                      stopColor={historico && historico.length > 1 && historico[historico.length - 1].Close >= historico[0].Close 
+                        ? 'rgba(16, 185, 129, 0.3)' 
+                        : 'rgba(239, 68, 68, 0.3)'} 
+                      stopOpacity={0.8}
+                    />
+                    <stop 
+                      offset="100%" 
+                      stopColor={historico && historico.length > 1 && historico[historico.length - 1].Close >= historico[0].Close 
+                        ? 'rgba(16, 185, 129, 0.05)' 
+                        : 'rgba(239, 68, 68, 0.05)'} 
+                      stopOpacity={0}
+                    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="currentColor"
+                  opacity={0.5}
+                  style={{ fontSize: '12px' }}
+                  interval={historico.length > 20 ? Math.floor(historico.length / 6) : 0}
+                  angle={periodo === '1d' || periodo === '1w' ? -45 : 0}
+                  textAnchor={periodo === '1d' || periodo === '1w' ? 'end' : 'middle'}
+                  height={periodo === '1d' || periodo === '1w' ? 60 : 30}
+                />
+                <YAxis 
+                  stroke="currentColor"
+                  opacity={0.5}
+                  style={{ fontSize: '12px' }}
+                  tickFormatter={(value) => formatCurrency(value)}
+                  width={80}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload
+                      const variacao = historico && historico.length > 1
+                        ? calcularVariacao(data.value, historico[0].Close)
+                        : 0
+                      return (
+                        <div className="bg-card border border-border rounded-lg shadow-xl p-3">
+                          <p className="text-sm font-semibold text-foreground mb-1">{data.fullDate}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold text-foreground">
+                              {formatCurrency(data.value)}
+                            </span>
+                            <span className={`text-sm font-medium ${
+                              variacao >= 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {variacao >= 0 ? '+' : ''}{variacao.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                  cursor={{ stroke: 'currentColor', strokeWidth: 1, opacity: 0.3 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={historico && historico.length > 1 && historico[historico.length - 1].Close >= historico[0].Close 
+                    ? 'rgba(16, 185, 129, 1)' 
+                    : 'rgba(239, 68, 68, 1)'}
+                  strokeWidth={2}
+                  fill="url(#colorValue)"
+                  animationDuration={1000}
+                  isAnimationActive={true}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="w-full flex items-center justify-center" style={{ height: '300px' }}>
+            <p className="text-sm text-muted-foreground">Nenhum dado histórico disponível</p>
+          </div>
+        )}
+      </motion.div>
 
       {/* Informações da empresa / FII */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

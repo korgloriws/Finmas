@@ -1763,6 +1763,11 @@ def criar_tabela_usuarios():
                     c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS email TEXT')
                 except Exception:
                     pass
+                # Adicionar campo auth_provider para identificar tipo de login (google/proprietario)
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT \'proprietario\'')
+                except Exception:
+                    pass
                 conn.commit()
         finally:
             conn.close()
@@ -1795,6 +1800,13 @@ def criar_tabela_usuarios():
         except sqlite3.OperationalError:
             pass  # Coluna já existe
         
+        # Adicionar campo auth_provider para identificar tipo de login (google/proprietario)
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN auth_provider TEXT DEFAULT \'proprietario\'')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Coluna já existe
+        
         conn.close()
 
 def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_seguranca=None, email=None, role='usuario'):
@@ -1812,9 +1824,9 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
             with conn.cursor() as c:
                 try:
                     c.execute('''
-                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role))
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario'))
                     conn.commit()
                     return True
                 except Exception:
@@ -1825,8 +1837,8 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role))
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario'))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -1840,10 +1852,10 @@ def buscar_usuario_por_username(username):
         conn = _get_pg_conn()
         try:
             with conn.cursor() as c:
-                # Buscar todos os campos, incluindo role e email (se existirem)
+                # Buscar todos os campos, incluindo role, email e auth_provider
                 c.execute('''
                     SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
-                           COALESCE(role, 'usuario') as role, email
+                           COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
                     FROM public.usuarios WHERE username = %s
                 ''', (username,))
                 row = c.fetchone()
@@ -1857,7 +1869,8 @@ def buscar_usuario_por_username(username):
                         'resposta_seguranca_hash': row[5],
                         'data_cadastro': row[6],
                         'role': row[7] if len(row) > 7 else 'usuario',
-                        'email': row[8] if len(row) > 8 else None
+                        'email': row[8] if len(row) > 8 else None,
+                        'auth_provider': row[9] if len(row) > 9 else 'proprietario'
                     }
                 return None
         finally:
@@ -1865,10 +1878,10 @@ def buscar_usuario_por_username(username):
     else:
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
-        # Buscar todos os campos, incluindo role e email (se existirem)
+        # Buscar todos os campos, incluindo role, email e auth_provider
         c.execute('''
             SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
-                   COALESCE(role, 'usuario') as role, email
+                   COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
             FROM usuarios WHERE username = ?
         ''', (username,))
         row = c.fetchone()
@@ -1883,7 +1896,8 @@ def buscar_usuario_por_username(username):
                 'resposta_seguranca_hash': row[5],
                 'data_cadastro': row[6],
                 'role': row[7] if len(row) > 7 else 'usuario',
-                'email': row[8] if len(row) > 8 else None
+                'email': row[8] if len(row) > 8 else None,
+                'auth_provider': row[9] if len(row) > 9 else 'proprietario'
             }
         return None
 
@@ -1895,7 +1909,7 @@ def buscar_usuario_por_email(email):
             with conn.cursor() as c:
                 c.execute('''
                     SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
-                           COALESCE(role, 'usuario') as role, email
+                           COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
                     FROM public.usuarios WHERE email = %s
                 ''', (email,))
                 row = c.fetchone()
@@ -1909,7 +1923,8 @@ def buscar_usuario_por_email(email):
                         'resposta_seguranca_hash': row[5],
                         'data_cadastro': row[6],
                         'role': row[7] if len(row) > 7 else 'usuario',
-                        'email': row[8] if len(row) > 8 else None
+                        'email': row[8] if len(row) > 8 else None,
+                        'auth_provider': row[9] if len(row) > 9 else 'proprietario'
                     }
                 return None
         finally:
@@ -1919,7 +1934,7 @@ def buscar_usuario_por_email(email):
         c = conn.cursor()
         c.execute('''
             SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
-                   COALESCE(role, 'usuario') as role, email
+                   COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
             FROM usuarios WHERE email = ?
         ''', (email,))
         row = c.fetchone()
@@ -1934,7 +1949,8 @@ def buscar_usuario_por_email(email):
                 'resposta_seguranca_hash': row[5],
                 'data_cadastro': row[6],
                 'role': row[7] if len(row) > 7 else 'usuario',
-                'email': row[8] if len(row) > 8 else None
+                'email': row[8] if len(row) > 8 else None,
+                'auth_provider': row[9] if len(row) > 9 else 'proprietario'
             }
         return None
 
@@ -1961,9 +1977,9 @@ def criar_usuario_google(nome, email, google_id=None):
             with conn.cursor() as c:
                 try:
                     c.execute('''
-                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario'))
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google'))
                     conn.commit()
                     return username
                 except Exception as e:
@@ -1975,8 +1991,8 @@ def criar_usuario_google(nome, email, google_id=None):
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario'))
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google'))
             conn.commit()
             return username
         except sqlite3.IntegrityError as e:
@@ -7268,7 +7284,8 @@ def obter_perfil_usuario(username):
         'username': usuario['username'],
         'email': usuario.get('email'),
         'role': usuario.get('role', 'usuario'),
-        'data_cadastro': usuario['data_cadastro']
+        'data_cadastro': usuario['data_cadastro'],
+        'auth_provider': usuario.get('auth_provider', 'proprietario')  # google ou proprietario
     }
 
 def atualizar_perfil_usuario(username, nome=None, email=None):

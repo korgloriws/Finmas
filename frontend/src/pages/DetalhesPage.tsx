@@ -30,6 +30,7 @@ export default function DetalhesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [inputTicker, setInputTicker] = useState('')
   const [periodo, setPeriodo] = useState('1y')
+  const [periodoOverview, setPeriodoOverview] = useState<'1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'>('1y') // Período para gráfico da visão geral
   const [fiPeriodo, setFiPeriodo] = useState<'6m' | '1y' | '3y' | '5y' | 'max'>('1y')
   const [, setTickersComparar] = useState<string[]>([])
   const compararInputRef = useRef<HTMLInputElement>(null)
@@ -71,11 +72,35 @@ export default function DetalhesPage() {
   // Usar metadados com portfólio se disponível, senão usar os básicos
   const fiiMetadataFinal = fiiMetadataComPortfolio || fiiMetadata
 
-  // OTIMIZAÇÃO: Carregar histórico apenas quando necessário (aba charts)
+  // Mapear período do frontend para formato do yfinance
+  const mapearPeriodoParaYFinance = (periodo: string): string => {
+    const mapa: Record<string, string> = {
+      '1d': '1d',
+      '1w': '5d', // yfinance não tem '1w', usa '5d' (5 dias úteis ≈ 1 semana)
+      '1m': '1mo',
+      '3m': '3mo',
+      '6m': '6mo',
+      '1y': '1y',
+      '5y': '5y',
+      'max': 'max'
+    }
+    return mapa[periodo] || '1y'
+  }
+
+  // Carregar histórico para overview (com período específico) e charts
+  const { data: historicoOverview, isLoading: loadingHistoricoOverview } = useQuery<Array<Record<string, any>>>({
+    queryKey: ['ativo-historico-overview', ticker, periodoOverview],
+    queryFn: () => ativoService.getHistorico(ticker, mapearPeriodoParaYFinance(periodoOverview)),
+    enabled: !!ticker && activeTab === 'overview', // Carrega apenas na aba overview
+    staleTime: 10 * 60 * 1000, // 10 minutos de cache
+    refetchOnWindowFocus: false,
+  })
+
+  // Carregar histórico para charts (com período da aba charts)
   const { data: historico, isLoading: loadingHistorico } = useQuery<Array<Record<string, any>>>({
     queryKey: ['ativo-historico', ticker, periodo],
     queryFn: () => ativoService.getHistorico(ticker, periodo),
-    enabled: !!ticker && activeTab === 'charts', // Só carrega na aba de gráficos
+    enabled: !!ticker && activeTab === 'charts', // Carrega apenas na aba charts
     staleTime: 10 * 60 * 1000, // 10 minutos de cache
     refetchOnWindowFocus: false,
   })
@@ -956,8 +981,10 @@ export default function DetalhesPage() {
                 ticker={ticker}
                 info={info}
                 logoUrl={logoUrl}
-                historico={historico}
-                loadingHistorico={loadingHistorico}
+                historico={historicoOverview}
+                loadingHistorico={loadingHistoricoOverview}
+                periodo={periodoOverview}
+                onPeriodoChange={setPeriodoOverview}
                 strategyDetails={strategyDetails}
                 tipoAtivo={tipoAtivo}
                 fiiInfo={fiiInfo}

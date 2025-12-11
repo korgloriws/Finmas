@@ -357,56 +357,78 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
 
-            {/* Alterar Senha */}
-            <div className="border-t border-border pt-8">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <Lock className="w-5 h-5" />
-                Alterar Senha
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="senha-atual-input" className="block text-sm font-medium mb-1">Senha Atual</label>
-                  <input
-                    id="senha-atual-input"
-                    type="password"
-                    value={senhaAtual}
-                    onChange={(e) => setSenhaAtual(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
-                    placeholder="Digite sua senha atual"
-                  />
+            {/* Alterar Senha - Apenas para usuários proprietários */}
+            {perfil?.auth_provider !== 'google' ? (
+              <div className="border-t border-border pt-8">
+                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Lock className="w-5 h-5" />
+                  Alterar Senha
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="senha-atual-input" className="block text-sm font-medium mb-1">Senha Atual</label>
+                    <input
+                      id="senha-atual-input"
+                      type="password"
+                      value={senhaAtual}
+                      onChange={(e) => setSenhaAtual(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Digite sua senha atual"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="nova-senha-input" className="block text-sm font-medium mb-1">Nova Senha</label>
+                    <input
+                      id="nova-senha-input"
+                      type="password"
+                      value={novaSenha}
+                      onChange={(e) => setNovaSenha(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Digite sua nova senha"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="confirmar-senha-input" className="block text-sm font-medium mb-1">Confirmar Nova Senha</label>
+                    <input
+                      id="confirmar-senha-input"
+                      type="password"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Confirme sua nova senha"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAtualizarSenha}
+                    disabled={atualizarSenhaMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    <Lock className="w-4 h-4" />
+                    {atualizarSenhaMutation.isPending ? 'Atualizando...' : 'Atualizar Senha'}
+                  </button>
                 </div>
-                <div>
-                  <label htmlFor="nova-senha-input" className="block text-sm font-medium mb-1">Nova Senha</label>
-                  <input
-                    id="nova-senha-input"
-                    type="password"
-                    value={novaSenha}
-                    onChange={(e) => setNovaSenha(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
-                    placeholder="Digite sua nova senha"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="confirmar-senha-input" className="block text-sm font-medium mb-1">Confirmar Nova Senha</label>
-                  <input
-                    id="confirmar-senha-input"
-                    type="password"
-                    value={confirmarSenha}
-                    onChange={(e) => setConfirmarSenha(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
-                    placeholder="Confirme sua nova senha"
-                  />
-                </div>
-                <button
-                  onClick={handleAtualizarSenha}
-                  disabled={atualizarSenhaMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  <Lock className="w-4 h-4" />
-                  {atualizarSenhaMutation.isPending ? 'Atualizando...' : 'Atualizar Senha'}
-                </button>
               </div>
-            </div>
+            ) : (
+              <div className="border-t border-border pt-8">
+                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Lock className="w-5 h-5" />
+                  Autenticação
+                </h2>
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <ShieldCheck className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                        Login com Google
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                        Você faz login usando sua conta Google. A senha é gerenciada pelo Google e não pode ser alterada aqui. Para alterar sua senha, acesse sua conta Google.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Excluir Conta */}
             <div className="border-t border-border pt-8">
