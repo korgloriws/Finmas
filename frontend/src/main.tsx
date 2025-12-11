@@ -10,11 +10,14 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutos - cache mais longo
-      gcTime: 1000 * 60 * 30, // 30 minutos - mantém em cache por mais tempo
+      gcTime: 1000 * 60 * 5, // 5 minutos - reduzido para limpar queries não usadas mais rápido
       retry: 1,
       refetchOnWindowFocus: false, 
       refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar - usa cache se disponível
       refetchOnReconnect: false, // Não recarrega ao reconectar
+      throwOnError: false, // Não quebrar app em caso de erro
+      // PERFORMANCE: Cancelar queries automaticamente quando componente desmonta
+      // React Query já faz isso por padrão, mas garantimos que está ativo
     },
   },
 })

@@ -5,6 +5,7 @@ import { AnaliseProvider } from './contexts/AnaliseContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import SecurityCheck from './components/SecurityCheck'
+import ErrorBoundary from './components/ErrorBoundary'
 // PERFORMANCE: Importar páginas diretamente (sem lazy) para navegação instantânea
 // As páginas agora são carregadas no bundle inicial, mas a navegação é instantânea
 import LoginPage from './pages/LoginPage'
@@ -25,10 +26,11 @@ import HomePage from './pages/HomePage'
 
 function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <AnaliseProvider>
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <AnaliseProvider>
+            <Routes>
           {/* Rotas públicas */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
@@ -149,10 +151,11 @@ function App() {
           {/* Redirect da rota antiga para a nova */}
           <Route path="/rankings-teste" element={<Navigate to="/rankings" replace />} />
 
-        </Routes>
-        </AnaliseProvider>
-      </ThemeProvider>
-    </AuthProvider>
+            </Routes>
+          </AnaliseProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

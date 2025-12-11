@@ -8,7 +8,7 @@ const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as Impo
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 16000000,
+  timeout: 30000, // 30 segundos - timeout razoável (era 4.4 horas!)
   withCredentials: true,
 })
 
