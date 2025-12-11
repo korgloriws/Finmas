@@ -2,11 +2,13 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Calendar, DollarSign, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react'
 import { marmitasService } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../utils/formatters'
 import { Marmita, GastoMensal } from '../types'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from '../components/LazyChart'
 
 export default function MarmitasPage() {
+  const { user } = useAuth()
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
   const [inputValor, setInputValor] = useState('')
   const [inputComprou, setInputComprou] = useState(true)
@@ -16,15 +18,18 @@ export default function MarmitasPage() {
 
   const queryClient = useQueryClient()
 
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   // Queries
   const { data: marmitas, isLoading: loadingMarmitas } = useQuery<Marmita[]>({
-    queryKey: ['marmitas', filtroMes, filtroAno],
+    queryKey: ['marmitas', user, filtroMes, filtroAno],
     queryFn: () => marmitasService.getMarmitas(filtroMes, filtroAno),
+    enabled: !!user,
   })
 
   const { data: gastosMensais } = useQuery<GastoMensal[]>({
-    queryKey: ['gastos-mensais', periodoGrafico],
+    queryKey: ['gastos-mensais', user, periodoGrafico],
     queryFn: () => marmitasService.getGastosMensais(periodoGrafico),
+    enabled: !!user,
   })
 
   // Mutations
@@ -32,8 +37,9 @@ export default function MarmitasPage() {
     mutationFn: ({ data, valor, comprou }: { data: string; valor: number; comprou: boolean }) =>
       marmitasService.adicionarMarmita(data, valor, comprou),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
       setInputData('')
       setInputValor('')
       setInputComprou(true)
@@ -43,8 +49,9 @@ export default function MarmitasPage() {
   const removerMutation = useMutation({
     mutationFn: marmitasService.removerMarmita,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
     },
   })
 

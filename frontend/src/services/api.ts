@@ -23,6 +23,15 @@ api.interceptors.request.use(
         config.headers = config.headers || {}
         config.headers['X-User-Expected'] = expectedUser
       }
+      // Log para debug de exclusão de usuário
+      if (config.url?.includes('/admin/usuarios') && config.method === 'delete') {
+        console.log('[API Interceptor] DELETE Request:', {
+          url: config.url,
+          fullURL: `${config.baseURL}${config.url}`,
+          method: config.method,
+          params: config.params
+        })
+      }
     } catch {
       /* ignore */
     }
@@ -174,6 +183,27 @@ export const adminService = {
   
   definirRole: async (username: string, role: 'usuario' | 'admin') => {
     const response = await api.put(`/admin/usuarios/${username}/role`, { role })
+    return response.data
+  },
+  
+  criarUsuario: async (nome: string, username: string, senha: string, email?: string, role: 'usuario' | 'admin' = 'usuario') => {
+    const response = await api.post('/admin/usuarios', { nome, username, senha, email, role })
+    return response.data
+  },
+  
+  excluirUsuario: async (username: string) => {
+    if (!username || username.trim() === '') {
+      throw new Error('Username é obrigatório')
+    }
+    const encodedUsername = encodeURIComponent(username)
+    const url = `/admin/usuarios/${encodedUsername}`
+    console.log('[API] Excluindo usuário:', {
+      username,
+      encodedUsername,
+      url,
+      fullURL: `${api.defaults.baseURL}${url}`
+    })
+    const response = await api.delete(url)
     return response.data
   },
 }

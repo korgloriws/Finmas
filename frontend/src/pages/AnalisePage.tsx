@@ -5,21 +5,24 @@ import { useQuery } from '@tanstack/react-query'
 import { List, BarChart, Loader2 } from 'lucide-react'
 import { carteiraService } from '../services/api'
 import { useAnalise } from '../contexts/AnaliseContext'
+import { useAuth } from '../contexts/AuthContext'
 import AnaliseListaTab from '../components/analise/AnaliseListaTab'
 import AnaliseGraficosTab from '../components/analise/AnaliseGraficosTab'
 
 export default function AnalisePage() {
   const [activeTab, setActiveTab] = useState<'lista' | 'graficos'>('lista')
   const { ativosAcoes, ativosBdrs, ativosFiis } = useAnalise()
+  const { user } = useAuth()
 
 
  
+  //  SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
   const { isLoading: loadingCarteira } = useQuery({
-    queryKey: ['carteira'],
+    queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
     retry: 3,
     refetchOnWindowFocus: false,
-    enabled: activeTab === 'graficos', 
+    enabled: activeTab === 'graficos' && !!user, 
     staleTime: 5 * 60 * 1000, 
   })
 

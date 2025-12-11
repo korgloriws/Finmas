@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { analiseService, carteiraService, ativoService } from '../../services/api'
 import { AtivoAnalise, FiltrosAnalise } from '../../types'
 import { useAnalise } from '../../contexts/AnaliseContext'
+import { useAuth } from '../../contexts/AuthContext'
 import TickerWithLogo from '../TickerWithLogo'
 import { formatNumber, formatCurrency } from '../../utils/formatters'
 import { ExternalLink } from 'lucide-react'
@@ -1152,6 +1153,7 @@ function TabelaDebentures() {
 
 
 export default function AnaliseListaTab() {
+  const { user } = useAuth()
   const [activeSubTab, setActiveSubTab] = useState<'acoes' | 'bdrs' | 'fiis' | 'cris' | 'cras' | 'debentures' | 'tesouro'>('acoes')
   
 
@@ -1186,9 +1188,11 @@ export default function AnaliseListaTab() {
 
   const [fiiMetadataMap, setFiiMetadataMap] = useState<Record<string, { tipo?: string; segmento?: string }>>({})
 
+  // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
   const { data: carteira } = useQuery({
-    queryKey: ['carteira'],
+    queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
+    enabled: !!user,
     retry: 3,
     refetchOnWindowFocus: false
   })

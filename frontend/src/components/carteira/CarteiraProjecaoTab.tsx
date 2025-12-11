@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { carteiraService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { 
   Calculator, 
   TrendingUp, 
@@ -37,6 +38,7 @@ export default function CarteiraProjecaoTab({
   filtroPeriodo,
   setFiltroPeriodo
 }: CarteiraProjecaoTabProps) {
+  const { user } = useAuth()
   const [anosProjecao, setAnosProjecao] = useState<string>('5')
   const [considerarDividendos, setConsiderarDividendos] = useState(true)
   const [valorInicial, setValorInicial] = useState('')
@@ -53,30 +55,32 @@ export default function CarteiraProjecaoTab({
     return carteira?.reduce((total, ativo) => total + (ativo.valor_total || 0), 0) || 0
   }, [carteira])
 
-
-
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   const { data: historicoMensal, isLoading: loadingHistoricoMensal } = useQuery({
-    queryKey: ['carteira-historico-mensal-projecao'],
+    queryKey: ['carteira-historico-mensal-projecao', user],
     queryFn: () => carteiraService.getHistorico('mensal'),
+    enabled: !!user,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   })
 
   const queryClient = useQueryClient()
   const { data: goal } = useQuery({
-    queryKey: ['goals'],
+    queryKey: ['goals', user],
     queryFn: carteiraService.getGoals,
+    enabled: !!user,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   })
   const saveGoalsMutation = useMutation({
     mutationFn: carteiraService.saveGoals,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['goals', user] })
     }
   })
   const projectGoalsQuery = useQuery({
-    queryKey: ['goals-projecao', goalTipo, goalAlvo, goalHorizonteMeses, usarCrescimentoManual, crescimentoManual],
+    queryKey: ['goals-projecao', user, goalTipo, goalAlvo, goalHorizonteMeses, usarCrescimentoManual, crescimentoManual],
     queryFn: async () => {
       const payload: any = { tipo: goalTipo }
       if (goalAlvo) payload.alvo = parseFloat(goalAlvo)

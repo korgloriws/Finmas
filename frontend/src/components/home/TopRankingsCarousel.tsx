@@ -16,12 +16,14 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Buscar rankings de todos os tipos
+  // PERFORMANCE: Buscar rankings de todos os tipos (não bloqueia renderização)
   const { data: rankingsAcoes } = useQuery({
     queryKey: ['rankings-top-acoes'],
     queryFn: () => rankingService.getRankingsInvestidor10('acoes'),
     staleTime: 10 * 60 * 1000,
     retry: 2,
+    refetchOnMount: false, // Não recarrega ao montar - usa cache
+    refetchOnWindowFocus: false,
   })
 
   const { data: rankingsFiis } = useQuery({
@@ -29,6 +31,8 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
     queryFn: () => rankingService.getRankingsInvestidor10('fiis'),
     staleTime: 10 * 60 * 1000,
     retry: 2,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   })
 
   const { data: rankingsBdrs } = useQuery({
@@ -36,6 +40,8 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
     queryFn: () => rankingService.getRankingsInvestidor10('bdrs'),
     staleTime: 10 * 60 * 1000,
     retry: 2,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   })
 
   const { data: rankingsCriptos } = useQuery({
@@ -43,6 +49,8 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
     queryFn: () => rankingService.getRankingsInvestidor10('criptos'),
     staleTime: 10 * 60 * 1000,
     retry: 2,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   })
 
   // Pegar o primeiro item de cada tipo de ranking de cada categoria
@@ -94,9 +102,11 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
     },
     enabled: tickersParaBuscar.length > 0,
     staleTime: 60 * 60 * 1000,
+    refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar
+    refetchOnWindowFocus: false,
   })
 
-  // Buscar cotações e variações
+  // PERFORMANCE: Buscar cotações e variações (não bloqueia renderização)
   const { data: precosData } = useQuery({
     queryKey: ['precos-top-rankings', tickersParaBuscar.join(',')],
     queryFn: async () => {
@@ -124,6 +134,8 @@ const TopRankingsCarousel = memo(({ delay = 0 }: TopRankingsCarouselProps) => {
     },
     enabled: tickersParaBuscar.length > 0,
     staleTime: 2 * 60 * 1000,
+    refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar
+    refetchOnWindowFocus: false,
   })
 
   // Refs para manter estado do scroll

@@ -1,28 +1,27 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider } from './contexts/AuthContext'
 import { AnaliseProvider } from './contexts/AnaliseContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import SecurityCheck from './components/SecurityCheck'
-import LoadingSpinner from './components/LoadingSpinner'
-const LoginPage = lazy(() => import('./pages/LoginPage'))
-const RecuperacaoSenhaPage = lazy(() => import('./pages/RecuperacaoSenhaPage'))
-const ConfigurarSegurancaPage = lazy(() => import('./pages/ConfigurarSegurancaPage'))
-const DetalhesPage = lazy(() => import('./pages/DetalhesPage'))
-const AnalisePage = lazy(() => import('./pages/AnalisePage'))
-const CarteiraPage = lazy(() => import('./pages/CarteiraPage'))
-const ControlePage = lazy(() => import('./pages/ControlePage'))
-const JurosCompostosPage = lazy(() => import('./pages/JurosCompostosPage'))
-const GuiaMercadoPage = lazy(() => import('./pages/GuiaMercadoPage'))
-const ConversorMoedasPage = lazy(() => import('./pages/ConversorMoedasPage'))
-const AgendaDividendosPage = lazy(() => import('./pages/AgendaDividendosPage'))
-const RankingsPage = lazy(() => import('./pages/RankingsPage'))
-const ConfiguracoesPage = lazy(() => import('./pages/ConfiguracoesPage'))
-const GoogleCallbackPage = lazy(() => import('./pages/GoogleCallbackPage'))
-
-const HomePage = lazy(() => import('./pages/HomePage'))
+// PERFORMANCE: Importar páginas diretamente (sem lazy) para navegação instantânea
+// As páginas agora são carregadas no bundle inicial, mas a navegação é instantânea
+import LoginPage from './pages/LoginPage'
+import RecuperacaoSenhaPage from './pages/RecuperacaoSenhaPage'
+import ConfigurarSegurancaPage from './pages/ConfigurarSegurancaPage'
+import DetalhesPage from './pages/DetalhesPage'
+import AnalisePage from './pages/AnalisePage'
+import CarteiraPage from './pages/CarteiraPage'
+import ControlePage from './pages/ControlePage'
+import JurosCompostosPage from './pages/JurosCompostosPage'
+import GuiaMercadoPage from './pages/GuiaMercadoPage'
+import ConversorMoedasPage from './pages/ConversorMoedasPage'
+import AgendaDividendosPage from './pages/AgendaDividendosPage'
+import RankingsPage from './pages/RankingsPage'
+import ConfiguracoesPage from './pages/ConfiguracoesPage'
+import GoogleCallbackPage from './pages/GoogleCallbackPage'
+import HomePage from './pages/HomePage'
 
 function App() {
   return (
@@ -31,17 +30,17 @@ function App() {
         <AnaliseProvider>
         <Routes>
           {/* Rotas públicas */}
-          <Route path="/login" element={<Suspense fallback={<LoadingSpinner text="Carregando página de login..." />}> <LoginPage /> </Suspense>} />
-          <Route path="/auth/google/callback" element={<Suspense fallback={<LoadingSpinner text="Processando login..." />}> <GoogleCallbackPage /> </Suspense>} />
-          <Route path="/recuperar-senha" element={<Suspense fallback={<LoadingSpinner text="Carregando recuperação de senha..." />}> <RecuperacaoSenhaPage /> </Suspense>} />
-          <Route path="/configurar-seguranca" element={<Suspense fallback={<LoadingSpinner text="Carregando configurações..." />}> <ConfigurarSegurancaPage /> </Suspense>} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+          <Route path="/recuperar-senha" element={<RecuperacaoSenhaPage />} />
+          <Route path="/configurar-seguranca" element={<ConfigurarSegurancaPage />} />
           
-          {/* Rotas protegidas */}
+          {/* Rotas protegidas - PERFORMANCE: Sem Suspense para navegação instantânea */}
           <Route path="/" element={
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando dashboard..." />}> <HomePage /> </Suspense>
+                  <HomePage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -51,7 +50,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando detalhes do ativo..." />}> <DetalhesPage /> </Suspense>
+                  <DetalhesPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -61,7 +60,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando análise de mercado..." />}> <AnalisePage /> </Suspense>
+                  <AnalisePage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -71,7 +70,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando carteira..." />}> <CarteiraPage /> </Suspense>
+                  <CarteiraPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -81,7 +80,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando controle financeiro..." />}> <ControlePage /> </Suspense>
+                  <ControlePage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -91,7 +90,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando calculadora..." />}> <JurosCompostosPage /> </Suspense>
+                  <JurosCompostosPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -101,7 +100,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando guia de mercado..." />}> <GuiaMercadoPage /> </Suspense>
+                  <GuiaMercadoPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -111,7 +110,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando conversor de moedas..." />}> <ConversorMoedasPage /> </Suspense>
+                  <ConversorMoedasPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -121,7 +120,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando agenda de dividendos..." />}> <AgendaDividendosPage /> </Suspense>
+                  <AgendaDividendosPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -131,9 +130,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando rankings..." />}>
-                    <RankingsPage />
-                  </Suspense>
+                  <RankingsPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -143,9 +140,7 @@ function App() {
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
-                  <Suspense fallback={<LoadingSpinner text="Carregando configurações..." />}>
-                    <ConfiguracoesPage />
-                  </Suspense>
+                  <ConfiguracoesPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>

@@ -11,25 +11,15 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth()
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando...</p>
-        </motion.div>
-      </div>
-    )
-  }
-
-  if (!user) {
+  // PERFORMANCE: Não bloquear renderização - verificar apenas se não há user
+  // O loading do AuthContext não deve bloquear navegação
+  // Se não houver user após um tempo curto, redirecionar
+  if (!loading && !user) {
     return <Navigate to="/login" replace />
   }
 
+  // Renderizar página imediatamente, mesmo se ainda estiver carregando
+  // O AuthContext vai atualizar o estado em background
   return <>{children}</>
 }
 

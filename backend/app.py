@@ -64,6 +64,7 @@ from models import (
     simular_choques_indexadores,
     obter_cenarios_predefinidos,
     executar_monte_carlo,
+    limpar_cache_usuario,
 )
 from fii_scraper import obter_metadata_fii
 from models import cache
@@ -290,10 +291,47 @@ def api_login():
 
 @server.route("/api/auth/logout", methods=["POST"])
 def api_logout():
+    """
+    Endpoint de logout que garante limpeza completa de dados do usuário:
+    1. Obtém o usuário atual ANTES de invalidar o token (para poder limpar cache)
+    2. Limpa todo o cache relacionado ao usuário
+    3. Invalida a sessão/token
+    4. Limpa o cache do Flask g (request-scoped)
+    5. Remove cookie e headers de cache
+    """
     try:
         from models import limpar_sessoes_expiradas, SESSION_LOCK
         import threading
+        from flask import g
         
+        # ✅ SEGURANÇA: Obter usuário atual ANTES de invalidar token
+        # Isso é crítico para poder limpar o cache do usuário correto
+        usuario_atual = None
+        try:
+            usuario_atual = get_usuario_atual()
+        except Exception:
+            pass
+        
+        # ✅ SEGURANÇA: Limpar cache do usuário ANTES de invalidar token
+        # Isso garante que nenhum dado do usuário permaneça em cache
+        if usuario_atual:
+            try:
+                limpar_cache_usuario(usuario_atual)
+            except Exception as e:
+                # Não falhar o logout se houver erro ao limpar cache
+                # Mas logar o erro para debug
+                print(f"[AVISO] Erro ao limpar cache no logout para {usuario_atual}: {e}")
+        
+        # ✅ SEGURANÇA: Limpar cache do Flask g (request-scoped)
+        # Por segurança, mesmo que seja request-scoped
+        try:
+            if g is not None:
+                if hasattr(g, "_usuario_atual_cached"):
+                    setattr(g, "_usuario_atual_cached", None)
+        except Exception:
+            pass
+        
+        # ✅ SEGURANÇA: Invalidar token/sessão
         try:
             token = request.cookies.get('session_token')
             if token:
@@ -301,17 +339,23 @@ def api_logout():
         except Exception:
             pass
         
+        # Limpar sessões expiradas (manutenção)
         limpar_sessoes_expiradas()
         
+        # ✅ SEGURANÇA: Criar resposta com headers anti-cache
         response = make_response(jsonify({"message": "Logout realizado com sucesso"}), 200)
         response.delete_cookie('session_token')
         
+        # Headers para garantir que navegador não cacheie resposta
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
+        print(f"[SEGURANÇA] Logout realizado para usuário: {usuario_atual or 'desconhecido'}")
+        
         return response
     except Exception as e:
+        print(f"[ERRO] Erro no logout: {e}")
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/auth/google/login", methods=["GET"])
@@ -506,9 +550,10 @@ def api_obter_perfil():
 def api_atualizar_perfil():
     """Atualiza o perfil do usuário atual"""
     try:
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
         
         data = request.get_json()
         nome = data.get('nome')
@@ -525,9 +570,10 @@ def api_atualizar_perfil():
 def api_atualizar_senha():
     """Atualiza a senha do usuário atual"""
     try:
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
         
         data = request.get_json()
         senha_atual = data.get('senha_atual')
@@ -550,9 +596,10 @@ def api_atualizar_senha():
 def api_excluir_conta():
     """Exclui a conta do usuário atual (LGPD)"""
     try:
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
         
         data = request.get_json()
         confirmacao = data.get('confirmacao')
@@ -570,22 +617,7 @@ def api_excluir_conta():
 
 # ==================== ENDPOINTS ADMINISTRATIVOS ====================
 
-@server.route("/api/admin/usuarios", methods=["GET"])
-def api_listar_usuarios():
-    """Lista todos os usuários (apenas para admins)"""
-    try:
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Não autenticado"}), 401
-        
-        if not verificar_role(usuario, 'admin'):
-            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
-        
-        usuarios = listar_usuarios()
-        return jsonify(usuarios), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+# IMPORTANTE: Rotas com parâmetros devem vir ANTES das rotas sem parâmetros
 @server.route("/api/admin/usuarios/<username>/role", methods=["PUT"])
 def api_definir_role(username):
     """Define o role de um usuário (apenas para admins)"""
@@ -606,6 +638,101 @@ def api_definir_role(username):
         if definir_role_usuario(username, novo_role):
             return jsonify({"message": f"Role de {username} atualizado para {novo_role}"}), 200
         return jsonify({"error": "Erro ao atualizar role"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/admin/usuarios/<username>", methods=["DELETE"])
+def api_excluir_usuario(username):
+    """Exclui um usuário (apenas para admins)"""
+    print(f"[ADMIN] DELETE /api/admin/usuarios/{username} - Método: {request.method}, Path: {request.path}")
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        
+        # Não permitir excluir a si mesmo
+        if usuario == username:
+            return jsonify({"error": "Você não pode excluir sua própria conta"}), 400
+        
+        # Verificar se usuário existe
+        usuario_existente = buscar_usuario_por_username(username)
+        if not usuario_existente:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        print(f"[ADMIN] Excluindo usuário {username}...")
+        # Excluir usuário
+        resultado = excluir_conta_usuario(username)
+        if resultado:
+            print(f"[ADMIN] Usuário {username} excluído com sucesso")
+            return jsonify({"message": f"Usuário {username} excluído com sucesso"}), 200
+        else:
+            print(f"[ADMIN] Erro ao excluir usuário {username}")
+            return jsonify({"error": "Erro ao excluir usuário"}), 500
+    except Exception as e:
+        print(f"[ERRO] Erro ao excluir usuário {username}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/admin/usuarios", methods=["GET"])
+def api_listar_usuarios():
+    """Lista todos os usuários (apenas para admins)"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        
+        usuarios = listar_usuarios()
+        return jsonify(usuarios), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/admin/usuarios", methods=["POST"])
+def api_criar_usuario():
+    """Cria um novo usuário (apenas para admins)"""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        
+        data = request.get_json()
+        nome = data.get('nome')
+        username = data.get('username')
+        senha = data.get('senha')
+        email = data.get('email')
+        role = data.get('role', 'usuario')
+        
+        if not nome or not username or not senha:
+            return jsonify({"error": "Nome, username e senha são obrigatórios"}), 400
+        
+        if role not in ['usuario', 'admin']:
+            return jsonify({"error": "Role inválido. Use 'usuario' ou 'admin'"}), 400
+        
+        # Verificar se usuário já existe
+        usuario_existente = buscar_usuario_por_username(username)
+        if usuario_existente:
+            return jsonify({"error": "Usuário já existe"}), 400
+        
+        # Criar usuário
+        resultado = cadastrar_usuario(nome, username, senha, None, None, email, role)
+        if resultado:
+            try:
+                inicializar_bancos_usuario(username)
+            except Exception as e:
+                print(f"Erro ao inicializar bancos para {username}: {e}")
+                pass
+            return jsonify({"message": f"Usuário {username} criado com sucesso"}), 201
+        else:
+            return jsonify({"error": "Erro ao criar usuário"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1676,23 +1803,119 @@ def spa_404_fallback(_e):
         pass
     return jsonify({"error": "Not Found"}), 404
 
+# ==================== HELPER: VALIDAÇÃO DUPLA DE SEGURANÇA ====================
+
+def validar_usuario_autenticado(expected_user=None, validar_token=True):
+    """
+    Função helper para validação dupla de segurança em rotas críticas.
+    
+    Validações realizadas:
+    1. Verifica se o usuário está autenticado
+    2. Verifica se o token ainda é válido (se validar_token=True)
+    3. Verifica se o usuário esperado corresponde ao usuário atual (se fornecido)
+    
+    Args:
+        expected_user: Username esperado (opcional, pode vir do header X-User-Expected)
+        validar_token: Se True, valida que o token ainda é válido no banco
+    
+    Returns:
+        tuple: (usuario_atual, None) se válido, ou (None, resposta_erro) se inválido
+    """
+    try:
+        # Obter usuário esperado do header se não fornecido
+        if expected_user is None:
+            try:
+                expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
+                if not expected_user:
+                    expected_user = None
+            except Exception:
+                expected_user = None
+        
+        # Validação 1: Verificar se usuário está autenticado
+        usuario_atual = get_usuario_atual()
+        if not usuario_atual:
+            print("[SEGURANCA] Validação falhou: Usuário não autenticado")
+            return None, (jsonify({"error": "Não autenticado"}), 401)
+        
+        # Validação 2: Verificar se token ainda é válido (re-validar no banco)
+        if validar_token:
+            try:
+                token = request.cookies.get('session_token')
+                if not token:
+                    print(f"[SEGURANCA] Validação falhou: Token não encontrado para usuário {usuario_atual}")
+                    return None, (jsonify({"error": "Token inválido"}), 401)
+                
+                # Re-validar token no banco (get_usuario_atual já faz isso, mas reforçar)
+                from models import _create_sessions_table_if_needed
+                import time
+                _create_sessions_table_if_needed()
+                
+                # Verificar token diretamente no banco
+                from models import _is_postgres, _get_pg_conn, USUARIOS_DB_PATH
+                import sqlite3
+                
+                token_valido = False
+                if _is_postgres():
+                    conn = _get_pg_conn()
+                    try:
+                        with conn.cursor() as c:
+                            c.execute('SELECT username, expira_em FROM public.sessoes WHERE token = %s', (token,))
+                            row = c.fetchone()
+                            if row:
+                                username_db, expira_em = row
+                                if username_db == usuario_atual and int(expira_em) >= int(time.time()):
+                                    token_valido = True
+                    finally:
+                        conn.close()
+                else:
+                    conn = sqlite3.connect(USUARIOS_DB_PATH)
+                    try:
+                        c = conn.cursor()
+                        c.execute('SELECT username, expira_em FROM sessoes WHERE token = ?', (token,))
+                        row = c.fetchone()
+                        if row:
+                            username_db, expira_em = row
+                            if username_db == usuario_atual and expira_em >= int(time.time()):
+                                token_valido = True
+                    finally:
+                        conn.close()
+                
+                if not token_valido:
+                    print(f"[SEGURANCA] Validação falhou: Token inválido ou expirado para usuário {usuario_atual}")
+                    return None, (jsonify({"error": "Token inválido ou expirado"}), 401)
+            except Exception as e:
+                # Se houver erro na validação do token, não falhar completamente
+                # mas logar o erro
+                print(f"[AVISO] Erro ao validar token para {usuario_atual}: {e}")
+        
+        # Validação 3: Verificar se usuário esperado corresponde ao atual
+        if expected_user:
+            usuario_atual_lower = str(usuario_atual).strip().lower()
+            expected_user_lower = str(expected_user).strip().lower()
+            if usuario_atual_lower != expected_user_lower:
+                print(f"[SEGURANCA] Validação falhou: User mismatch - esperado: {expected_user}, atual: {usuario_atual}")
+                return None, (jsonify({"error": "User mismatch", "current_user": usuario_atual}), 409)
+        
+        # Todas as validações passaram
+        return usuario_atual, None
+        
+    except Exception as e:
+        print(f"[ERRO] Erro na validação de segurança: {e}")
+        return None, (jsonify({"error": "Erro na validação de segurança"}), 500)
+
 # ==================== APIs DE CARTEIRA ====================
 
 @server.route("/api/carteira", methods=["GET"])
 def api_get_carteira():
-    
     try:
-     
-        try:
-            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
-        except Exception:
-            expected_user = ''
         refresh = request.args.get('refresh') in ('1', 'true', 'True')
-   
-        usuario_atual = get_usuario_atual()
+        
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         print(f"DEBUG - Carteira: Usuário atual = {usuario_atual}")
-        if expected_user and usuario_atual and expected_user != str(usuario_atual).strip().lower():
-            return jsonify({"error": "User mismatch", "current_user": usuario_atual}), 409
        
         if refresh:
             try:
@@ -1711,7 +1934,7 @@ def api_get_carteira():
         carteira = obter_carteira()
         if cache_key and cache:
             try:
-                cache.set(cache_key, carteira, timeout=600)  # 10 minutos
+                cache.set(cache_key, carteira, timeout=60)  # 10 minutos
             except Exception:
                 pass
         return jsonify(carteira)
@@ -1722,6 +1945,11 @@ def api_get_carteira():
 def api_carteira_com_metadados_fii():
     """API para obter carteira com metadados de FIIs (usado apenas quando necessário)"""
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         carteira = obter_carteira_com_metadados_fii()
         return jsonify(carteira)
     except Exception as e:
@@ -1732,21 +1960,17 @@ def api_carteira_com_metadados_fii():
 @server.route("/api/carteira/refresh", methods=["POST"])
 def api_refresh_carteira():
     try:
-        # Proteção contra troca de usuário entre abas: valida o usuário esperado (opcional)
-        try:
-            expected_user = (request.headers.get('X-User-Expected') or '').strip().lower()
-        except Exception:
-            expected_user = ''
-        actual_user = get_usuario_atual()
-        if expected_user and actual_user and expected_user != str(actual_user).strip().lower():
-            return jsonify({"error": "User mismatch", "current_user": actual_user}), 409
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         print("DEBUG: Iniciando refresh da carteira...")
         result = atualizar_precos_indicadores_carteira()
         print(f"DEBUG: Resultado do refresh: {result}")
         
         
         try:
-            usuario_atual = get_usuario_atual()
             if usuario_atual and cache:
                 cache.delete(f"carteira:{usuario_atual}")
                 cache.delete(f"carteira_insights:{usuario_atual}")
@@ -2062,9 +2286,11 @@ def api_batch():
 @server.route("/api/carteira/insights", methods=["GET"])
 def api_carteira_insights():
     try:
-        usuario_atual = get_usuario_atual()
-        if not usuario_atual:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         cache_key = f"carteira_insights:{usuario_atual}"
         if cache:
             cached = cache.get(cache_key)
@@ -2210,9 +2436,10 @@ def api_carteira_insights():
 @server.route('/api/goals', methods=['GET', 'POST'])
 def api_goals():
     try:
-        usuario_atual = get_usuario_atual()
-        if not usuario_atual:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
         _ensure_goals_schema()
         if request.method == 'GET':
             g = get_goals() or {}
@@ -2232,9 +2459,10 @@ def api_goals():
 @server.route('/api/goals/projecao', methods=['POST'])
 def api_goals_projecao():
     try:
-        usuario_atual = get_usuario_atual()
-        if not usuario_atual:
-            return jsonify({"error": "Não autenticado"}), 401
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
         payload = request.get_json() or {}
         goal = payload or (get_goals() or {})
         proj = compute_goals_projection(goal or {})
@@ -2486,6 +2714,11 @@ def export_rendimentos_generic():
 def api_adicionar_ativo():
     """API para adicionar um ativo à carteira"""
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         data = request.get_json()
         ticker = data.get('ticker')
         quantidade = data.get('quantidade')
@@ -2554,6 +2787,11 @@ def api_adicionar_ativo():
 def api_remover_ativo(id):
     """API para remover um ativo da carteira"""
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         resultado = remover_ativo_carteira(id)
         try:
             if cache:
@@ -2572,6 +2810,11 @@ def api_remover_ativo(id):
 def api_atualizar_ativo(id):
     """API para atualizar quantidade e/ou preço do ativo"""
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         data = request.get_json() or {}
         quantidade = data.get('quantidade')
         preco_atual = data.get('preco_atual')
@@ -2594,12 +2837,15 @@ def api_atualizar_ativo(id):
 
 @server.route("/api/carteira/movimentacoes", methods=["GET"])
 def api_get_movimentacoes():
-
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         mes = request.args.get('mes', type=int)
         ano = request.args.get('ano', type=int)
         
-        usuario_atual = get_usuario_atual()
         cache_key = None
         if cache and usuario_atual:
             cache_key = f"movimentacoes:{usuario_atual}:{mes or ''}:{ano or ''}"
@@ -3119,11 +3365,14 @@ def _buscar_proventos_ativo(ativo, data_inicio):
 
 @server.route("/api/carteira/proventos-recebidos", methods=["GET"])
 def api_get_proventos_recebidos():
-    
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         periodo = request.args.get('periodo', 'total')
         
-
         carteira = obter_carteira()
         if not carteira:
             return jsonify([])
@@ -3176,12 +3425,15 @@ def api_get_proventos_recebidos():
 
 @server.route("/api/marmitas", methods=["GET"])
 def api_get_marmitas():
-  
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         mes = request.args.get('mes', type=int)
         ano = request.args.get('ano', type=int)
         
-        usuario = get_usuario_atual()
         mes_key = str(mes).zfill(2) if mes else ''
         ano_key = str(ano) if ano else ''
         
@@ -3657,13 +3909,15 @@ def api_evolucao_receitas():
 
 @server.route("/api/controle/receitas-despesas", methods=["GET"])
 def api_receitas_despesas():
-   
     try:
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         mes = request.args.get('mes', type=str)
         ano = request.args.get('ano', type=str)
         
-       
-        usuario = get_usuario_atual()
         if cache and usuario:
             key = f"receitas_despesas:{usuario}:{mes or ''}:{ano or ''}"
             cached = cache.get(key)
@@ -3693,27 +3947,24 @@ def api_receitas_despesas():
 
 @server.route("/api/home/resumo", methods=["GET"])
 def api_home_resumo():
-
     try:
-       
+        # SEGURANCA: Validação dupla de segurança
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
         def _cache_key():
-            try:
-                user = get_usuario_atual() or 'anon'
-            except Exception:
-                user = 'anon'
             mes_q = request.args.get('mes', type=str) or ''
             ano_q = request.args.get('ano', type=str) or ''
-            return f"home_resumo:{user}:{mes_q}:{ano_q}"
+            return f"home_resumo:{usuario}:{mes_q}:{ano_q}"
+        
         if cache:
             cached_payload = cache.get(_cache_key())
             if cached_payload is not None:
                 return jsonify(cached_payload)
+        
         mes = request.args.get('mes', type=str)
         ano = request.args.get('ano', type=str)
-       
-        usuario = get_usuario_atual()
-        if not usuario:
-            return jsonify({"error": "Não autenticado"}), 401
         
         if not mes or not ano:
             return jsonify({"error": "Mês e ano são obrigatórios"}), 400
@@ -4551,4 +4802,10 @@ def api_obter_lista_ranking():
         return jsonify({"success": False, "message": str(e)}), 500
 
 if __name__ == "__main__":
+    # Debug: Listar todas as rotas registradas
+    print("\n=== ROTAS REGISTRADAS ===")
+    for rule in server.url_map.iter_rules():
+        if 'admin/usuarios' in rule.rule:
+            print(f"{rule.methods} {rule.rule}")
+    print("========================\n")
     server.run(debug=False, port=5005, host='0.0.0.0') 

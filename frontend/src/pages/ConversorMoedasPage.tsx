@@ -13,6 +13,7 @@ import {
 
 } from 'lucide-react'
 import { ativoService, carteiraService } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatPercentage } from '../utils/formatters'
 import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
 import TickerWithLogo from '../components/TickerWithLogo'
@@ -74,6 +75,7 @@ const SUPPORTED_CODES = Array.from(new Set(CURRENCY_PAIRS.flatMap(p => [p.from, 
 const SUPPORTED_CURRENCIES = CURRENCIES.filter(c => SUPPORTED_CODES.includes(c.code))
 
 export default function ConversorMoedasPage() {
+  const { user } = useAuth()
   const [amount, setAmount] = useState<string>('1')
   const [fromCurrency, setFromCurrency] = useState('BRL')
   const [toCurrency, setToCurrency] = useState('USD')
@@ -146,9 +148,10 @@ export default function ConversorMoedasPage() {
     return numAmount * rate
   }, [amount, exchangeRateQuery.data, fromCurrency, toCurrency])
 
+  // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
   // Carteira real do sistema – declarado antes do uso em carteiraRatesQuery
   const carteiraQuery = useQuery({
-    queryKey: ['carteira'],
+    queryKey: ['carteira', user],
     queryFn: async () => {
       const data = await carteiraService.getCarteira()
       // Mapear para estrutura com moeda inferida
@@ -160,6 +163,7 @@ export default function ConversorMoedasPage() {
         moeda: typeof a.ticker === 'string' && a.ticker.endsWith('.SA') ? 'BRL' : 'USD',
       }))
     },
+    enabled: !!user,
     staleTime: 60_000,
   })
 

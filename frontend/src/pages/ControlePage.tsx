@@ -9,6 +9,7 @@ import {
   ChefHat, CreditCard, Target, Calendar
 } from 'lucide-react'
 import { controleService, cartaoService, marmitasService } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import HelpTips from '../components/HelpTips'
 // Lazy loading dos componentes de controle
 import { lazy, Suspense } from 'react'
@@ -52,6 +53,7 @@ const CATEGORIAS_DESPESAS = [
 ]
 
 export default function ControlePage() {
+  const { user } = useAuth()
   
   const getNomeMes = (mes: number) => {
     return new Date(2024, mes - 1).toLocaleDateString('pt-BR', { month: 'long' })
@@ -95,39 +97,44 @@ export default function ControlePage() {
   }, [])
 
 
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   // Dados sempre carregam (são rápidos, estão no mesmo servidor)
   const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
-    queryKey: ['receitas-despesas', filtroMes, filtroAno],
+    queryKey: ['receitas-despesas', user, filtroMes, filtroAno],
     queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 1 * 60 * 1000, // 1 minuto
   })
 
   const { data: saldo } = useQuery<{ saldo: number }>({
-    queryKey: ['saldo', filtroMes, filtroAno],
+    queryKey: ['saldo', user, filtroMes, filtroAno],
     queryFn: () => controleService.getSaldo(filtroMes, filtroAno),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 1 * 60 * 1000, // 1 minuto
   })
 
   const { data: dadosGraficoEvolucao } = useQuery<EvolucaoFinanceira[]>({
-    queryKey: ['evolucao-financeira', filtroMes, filtroAno, periodoEvolucao],
+    queryKey: ['evolucao-financeira', user, filtroMes, filtroAno, periodoEvolucao],
     queryFn: () => controleService.getEvolucaoFinanceira(filtroMes, filtroAno),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
   const { data: dadosComparacao } = useQuery<EvolucaoFinanceira[]>({
-    queryKey: ['evolucao-financeira-comparacao', filtroMes, filtroAno],
+    queryKey: ['evolucao-financeira-comparacao', user, filtroMes, filtroAno],
     queryFn: () => {
       const mesAnterior = parseInt(filtroMes) - 1
       const anoAnterior = mesAnterior === 0 ? parseInt(filtroAno) - 1 : parseInt(filtroAno)
       const mesAnteriorStr = mesAnterior === 0 ? '12' : mesAnterior.toString().padStart(2, '0')
       return controleService.getEvolucaoFinanceira(mesAnteriorStr, anoAnterior.toString())
     },
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
@@ -135,24 +142,27 @@ export default function ControlePage() {
 
   // Dados das abas específicas - sempre carregam
   const { data: outros } = useQuery({
-    queryKey: ['outros', filtroMes, filtroAno],
+    queryKey: ['outros', user, filtroMes, filtroAno],
     queryFn: () => controleService.getOutros(filtroMes, filtroAno),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 2 * 60 * 1000, // 2 minutos
   })
 
   const { data: cartoes } = useQuery({
-    queryKey: ['cartoes-cadastrados', filtroMes, filtroAno],
+    queryKey: ['cartoes-cadastrados', user, filtroMes, filtroAno],
     queryFn: () => cartaoService.getCartoesCadastrados(),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
   const { data: marmitas } = useQuery({
-    queryKey: ['marmitas', filtroMes, filtroAno],
+    queryKey: ['marmitas', user, filtroMes, filtroAno],
     queryFn: () => marmitasService.getMarmitas(parseInt(filtroMes), parseInt(filtroAno)),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 2 * 60 * 1000, // 2 minutos

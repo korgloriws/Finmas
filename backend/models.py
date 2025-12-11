@@ -1195,6 +1195,98 @@ def get_usuario_atual():
         print(f"DEBUG: get_usuario_atual: Exceção: {e}")
         return None
 
+def limpar_cache_usuario(username):
+    """
+    Limpa todo o cache relacionado a um usuário específico.
+    Esta função deve ser chamada no logout para garantir que nenhum dado
+    do usuário permaneça em cache após o logout.
+    
+    Args:
+        username: Nome do usuário cujo cache deve ser limpo
+    """
+    if not username or not cache:
+        return
+    
+    try:
+        # Lista de todas as chaves de cache conhecidas que usam username
+        # Chaves fixas (sem parâmetros variáveis)
+        chaves_fixas = [
+            f"carteira:{username}",
+            f"carteira_insights:{username}",
+            f"goals:{username}",
+        ]
+        
+        # Limpar chaves fixas
+        for chave in chaves_fixas:
+            try:
+                cache.delete(chave)
+            except Exception:
+                pass
+        
+        # Chaves com parâmetros variáveis (mes, ano, periodo)
+        # Vamos tentar limpar as combinações mais comuns dos últimos 2 anos
+        from datetime import datetime
+        ano_atual = datetime.now().year
+        anos = [str(ano_atual - 1), str(ano_atual), str(ano_atual + 1)]
+        meses = [f"{i:02d}" for i in range(1, 13)]
+        periodos = ['1m', '3m', '6m', '12m']
+        
+        # Limpar chaves com parâmetros (mes, ano)
+        # Padrões: movimentacoes, marmitas, receitas, outros, saldo, receitas_despesas, home_resumo
+        prefixos_mes_ano = [
+            f"movimentacoes:{username}",
+            f"marmitas:{username}",
+            f"receitas:{username}",
+            f"outros:{username}",
+            f"saldo:{username}",
+            f"receitas_despesas:{username}",
+            f"home_resumo:{username}",
+        ]
+        
+        for prefixo in prefixos_mes_ano:
+            for ano in anos:
+                for mes in meses:
+                    chave = f"{prefixo}:{mes}:{ano}"
+                    try:
+                        cache.delete(chave)
+                    except Exception:
+                        pass
+                # Também tentar sem mes (string vazia)
+                chave = f"{prefixo}::{ano}"
+                try:
+                    cache.delete(chave)
+                except Exception:
+                    pass
+        
+        # Limpar chaves com período (marmitas_gastos)
+        for periodo in periodos:
+            chave = f"marmitas_gastos:{username}:{periodo}"
+            try:
+                cache.delete(chave)
+            except Exception:
+                pass
+        
+        # Limpar cache do Flask g (request-scoped, mas por segurança)
+        try:
+            from flask import g
+            if g is not None:
+                try:
+                    # Se o usuário em cache é o que está fazendo logout, limpar
+                    cached_user = getattr(g, "_usuario_atual_cached", None)
+                    if cached_user == username:
+                        setattr(g, "_usuario_atual_cached", None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        print(f"[SEGURANÇA] Cache limpo para usuário: {username}")
+        
+    except Exception as e:
+        # Não falhar o logout se houver erro ao limpar cache
+        print(f"[AVISO] Erro ao limpar cache do usuário {username}: {e}")
+        pass
+
 def limpar_sessoes_expiradas():
     try:
         _create_sessions_table_if_needed()

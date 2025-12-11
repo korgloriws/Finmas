@@ -47,32 +47,41 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     checkCurrentUser()
   }, [])
 
-  // Revalidar usuário em foco/visibilidade e sincronizar entre abas
+  // PERFORMANCE: Reduzir verificações desnecessárias
+  // Sincronizar entre abas apenas (não verificar em focus/visibility)
   useEffect(() => {
-    const onFocus = () => {
-      checkCurrentUser()
-    }
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        checkCurrentUser()
-      }
-    }
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'finmas_user') {
-        checkCurrentUser()
+        // Só verificar se o valor mudou (outra aba fez login/logout)
+        const newUser = e.newValue
+        if (newUser !== user) {
+          checkCurrentUser()
+        }
       }
     }
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('storage', onStorage)
     return () => {
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('storage', onStorage)
     }
-  }, [])
+  }, [user])
 
+  // PERFORMANCE: Verificar cache local primeiro antes de fazer chamada API
   const checkCurrentUser = async () => {
+    // Verificar cache local primeiro (se houver user no localStorage, assumir que está logado)
+    try {
+      const cachedUser = window.localStorage.getItem('finmas_user')
+      if (cachedUser && !user) {
+        // Se há cache mas não há user no estado, definir temporariamente
+        // Isso permite renderização imediata enquanto verifica no backend
+        setUser(cachedUser)
+        setUserRole('usuario') // Assumir role padrão temporariamente
+        setLoading(false) // Não bloquear enquanto verifica
+      }
+    } catch {
+      // Ignorar erros de localStorage
+    }
+
+    // Verificar no backend em background (não bloqueia)
     try {
       const response = await api.get('/auth/usuario-atual')
       if (response.data.username) {
@@ -187,6 +196,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const atualizarPergunta = async (username: string, pergunta: string, resposta: string) => {
     try {
       await api.post('/auth/atualizar-pergunta', { username, pergunta, resposta })
+      // Invalidar cache do SecurityCheck após atualizar pergunta
+      try {
+        const cacheKey = `finmas_security_check_${username}`
+        window.localStorage.removeItem(cacheKey)
+      } catch {
+        /* ignore */
+      }
     } catch (error: any) {
       if (error.response?.data?.error) {
         throw new Error(error.response.data.error)
@@ -208,32 +224,145 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }
 
   const logout = async () => {
+    //  SEGURANÇA: Salvar username ANTES de limpar estado
+    // Isso é crítico para poder invalidar o cache específico do usuário
+    const currentUser = user
+    
     try {
+      //  SEGURANÇA: Invalidar cache específico do usuário ANTES de fazer logout
+      // Isso garante que nenhum dado do usuário permaneça em cache
+      if (currentUser) {
+        try {
+          // Invalidar todas as queries que incluem o username
+          queryClient.removeQueries({
+            predicate: (query) => {
+              const queryKey = query.queryKey
+              // Verificar se a queryKey inclui o username
+              if (Array.isArray(queryKey)) {
+                return queryKey.includes(currentUser) || 
+                       queryKey.some(key => 
+                         typeof key === 'string' && key.includes(currentUser)
+                       )
+              }
+              return false
+            }
+          })
+          
+          // Invalidar queries conhecidas que usam username (por segurança extra)
+          const queriesComUser = [
+            ['carteira', currentUser],
+            ['carteira-insights', currentUser],
+            ['batch-home', currentUser],
+            ['home-resumo', currentUser],
+            ['carteira-historico', currentUser],
+            ['movimentacoes', currentUser],
+            ['movimentacoes-all', currentUser],
+            ['proventos', currentUser],
+            ['proventos-recebidos', currentUser],
+            ['historico-carteira', currentUser],
+            ['rebalance-config', currentUser],
+            ['rebalance-status', currentUser],
+            ['rebalance-history', currentUser],
+            ['tipos-ativos', currentUser],
+            ['perfil'],
+            ['admin-usuarios'],
+          ]
+          
+          queriesComUser.forEach(queryKey => {
+            queryClient.removeQueries({ queryKey })
+          })
+          
+          console.log(`[SEGURANÇA] Cache do React Query invalidado para usuário: ${currentUser}`)
+        } catch (cacheError) {
+          // Não falhar o logout se houver erro ao limpar cache
+          console.warn('[AVISO] Erro ao invalidar cache específico do usuário:', cacheError)
+        }
+      }
+      
+      // Fazer logout no backend
       await api.post('/auth/logout')
+      
+      //  SEGURANÇA: Limpar estado do usuário
       setUser(null)
       setUserRole(null)
       
-      // Invalidar todo o cache do React Query para forçar recarregamento
+      //  SEGURANÇA: Limpar TODO o cache (segurança extra)
+      // Isso garante que mesmo queries sem username sejam limpas
       queryClient.clear()
+      
+      // Limpar localStorage (incluindo cache do SecurityCheck)
+      try {
+        window.localStorage.removeItem('finmas_user')
+        // Limpar cache do SecurityCheck para o usuário atual
+        if (currentUser) {
+          const cacheKey = `finmas_security_check_${currentUser}`
+          window.localStorage.removeItem(cacheKey)
+        }
+      } catch {
+        /* ignore */
+      }
       
       // Navegar para a tela de login sem recarregar a página
       navigate('/login', { replace: true })
     } catch (error) {
       console.error('Erro ao fazer logout:', error)
-      // Mesmo com erro, limpar o estado local
+      
+      //  SEGURANÇA: Mesmo com erro, limpar TUDO
+      if (currentUser) {
+        try {
+          queryClient.removeQueries({
+            predicate: (query) => {
+              const queryKey = query.queryKey
+              if (Array.isArray(queryKey)) {
+                return queryKey.includes(currentUser) || 
+                       queryKey.some(key => 
+                         typeof key === 'string' && key.includes(currentUser)
+                       )
+              }
+              return false
+            }
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+      
       setUser(null)
       setUserRole(null)
       queryClient.clear()
+      
+      try {
+        window.localStorage.removeItem('finmas_user')
+      } catch {
+        /* ignore */
+      }
+      
       navigate('/login', { replace: true })
     }
   }
 
   const setUserFromToken = (username: string, role: string) => {
+    //  SEGURANÇA: Limpar cache antes de definir novo usuário
+    // Isso garante que dados de usuários anteriores não sejam mantidos
+    try {
+      queryClient.clear()
+    } catch {
+      /* ignore */
+    }
+    
+    // Definir novo usuário
     setUser(username)
     setUserRole(role as 'usuario' | 'admin')
     setLoading(false)
-    // Limpar cache do React Query para forçar refresh
-    queryClient.clear()
+    
+    // Limpar localStorage e definir novo usuário
+    try {
+      window.localStorage.setItem('finmas_user', username)
+    } catch {
+      /* ignore */
+    }
+    
+    console.log(`[SEGURANÇA] Usuário definido via token: ${username}, cache limpo`)
   }
 
   const value = {

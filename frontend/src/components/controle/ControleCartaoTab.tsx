@@ -6,6 +6,7 @@ import {
   DollarSign, ShoppingCart, X, ChevronDown
 } from 'lucide-react'
 import { cartaoService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { CartaoCadastrado, CompraCartao, BandeiraCartao, CategoriaCompra } from '../../types'
 
@@ -49,6 +50,7 @@ export default function ControleCartaoTab({
   filtroAno, 
   ocultarValores
 }: ControleCartaoTabProps) {
+  const { user } = useAuth()
   
   const [inputNome, setInputNome] = useState('')
   const [inputBandeira, setInputBandeira] = useState('')
@@ -77,27 +79,29 @@ export default function ControleCartaoTab({
 
   const queryClient = useQueryClient()
 
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   // Queries
   const { data: cartoes, isLoading: cartoesLoading } = useQuery<CartaoCadastrado[]>({
-    queryKey: ['cartoes-cadastrados'],
+    queryKey: ['cartoes-cadastrados', user, filtroMes, filtroAno],
     queryFn: () => cartaoService.getCartoesCadastrados(),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
   })
 
 
   const { data: compras, isLoading: comprasLoading } = useQuery<CompraCartao[]>({
-    queryKey: ['compras-cartao', cartaoSelecionado, filtroMes, filtroAno],
+    queryKey: ['compras-cartao', user, cartaoSelecionado, filtroMes, filtroAno],
     queryFn: () => cartaoService.getComprasCartao(cartaoSelecionado!, filtroMes, filtroAno),
-    enabled: !!cartaoSelecionado,
+    enabled: !!user && !!cartaoSelecionado,
     retry: 1,
     refetchOnWindowFocus: false,
   })
 
   const { data: totalCompras, isLoading: totalLoading } = useQuery<number>({
-    queryKey: ['total-compras-cartao', cartaoSelecionado, filtroMes, filtroAno],
+    queryKey: ['total-compras-cartao', user, cartaoSelecionado, filtroMes, filtroAno],
     queryFn: () => cartaoService.getTotalComprasCartao(cartaoSelecionado!, filtroMes, filtroAno),
-    enabled: !!cartaoSelecionado,
+    enabled: !!user && !!cartaoSelecionado,
     retry: 1,
     refetchOnWindowFocus: false,
   })
@@ -106,7 +110,7 @@ export default function ControleCartaoTab({
   const adicionarCartaoMutation = useMutation({
     mutationFn: cartaoService.adicionarCartaoCadastrado,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
+      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados', user] })
       limparFormularioCartao()
     },
   })
@@ -114,7 +118,7 @@ export default function ControleCartaoTab({
   const atualizarCartaoMutation = useMutation({
     mutationFn: cartaoService.atualizarCartaoCadastrado,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
+      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados', user] })
       setEditingCartaoId(null)
       setEditandoCartao(false)
       limparFormularioCartao()
@@ -125,7 +129,7 @@ export default function ControleCartaoTab({
   const removerCartaoMutation = useMutation({
     mutationFn: cartaoService.removerCartaoCadastrado,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
+      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados', user] })
       if (cartaoSelecionado === editingCartaoId) {
         setCartaoSelecionado(null)
       }
@@ -135,8 +139,8 @@ export default function ControleCartaoTab({
   const adicionarCompraMutation = useMutation({
     mutationFn: cartaoService.adicionarCompraCartao,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['compras-cartao'] })
-      queryClient.invalidateQueries({ queryKey: ['total-compras-cartao'] })
+      queryClient.invalidateQueries({ queryKey: ['compras-cartao', user] })
+      queryClient.invalidateQueries({ queryKey: ['total-compras-cartao', user] })
       limparFormularioCompra()
     },
   })
@@ -145,8 +149,8 @@ export default function ControleCartaoTab({
   const removerCompraMutation = useMutation({
     mutationFn: cartaoService.removerCompraCartao,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['compras-cartao'] })
-      queryClient.invalidateQueries({ queryKey: ['total-compras-cartao'] })
+      queryClient.invalidateQueries({ queryKey: ['compras-cartao', user] })
+      queryClient.invalidateQueries({ queryKey: ['total-compras-cartao', user] })
     },
   })
 
@@ -155,17 +159,17 @@ export default function ControleCartaoTab({
       cartaoService.marcarCartaoComoPago(cartaoId, mesPagamento, anoPagamento),
     onSuccess: () => {
       // Invalidar todas as queries relacionadas
-      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
-      queryClient.invalidateQueries({ queryKey: ['outros'] })
-      queryClient.invalidateQueries({ queryKey: ['receitas-despesas'] })
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados', user] })
+      queryClient.invalidateQueries({ queryKey: ['outros', user] })
+      queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       
       // Forçar refetch das queries principais
-      queryClient.refetchQueries({ queryKey: ['outros'] })
-      queryClient.refetchQueries({ queryKey: ['receitas-despesas'] })
-      queryClient.refetchQueries({ queryKey: ['saldo'] })
+      queryClient.refetchQueries({ queryKey: ['outros', user] })
+      queryClient.refetchQueries({ queryKey: ['receitas-despesas', user] })
+      queryClient.refetchQueries({ queryKey: ['saldo', user] })
       
       // Mostrar notificação de sucesso
       alert('Cartão marcado como pago! A despesa foi adicionada, o saldo foi atualizado e o limite foi devolvido.')
@@ -183,17 +187,17 @@ export default function ControleCartaoTab({
     mutationFn: cartaoService.desmarcarCartaoComoPago,
     onSuccess: () => {
 
-      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados'] })
-      queryClient.invalidateQueries({ queryKey: ['outros'] })
-      queryClient.invalidateQueries({ queryKey: ['receitas-despesas'] })
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      queryClient.invalidateQueries({ queryKey: ['cartoes-cadastrados', user] })
+      queryClient.invalidateQueries({ queryKey: ['outros', user] })
+      queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       
  
-      queryClient.refetchQueries({ queryKey: ['outros'] })
-      queryClient.refetchQueries({ queryKey: ['receitas-despesas'] })
-      queryClient.refetchQueries({ queryKey: ['saldo'] })
+      queryClient.refetchQueries({ queryKey: ['outros', user] })
+      queryClient.refetchQueries({ queryKey: ['receitas-despesas', user] })
+      queryClient.refetchQueries({ queryKey: ['saldo', user] })
       
 
       alert('Cartão desmarcado como pago! A despesa foi removida e o saldo foi atualizado.')

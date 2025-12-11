@@ -8,6 +8,7 @@ import {
   ArrowUpRight, ArrowDownRight, TrendingDown
 } from 'lucide-react'
 import { controleService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 
 // Função para formatar data sem problemas de timezone
@@ -34,6 +35,7 @@ export default function ControleReceitaTab({
   filtroAno, 
   ocultarValores
 }: ControleReceitaTabProps) {
+  const { user } = useAuth()
   const [inputNome, setInputNome] = useState('')
   const [inputValor, setInputValor] = useState('')
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
@@ -53,17 +55,20 @@ export default function ControleReceitaTab({
 
   const queryClient = useQueryClient()
 
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   const { data: receitas, isLoading: loadingReceitas } = useQuery<Receita[]>({
-    queryKey: ['receitas', filtroMes, filtroAno],
+    queryKey: ['receitas', user, filtroMes, filtroAno],
     queryFn: () => controleService.getReceitas(filtroMes, filtroAno),
+    enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
   })
 
 
   const { data: evolucaoReceitas } = useQuery({
-    queryKey: ['evolucao-receitas', periodoGrafico],
+    queryKey: ['evolucao-receitas', user, periodoGrafico],
     queryFn: () => controleService.getEvolucaoReceitas(periodoGrafico),
+    enabled: !!user,
   })
 
 
@@ -71,9 +76,10 @@ export default function ControleReceitaTab({
     mutationFn: ({ nome, valor, opts }: { nome: string; valor: number; opts?: any }) =>
       controleService.adicionarReceita(nome, valor, opts),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       setInputNome('')
       setInputValor('')
       setInputData(new Date().toISOString().split('T')[0])
@@ -87,18 +93,20 @@ export default function ControleReceitaTab({
     mutationFn: ({ id, nome, valor, opts }: { id: number; nome: string; valor: number; opts?: any }) =>
       controleService.atualizarReceita(id, nome, valor, opts),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
   })
 
   const removerReceitaMutation = useMutation({
     mutationFn: controleService.removerReceita,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['evolucao-receitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
   })
 

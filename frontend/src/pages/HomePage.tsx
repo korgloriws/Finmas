@@ -536,8 +536,9 @@ export default function HomePage() {
     }).length || 0
 
     // 2. Proventos pendentes (baseado em histórico para estimativa)
+    // SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
     const proventosRecebidos = useQuery({
-      queryKey: ['proventos-recebidos-status'],
+      queryKey: ['proventos-recebidos-status', user],
       queryFn: () => carteiraService.getProventosRecebidos('3m'), // Últimos 3 meses
       staleTime: 300_000,
       enabled: !!user
@@ -687,8 +688,9 @@ export default function HomePage() {
   // Componente para próximos eventos e vencimentos
   const UpcomingEventsCard = ({ delay = 0 }: { delay?: number }) => {
     // Buscar proventos recebidos (dados reais)
+    // ✅ SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
     const { data: proventosRecebidos } = useQuery({
-      queryKey: ['proventos-recebidos'],
+      queryKey: ['proventos-recebidos', user],
       queryFn: () => carteiraService.getProventosRecebidos('6m'), // Últimos 6 meses
       staleTime: 300_000,
       enabled: !!user

@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { 
   Trash2, DollarSign, TrendingDown, BarChart3, 
-  Eye, EyeOff, TrendingUp, Edit, Save, X, Plus, Calendar
+  TrendingUp, Edit, Save, X, Plus, Calendar
 } from 'lucide-react'
 import { marmitasService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { Marmita, GastoMensal } from '../../types'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
@@ -21,6 +22,7 @@ export default function ControleAlimentacaoTab({
   filtroAno, 
   ocultarValores
 }: ControleAlimentacaoTabProps) {
+  const { user } = useAuth()
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
   const [inputValor, setInputValor] = useState('')
   const [inputComprou, setInputComprou] = useState(true)
@@ -34,15 +36,18 @@ export default function ControleAlimentacaoTab({
 
   const queryClient = useQueryClient()
 
+  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   // Queries para marmitas
   const { data: marmitas, isLoading: loadingMarmitas } = useQuery<Marmita[]>({
-    queryKey: ['marmitas', filtroMes, filtroAno],
+    queryKey: ['marmitas', user, filtroMes, filtroAno],
     queryFn: () => marmitasService.getMarmitas(parseInt(filtroMes), parseInt(filtroAno)),
+    enabled: !!user,
   })
 
   const { data: gastosMensais } = useQuery<GastoMensal[]>({
-    queryKey: ['gastos-mensais', periodoGrafico],
+    queryKey: ['gastos-mensais', user, periodoGrafico],
     queryFn: () => marmitasService.getGastosMensais(periodoGrafico),
+    enabled: !!user,
   })
 
   // Mutations para marmitas
@@ -50,9 +55,10 @@ export default function ControleAlimentacaoTab({
     mutationFn: ({ data, valor, comprou }: { data: string; valor: number; comprou: boolean }) =>
       marmitasService.adicionarMarmita(data, valor, comprou),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       setInputData(new Date().toISOString().split('T')[0])
       setInputValor('')
       setInputComprou(true)
@@ -63,18 +69,20 @@ export default function ControleAlimentacaoTab({
     mutationFn: ({ id, data, valor, comprou }: { id: number; data: string; valor: number; comprou: boolean }) =>
       marmitasService.atualizarMarmita(id, data, valor, comprou),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
   })
 
   const removerMarmitaMutation = useMutation({
     mutationFn: marmitasService.removerMarmita,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marmitas'] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais'] })
-      queryClient.invalidateQueries({ queryKey: ['saldo'] })
+      // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
+      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
   })
 
