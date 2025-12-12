@@ -70,6 +70,20 @@ export const ativoService = {
     const response = await api.get(`/ativo/${normalizedTicker}/preco-historico?data=${data}`)
     return response.data
   },
+  getFundamentals: async (ticker: string): Promise<{
+    earnings: Array<{ date: string; earnings: number | null }>
+    revenue: Array<{ date: string; revenue: number }>
+    gross_profit: Array<{ date: string; gross_profit: number }>
+    operating_income: Array<{ date: string; operating_income: number }>
+    net_income: Array<{ date: string; net_income: number }>
+    debt: Array<{ date: string; debt: number }>
+    equity: Array<{ date: string; equity: number }>
+    total_assets: Array<{ date: string; total_assets: number }>
+  }> => {
+    const normalizedTicker = normalizeTicker(ticker)
+    const response = await api.get(`/ativo/${normalizedTicker}/fundamentals`)
+    return response.data
+  },
 
   getPrecoAtual: async (ticker: string): Promise<{preco: number, data: string, ticker: string}> => {
     const normalizedTicker = normalizeTicker(ticker)

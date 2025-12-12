@@ -11,6 +11,7 @@ import {
   PieChart,
   LineChart,
   RefreshCw,
+  ScanLine,
 } from 'lucide-react'
 import { ativoService } from '../services/api'
 import { AtivoDetalhes, AtivoInfo } from '../types'
@@ -25,6 +26,7 @@ import DetalhesHistoryTab from '../components/detalhes/DetalhesHistoryTab'
 import DetalhesConceptsTab from '../components/detalhes/DetalhesConceptsTab'
 import DetalhesComparisonTab from '../components/detalhes/DetalhesComparisonTab'
 import DetalhesFixedIncomeTab from '../components/detalhes/DetalhesFixedIncomeTab'
+import DetalhesRadarDividendosTab from '../components/detalhes/DetalhesRadarDividendosTab'
 
 export default function DetalhesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -35,7 +37,7 @@ export default function DetalhesPage() {
   const [, setTickersComparar] = useState<string[]>([])
   const compararInputRef = useRef<HTMLInputElement>(null)
   const [periodoDividendos, setPeriodoDividendos] = useState('1y')
-  const [activeTab, setActiveTab] = useState<'overview' | 'fundamentals' | 'charts' | 'comparison' | 'dividends' | 'history' | 'concepts' | 'fixedincome'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'fundamentals' | 'charts' | 'comparison' | 'dividends' | 'history' | 'concepts' | 'fixedincome' | 'radar-dividendos'>('overview')
 
   // Obter filtros do contexto de análise
   const { filtrosAcoes, filtrosBdrs, filtrosFiis } = useAnalise()
@@ -945,6 +947,7 @@ export default function DetalhesPage() {
               { id: 'fundamentals', label: 'Fundamentos', icon: Target },
               { id: 'charts', label: 'Gráficos', icon: LineChart },
               { id: 'dividends', label: 'Proventos', icon: DollarSign },
+              { id: 'radar-dividendos', label: 'Radar de Dividendos', icon: ScanLine },
               { id: 'history', label: 'História', icon: FileText },
               { id: 'concepts', label: 'Conceitos', icon: Target },
               { id: 'comparison', label: 'Comparação', icon: BarChart3 },
@@ -1012,6 +1015,8 @@ export default function DetalhesPage() {
                 loadingHistorico={loadingHistorico}
                 chartData={chartData}
                 dividendYieldChartData={dividendYieldChartData}
+                historicoDividendos={detalhes?.dividends || null}
+                ticker={ticker}
               />
             )}
 
@@ -1020,6 +1025,14 @@ export default function DetalhesPage() {
                 periodoDividendos={periodoDividendos}
                 handlePeriodoDividendosChange={handlePeriodoDividendosChange}
                 dividendData={dividendData}
+              />
+            )}
+
+            {activeTab === 'radar-dividendos' && (
+              <DetalhesRadarDividendosTab
+                ticker={ticker}
+                historicoDividendos={detalhes?.dividends || null}
+                tipoAtivo={tipoAtivo}
               />
             )}
 

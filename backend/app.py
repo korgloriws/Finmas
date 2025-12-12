@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import json
 import sys
 import os
+from math import isfinite
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from authlib.integrations.flask_client import OAuth
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1588,6 +1589,153 @@ def api_get_ativo_historico(ticker):
         return jsonify(historico_json)
     except Exception as e:
         print(f"[ERRO] Erro ao buscar histórico para {ticker} com período {periodo}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/ativo/<ticker>/fundamentals", methods=["GET"])
+@cache.cached(timeout=3600, query_string=True)  # Cache de 1 hora
+def api_get_ativo_fundamentals(ticker):
+    """
+    API para buscar dados fundamentais históricos (trimestrais)
+    Retorna: earnings, revenue, debt, margins, etc.
+    """
+    try:
+        ticker = ticker.strip().upper()
+        if '-' not in ticker and '.' not in ticker and len(ticker) <= 6:
+            ticker += '.SA'
+        
+        acao = yf.Ticker(ticker)
+        
+        # Buscar dados trimestrais
+        quarterly_earnings = None
+        quarterly_financials = None
+        quarterly_balance_sheet = None
+        
+        try:
+            quarterly_earnings = acao.quarterly_earnings
+        except Exception as e:
+            print(f"[WARN] Erro ao buscar quarterly_earnings para {ticker}: {e}")
+        
+        try:
+            quarterly_financials = acao.quarterly_financials
+        except Exception as e:
+            print(f"[WARN] Erro ao buscar quarterly_financials para {ticker}: {e}")
+        
+        try:
+            quarterly_balance_sheet = acao.quarterly_balance_sheet
+        except Exception as e:
+            print(f"[WARN] Erro ao buscar quarterly_balance_sheet para {ticker}: {e}")
+        
+        # Processar earnings (lucros)
+        earnings_data = []
+        if quarterly_earnings is not None and not quarterly_earnings.empty:
+            for date, row in quarterly_earnings.iterrows():
+                earnings_data.append({
+                    'date': date.isoformat() if hasattr(date, 'isoformat') else str(date),
+                    'earnings': float(row.iloc[0]) if len(row) > 0 else None
+                })
+            earnings_data.sort(key=lambda x: x['date'])
+        
+        # Processar financials (receita, margens)
+        revenue_data = []
+        gross_profit_data = []
+        operating_income_data = []
+        net_income_data = []
+        
+        if quarterly_financials is not None and not quarterly_financials.empty:
+            for col in quarterly_financials.columns:
+                date_str = col.isoformat() if hasattr(col, 'isoformat') else str(col)
+                
+                # Total Revenue
+                if 'Total Revenue' in quarterly_financials.index:
+                    try:
+                        revenue = float(quarterly_financials.loc['Total Revenue', col])
+                        if isfinite(revenue):
+                            revenue_data.append({'date': date_str, 'revenue': revenue})
+                    except Exception:
+                        pass
+                
+                # Gross Profit
+                if 'Gross Profit' in quarterly_financials.index:
+                    try:
+                        gross = float(quarterly_financials.loc['Gross Profit', col])
+                        if isfinite(gross):
+                            gross_profit_data.append({'date': date_str, 'gross_profit': gross})
+                    except Exception:
+                        pass
+                
+                # Operating Income
+                if 'Operating Income' in quarterly_financials.index:
+                    try:
+                        op_inc = float(quarterly_financials.loc['Operating Income', col])
+                        if isfinite(op_inc):
+                            operating_income_data.append({'date': date_str, 'operating_income': op_inc})
+                    except Exception:
+                        pass
+                
+                # Net Income
+                if 'Net Income' in quarterly_financials.index:
+                    try:
+                        net = float(quarterly_financials.loc['Net Income', col])
+                        if isfinite(net):
+                            net_income_data.append({'date': date_str, 'net_income': net})
+                    except Exception:
+                        pass
+        
+        # Processar balance sheet (dívida, patrimônio)
+        debt_data = []
+        equity_data = []
+        total_assets_data = []
+        
+        if quarterly_balance_sheet is not None and not quarterly_balance_sheet.empty:
+            for col in quarterly_balance_sheet.columns:
+                date_str = col.isoformat() if hasattr(col, 'isoformat') else str(col)
+                
+                # Total Debt
+                debt = None
+                for key in ['Total Debt', 'TotalDebt', 'LongTermDebt']:
+                    if key in quarterly_balance_sheet.index:
+                        try:
+                            debt = float(quarterly_balance_sheet.loc[key, col])
+                            if isfinite(debt):
+                                break
+                        except Exception:
+                            continue
+                
+                if debt is not None:
+                    debt_data.append({'date': date_str, 'debt': debt})
+                
+                # Total Stockholder Equity
+                if 'Total Stockholder Equity' in quarterly_balance_sheet.index:
+                    try:
+                        equity = float(quarterly_balance_sheet.loc['Total Stockholder Equity', col])
+                        if isfinite(equity):
+                            equity_data.append({'date': date_str, 'equity': equity})
+                    except Exception:
+                        pass
+                
+                # Total Assets
+                if 'Total Assets' in quarterly_balance_sheet.index:
+                    try:
+                        assets = float(quarterly_balance_sheet.loc['Total Assets', col])
+                        if isfinite(assets):
+                            total_assets_data.append({'date': date_str, 'total_assets': assets})
+                    except Exception:
+                        pass
+        
+        return jsonify({
+            'earnings': earnings_data,
+            'revenue': revenue_data,
+            'gross_profit': gross_profit_data,
+            'operating_income': operating_income_data,
+            'net_income': net_income_data,
+            'debt': debt_data,
+            'equity': equity_data,
+            'total_assets': total_assets_data
+        })
+    except Exception as e:
+        print(f"[ERRO] Erro ao buscar dados fundamentais para {ticker}: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

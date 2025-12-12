@@ -29,23 +29,21 @@ import { AtivoCarteira, Movimentacao } from '../types'
 import { formatCurrency } from '../utils/formatters'
 import HelpTips from '../components/HelpTips'
 import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
-// Lazy loading dos componentes da carteira
-import { lazy, Suspense } from 'react'
-import LoadingSpinner from '../components/LoadingSpinner'
 
-const CarteiraAtivosTab = lazy(() => import('../components/carteira/CarteiraAtivosTab'))
-const CarteiraGraficosTab = lazy(() => import('../components/carteira/CarteiraGraficosTab'))
-const CarteiraRankingTab = lazy(() => import('../components/carteira/CarteiraRankingTab'))
-const CarteiraProventosTab = lazy(() => import('../components/carteira/CarteiraProventosTab'))
-const CarteiraInsightsTab = lazy(() => import('../components/carteira/CarteiraInsightsTab'))
-const CarteiraRebalanceamentoTab = lazy(() => import('../components/carteira/CarteiraRebalanceamentoTab'))
-const CarteiraMovimentacoesTab = lazy(() => import('../components/carteira/CarteiraMovimentacoesTab'))
-const CarteiraProjecaoTab = lazy(() => import('../components/carteira/CarteiraProjecaoTab'))
-const CarteiraRelatoriosTab = lazy(() => import('../components/carteira/CarteiraRelatoriosTab'))
-const CarteiraSimuladorTab = lazy(() => import('../components/carteira/CarteiraSimuladorTab'))
-const AddAtivoModal = lazy(() => import('../components/carteira/AddAtivoModal'))
-const EditAtivoModal = lazy(() => import('../components/carteira/EditAtivoModal'))
-const RendaFixaFormModal = lazy(() => import('../components/carteira/RendaFixaFormModal'))
+// Importações diretas (sem lazy loading para evitar crashes)
+import CarteiraAtivosTab from '../components/carteira/CarteiraAtivosTab'
+import CarteiraGraficosTab from '../components/carteira/CarteiraGraficosTab'
+import CarteiraRankingTab from '../components/carteira/CarteiraRankingTab'
+import CarteiraProventosTab from '../components/carteira/CarteiraProventosTab'
+import CarteiraInsightsTab from '../components/carteira/CarteiraInsightsTab'
+import CarteiraRebalanceamentoTab from '../components/carteira/CarteiraRebalanceamentoTab'
+import CarteiraMovimentacoesTab from '../components/carteira/CarteiraMovimentacoesTab'
+import CarteiraProjecaoTab from '../components/carteira/CarteiraProjecaoTab'
+import CarteiraRelatoriosTab from '../components/carteira/CarteiraRelatoriosTab'
+import CarteiraSimuladorTab from '../components/carteira/CarteiraSimuladorTab'
+import AddAtivoModal from '../components/carteira/AddAtivoModal'
+import EditAtivoModal from '../components/carteira/EditAtivoModal'
+import RendaFixaFormModal from '../components/carteira/RendaFixaFormModal'
 
 export default function CarteiraPage() {
   const { user } = useAuth()
@@ -756,17 +754,15 @@ export default function CarteiraPage() {
         )}
 
         {activeTab === 'graficos' && (
-          <Suspense fallback={<LoadingSpinner text="Carregando gráficos..." />}>
-            <CarteiraGraficosTab
-              carteira={carteira || []}
-              loadingHistorico={loadingHistorico}
-              historicoCarteira={historicoCarteira as any || null}
-              filtroPeriodo={filtroPeriodo}
-              setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
-              ativosPorTipo={ativosPorTipo as unknown as Record<string, number>}
-              topAtivos={topAtivos}
-            />
-          </Suspense>
+          <CarteiraGraficosTab
+            carteira={carteira || []}
+            loadingHistorico={loadingHistorico}
+            historicoCarteira={historicoCarteira as any || null}
+            filtroPeriodo={filtroPeriodo}
+            setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
+            ativosPorTipo={ativosPorTipo as unknown as Record<string, number>}
+            topAtivos={topAtivos}
+          />
         )}
 
 
@@ -792,13 +788,11 @@ export default function CarteiraPage() {
 
 
         {activeTab === 'insights' && (
-          <Suspense fallback={<LoadingSpinner text="Carregando insights..." />}>
-            <CarteiraInsightsTab
-              carteira={carteira || []}
-              loadingInsights={loadingInsights}
-              insights={insights}
-            />
-          </Suspense>
+          <CarteiraInsightsTab
+            carteira={carteira || []}
+            loadingInsights={loadingInsights}
+            insights={insights}
+          />
         )}
 
         {activeTab === 'rebalance' && (
@@ -848,9 +842,7 @@ export default function CarteiraPage() {
         )}
 
         {activeTab === 'simulador' && (
-          <Suspense fallback={<LoadingSpinner text="Carregando simulador..." />}>
-            <CarteiraSimuladorTab carteira={carteira || []} />
-          </Suspense>
+          <CarteiraSimuladorTab carteira={carteira || []} />
         )}
       </div>
       {/* FAB mobile para adicionar ativo rapidamente (somente na aba Ativos) */}
@@ -867,42 +859,36 @@ export default function CarteiraPage() {
         </div>
       )}
       {activeTab === 'ativos' && addModalOpen && (
-        <Suspense fallback={<LoadingSpinner text="Carregando modal..." />}>
-          <AddAtivoModal open={addModalOpen} onClose={()=>setAddModalOpen(false)} />
-        </Suspense>
+        <AddAtivoModal open={addModalOpen} onClose={()=>setAddModalOpen(false)} />
       )}
       
       {/* Modal de editar ativo */}
       {editModalOpen && (
-        <Suspense fallback={<LoadingSpinner text="Carregando modal..." />}>
-          <EditAtivoModal
-            open={editModalOpen}
-            onClose={() => {
-              setEditModalOpen(false)
-              setAtivoParaEditar(null)
-            }}
-            ativo={ativoParaEditar}
-          />
-        </Suspense>
+        <EditAtivoModal
+          open={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false)
+            setAtivoParaEditar(null)
+          }}
+          ativo={ativoParaEditar}
+        />
       )}
 
       {/* Modal de editar renda fixa */}
       {rendaFixaModalOpen && (
-        <Suspense fallback={<LoadingSpinner text="Carregando modal..." />}>
-          <RendaFixaFormModal
-            open={rendaFixaModalOpen}
-            onClose={() => {
-              setRendaFixaModalOpen(false)
-              setAtivoRendaFixaParaEditar(null)
-            }}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ['carteira', user] })
-              queryClient.invalidateQueries({ queryKey: ['carteira'] })
-            }}
-            initialData={ativoRendaFixaParaEditar}
-            editingMode={true}
-          />
-        </Suspense>
+        <RendaFixaFormModal
+          open={rendaFixaModalOpen}
+          onClose={() => {
+            setRendaFixaModalOpen(false)
+            setAtivoRendaFixaParaEditar(null)
+          }}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['carteira', user] })
+            queryClient.invalidateQueries({ queryKey: ['carteira'] })
+          }}
+          initialData={ativoRendaFixaParaEditar}
+          editingMode={true}
+        />
       )}
     </div>
   )
