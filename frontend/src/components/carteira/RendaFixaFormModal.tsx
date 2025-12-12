@@ -170,6 +170,13 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })
+      
+      // Forçar refetch imediato da carteira para atualização instantânea
+      if (u) {
+        queryClient.refetchQueries({ queryKey: ['carteira', u] })
+      }
+      queryClient.refetchQueries({ queryKey: ['carteira'] })
+      
       onSuccess?.()
       onClose()
     },

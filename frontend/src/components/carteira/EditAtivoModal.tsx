@@ -158,6 +158,11 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })
+      
+      // Forçar refetch imediato da carteira para atualização instantânea
+      queryClient.refetchQueries({ queryKey: ['carteira', user] })
+      queryClient.refetchQueries({ queryKey: ['carteira'] })
+      
       onClose()
     }
   })

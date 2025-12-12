@@ -297,13 +297,20 @@ export default function CarteiraPage() {
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
       carteiraService.adicionarAtivo(ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir),
     onSuccess: () => {
+      // Invalidar e forçar refetch imediato das queries ativas
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
       
- 
+      // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
+      queryClient.refetchQueries({ queryKey: ['carteira', user] })
+      // Forçar refetch de movimentações se a aba estiver ativa
+      if (activeTab === 'movimentacoes') {
+        queryClient.refetchQueries({ queryKey: ['movimentacoes', user] })
+      }
+      
       setInputTicker('')
       setInputQuantidade('')
       setInputTipo('')
@@ -325,11 +332,19 @@ export default function CarteiraPage() {
   const removerMutation = useMutation({
     mutationFn: carteiraService.removerAtivo,
     onSuccess: () => {
+      // Invalidar e forçar refetch imediato das queries ativas
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
+      
+      // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
+      queryClient.refetchQueries({ queryKey: ['carteira', user] })
+      // Forçar refetch de movimentações se a aba estiver ativa
+      if (activeTab === 'movimentacoes') {
+        queryClient.refetchQueries({ queryKey: ['movimentacoes', user] })
+      }
     },
   })
 
@@ -337,13 +352,22 @@ export default function CarteiraPage() {
     mutationFn: ({ id, quantidade, preco_atual }: { id: number; quantidade?: number; preco_atual?: number }) =>
       carteiraService.atualizarAtivo(id, { quantidade, preco_atual }),
     onSuccess: () => {
+      // Invalidar e forçar refetch imediato das queries ativas
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
-      
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes-all', user] })
+      
+      // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
+      queryClient.refetchQueries({ queryKey: ['carteira', user] })
+      // Forçar refetch de movimentações se a aba estiver ativa
+      if (activeTab === 'movimentacoes') {
+        queryClient.refetchQueries({ queryKey: ['movimentacoes', user] })
+        queryClient.refetchQueries({ queryKey: ['movimentacoes-all', user] })
+      }
+      
       setEditingId(null)
       setEditQuantidade('')
       setEditPreco('')

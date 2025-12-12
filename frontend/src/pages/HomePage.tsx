@@ -156,9 +156,11 @@ export default function HomePage() {
     : null
   
   // Estados de loading
-  const loadingCarteira = loadingBatch
-  const isFetchingCarteira = isFetchingBatch
-  const loadingResumo = loadingBatch
+  // PERFORMANCE: Só mostrar loading se não houver dados em cache
+  // Isso evita recarregamento visual quando os dados já estão disponíveis
+  const loadingCarteira = loadingBatch && !carteira
+  const isFetchingCarteira = isFetchingBatch && !carteira
+  const loadingResumo = loadingBatch && !resumoHome
 
 
   const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')
@@ -168,9 +170,7 @@ export default function HomePage() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
   const isFirstLoad = useRef(true)
 
-  // ==================== REFRESH AUTOMÁTICO REMOVIDO ====================
-  // Dados só são carregados quando a página é aberta/clicada
-  // Sem atualizações periódicas automáticas
+
 
   // Monitorar carregamento inicial da carteira
   useEffect(() => {
@@ -540,7 +540,9 @@ export default function HomePage() {
     const proventosRecebidos = useQuery({
       queryKey: ['proventos-recebidos-status', user],
       queryFn: () => carteiraService.getProventosRecebidos('3m'), // Últimos 3 meses
-      staleTime: 300_000,
+      staleTime: 10 * 60 * 1000, // 10 minutos
+      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      refetchOnWindowFocus: false,
       enabled: !!user
     }).data
 
@@ -687,12 +689,13 @@ export default function HomePage() {
 
   // Componente para próximos eventos e vencimentos
   const UpcomingEventsCard = ({ delay = 0 }: { delay?: number }) => {
-    // Buscar proventos recebidos (dados reais)
-    // ✅ SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
+
     const { data: proventosRecebidos } = useQuery({
       queryKey: ['proventos-recebidos', user],
       queryFn: () => carteiraService.getProventosRecebidos('6m'), // Últimos 6 meses
-      staleTime: 300_000,
+      staleTime: 10 * 60 * 1000, // 10 minutos
+      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      refetchOnWindowFocus: false,
       enabled: !!user
     })
 
@@ -976,7 +979,8 @@ export default function HomePage() {
       queryFn: carteiraService.getRebalanceConfig,
       enabled: !!user,
       refetchOnWindowFocus: false,
-      staleTime: 60_000,
+      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      staleTime: 10 * 60 * 1000, // 10 minutos
     })
 
     const { data: rbStatus } = useQuery({
@@ -984,7 +988,8 @@ export default function HomePage() {
       queryFn: carteiraService.getRebalanceStatus,
       enabled: !!user,
       refetchOnWindowFocus: false,
-      staleTime: 30_000,
+      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      staleTime: 5 * 60 * 1000, // 5 minutos
     })
 
     // Calcular alocação atual vs ideal
