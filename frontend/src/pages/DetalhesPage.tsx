@@ -13,11 +13,12 @@ import {
   RefreshCw,
   ScanLine,
 } from 'lucide-react'
-import { ativoService } from '../services/api'
-import { AtivoDetalhes, AtivoInfo } from '../types'
-import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
+import { ativoService, carteiraService } from '../services/api'
+import { AtivoDetalhes, AtivoInfo, AtivoCarteira } from '../types'
+import { normalizeTicker, getDisplayTicker, removeTickerExtension } from '../utils/tickerUtils'
 import { useAnalise } from '../contexts/AnaliseContext'
 import { verificarEstrategia } from '../utils/strategyChecker'
+import { useAuth } from '../contexts/AuthContext'
 import DetalhesVisaoGeralTab from '../components/detalhes/DetalhesVisaoGeralTab'
 import DetalhesFundamentalsTab from '../components/detalhes/DetalhesFundamentalsTab'
 import DetalhesChartsTab from '../components/detalhes/DetalhesChartsTab'
@@ -43,11 +44,38 @@ export default function DetalhesPage() {
   const { filtrosAcoes, filtrosBdrs, filtrosFiis } = useAnalise()
 
   const ticker = searchParams.get('ticker') || ''
+  const { user } = useAuth()
+
+  // Verificar se o ativo está na carteira
+  const { data: carteira } = useQuery<AtivoCarteira[]>({
+    queryKey: ['carteira', user],
+    queryFn: async () => await carteiraService.getCarteira(),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  })
+
+  // Verificar se o ticker atual está na carteira
+  const isInCarteira = useMemo(() => {
+    if (!carteira || !ticker) return false
+    const normalizedTicker = normalizeTicker(ticker).toUpperCase()
+    const tickerBase = removeTickerExtension(normalizedTicker).toUpperCase()
+    
+    return carteira.some(ativo => {
+      const ativoTicker = normalizeTicker(ativo.ticker || '').toUpperCase()
+      const ativoTickerBase = removeTickerExtension(ativoTicker).toUpperCase()
+      return ativoTicker === normalizedTicker || ativoTickerBase === tickerBase
+    })
+  }, [carteira, ticker])
 
   const { data: detalhes, isLoading: loadingDetalhes, error: errorDetalhes, refetch: refetchDetalhes } = useQuery<AtivoDetalhes & { fii?: Record<string, any> }>({
     queryKey: ['ativo-detalhes', ticker],
     queryFn: () => ativoService.getDetalhes(ticker),
     enabled: !!ticker,
+    staleTime: 10 * 60 * 1000, // 10 minutos - dados considerados frescos
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    refetchOnWindowFocus: false,
   })
 
   
@@ -998,6 +1026,7 @@ export default function DetalhesPage() {
                 ebitComputed={ebitComputed}
                 evToEbit={evToEbit}
                 liquidezDiaria={liquidezDiaria}
+                isInCarteira={isInCarteira}
               />
             )}
 

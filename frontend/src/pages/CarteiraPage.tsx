@@ -79,8 +79,9 @@ export default function CarteiraPage() {
     queryKey: ['carteira-insights', user],
     queryFn: carteiraService.getInsights,
     enabled: !!user && activeTab === 'insights',
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 10 * 60 * 1000, // 10 minutos - insights mudam pouco
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
   })
   // Carregamento sob demanda - rebalanceamento (só na aba rebalance)
   const { data: rbConfig } = useQuery({
@@ -88,21 +89,24 @@ export default function CarteiraPage() {
     queryFn: carteiraService.getRebalanceConfig,
     enabled: !!user && activeTab === 'rebalance',
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnMount: false, 
+    staleTime: 10 * 60 * 1000, 
   })
   const { data: rbStatus, refetch: refetchRbStatus } = useQuery({
     queryKey: ['rebalance-status', user],
     queryFn: carteiraService.getRebalanceStatus,
     enabled: !!user && activeTab === 'rebalance',
     refetchOnWindowFocus: false,
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    refetchOnMount: false, 
+    staleTime: 5 * 60 * 1000, 
   })
   const { data: rbHistory } = useQuery({
     queryKey: ['rebalance-history', user],
     queryFn: carteiraService.getRebalanceHistory,
     enabled: !!user && activeTab === 'rebalance',
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnMount: false, 
+    staleTime: 10 * 60 * 1000, 
   })
   const saveRebalanceMutation = useMutation({
     mutationFn: carteiraService.saveRebalanceConfig,
@@ -164,16 +168,17 @@ export default function CarteiraPage() {
 
 
   // Carregamento prioritário - carteira principal
-  // OTIMIZAÇÃO: Atualiza sempre que a aba é acessada (preços precisam estar atualizados)
+  // PERFORMANCE: Usa cache se disponível, atualiza dados em background se necessário
   const { data: carteira, isLoading: loadingCarteira } = useQuery<AtivoCarteira[]>({
     queryKey: ['carteira', user], 
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user, 
-    staleTime: 2 * 60 * 1000, // 2 minutos - cache curto para preços atualizados
-    gcTime: 10 * 60 * 1000, // 10 minutos - mantém em cache por um tempo razoável
+    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos por mais tempo
+    gcTime: 15 * 60 * 1000, // 15 minutos - mantém em cache por mais tempo
     refetchOnWindowFocus: false, // Não refazer ao focar janela
     refetchOnReconnect: false, // Não refazer ao reconectar
-    refetchOnMount: true, // SEMPRE recarrega ao montar a aba para atualizar preços
+    refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar - usa cache se disponível
+    // Os dados serão atualizados em background quando necessário via refresh manual ou invalidação
   })
 
   const { data: tiposApi } = useQuery({
@@ -181,7 +186,8 @@ export default function CarteiraPage() {
     queryFn: carteiraService.getTipos,
     enabled: !!user,
     refetchOnWindowFocus: false,
-    staleTime: 60000,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    staleTime: 15 * 60 * 1000, // 15 minutos - tipos mudam raramente
   })
   const tiposDisponiveisComputed = useMemo(() => {
     const fromCarteira = (carteira || []).map(a => (a?.tipo || 'Desconhecido')).filter(Boolean) as string[]
@@ -194,7 +200,9 @@ export default function CarteiraPage() {
     queryKey: ['movimentacoes', user, filtroMes, filtroAno], 
     queryFn: () => carteiraService.getMovimentacoes(filtroMes, filtroAno),
     enabled: !!user && activeTab === 'movimentacoes',
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    refetchOnWindowFocus: false,
   })
 
   const { data: movimentacoesAll } = useQuery<Movimentacao[]>({
@@ -202,7 +210,8 @@ export default function CarteiraPage() {
     queryFn: () => carteiraService.getMovimentacoes(),
     enabled: !!user && activeTab === 'movimentacoes',
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    staleTime: 10 * 60 * 1000, // 10 minutos - dados completos mudam pouco
   })
 
   
@@ -213,7 +222,8 @@ export default function CarteiraPage() {
     enabled: !!user && !!carteira && carteira.length > 0 && activeTab === 'proventos', 
     retry: 1,
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    staleTime: 10 * 60 * 1000, // 10 minutos - dados de proventos mudam pouco
   })
 
   
@@ -222,41 +232,23 @@ export default function CarteiraPage() {
     queryKey: ['indicadores'],
     queryFn: carteiraService.getIndicadores,
     enabled: activeTab === 'ativos', // Só carrega na aba principal
-    staleTime: 60_000,
+    staleTime: 10 * 60 * 1000, // 10 minutos - indicadores mudam pouco
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
   })
 
 
+  // PERFORMANCE: Atualização em background apenas quando necessário
+  // Não executa automaticamente ao montar - apenas quando o usuário solicita ou após ações
+  // Isso evita recarregamento desnecessário das telas
   useEffect(() => {
-    let cancelled = false
-    const runBackgroundUpdates = async () => {
-      try {
-       
-        const [resIdx, resPrecos] = await Promise.allSettled([
-          carteiraService.refreshIndexadores(),
-          carteiraService.refreshCarteira(),
-        ])
-        if (cancelled) return
-        // Invalidar dados após conclusão
-        queryClient.invalidateQueries({ queryKey: ['carteira', user] })
-        queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
-        // Notificações leves
-        if (resIdx.status === 'fulfilled') {
-          const n = (resIdx.value && typeof resIdx.value.updated === 'number') ? resIdx.value.updated : undefined
-          toast.success(n != null ? `Indexadores atualizados (${n})` : 'Indexadores atualizados')
-        }
-        if (resPrecos.status === 'fulfilled') {
-          const n = (resPrecos.value && typeof resPrecos.value.updated === 'number') ? resPrecos.value.updated : undefined
-          toast.success(n != null ? `Preços atualizados (${n})` : 'Preços atualizados')
-        }
-      } catch {
-      
-      }
-    }
-    runBackgroundUpdates()
-    return () => { cancelled = true }
-  
-  }, [user, queryClient])
+    // Este useEffect não executa mais automaticamente
+    // As atualizações serão feitas apenas quando:
+    // 1. O usuário clicar em "Atualizar" manualmente
+    // 2. Após adicionar/remover/editar ativos (via mutations)
+    // 3. Quando necessário via invalidateQueries explícito
+    return () => {}
+  }, [])
 
 
   // OTIMIZAÇÃO: Carregar dados do tesouro apenas quando necessário (aba de ativos para renda fixa)
@@ -276,6 +268,8 @@ export default function CarteiraPage() {
     enabled: !!user && !!carteira && carteira.length > 0 && (activeTab === 'proventos' || activeTab === 'projecao'),
     retry: 1,
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    staleTime: 10 * 60 * 1000, // 10 minutos
   })
 
 

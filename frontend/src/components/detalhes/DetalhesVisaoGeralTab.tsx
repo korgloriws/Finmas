@@ -15,7 +15,8 @@ import {
   XCircle,
   ExternalLink,
   BarChart3,
-  Award
+  Award,
+  Wallet
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatNumber, formatDividendYield } from '../../utils/formatters'
 import PortfolioFIIComponent from './PortfolioFII'
@@ -184,6 +185,7 @@ interface DetalhesVisaoGeralTabProps {
   ebitComputed: number | null
   evToEbit: number | null
   liquidezDiaria: number
+  isInCarteira?: boolean
 }
 
 export default function DetalhesVisaoGeralTab({
@@ -203,7 +205,8 @@ export default function DetalhesVisaoGeralTab({
   enterpriseValue,
   ebitComputed,
   evToEbit,
-  liquidezDiaria
+  liquidezDiaria,
+  isInCarteira = false
 }: DetalhesVisaoGeralTabProps) {
   
   // Períodos disponíveis (estilo Google Finance)
@@ -618,6 +621,174 @@ export default function DetalhesVisaoGeralTab({
                   </motion.div>
                 )}
               </motion.div>
+
+              {/* Selo de Carteira */}
+              {isInCarteira && (
+                <motion.div
+                  key="in-carteira"
+                  initial={{ opacity: 0, scale: 0, rotate: -180, y: -20 }}
+                  animate={{ 
+                    opacity: 1, 
+                    scale: 1,
+                    rotate: 0,
+                    y: 0
+                  }}
+                  transition={{ 
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 20,
+                    duration: 0.6,
+                    delay: 0.1
+                  }}
+                  whileHover={{ 
+                    scale: 1.08,
+                    rotate: [0, -3, 3, 0],
+                    transition: { duration: 0.3 }
+                  }}
+                  className="relative shrink-0"
+                >
+                  <motion.div
+                    className="relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white overflow-visible cursor-pointer"
+                    style={{
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%)',
+                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      borderRadius: '8px 8px 8px 8px',
+                    }}
+                    animate={{
+                      boxShadow: [
+                        '0 0 20px rgba(59, 130, 246, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.1)',
+                        '0 0 35px rgba(59, 130, 246, 0.7), inset 0 0 25px rgba(255, 255, 255, 0.2)',
+                        '0 0 20px rgba(59, 130, 246, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.1)',
+                      ],
+                    }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    title="💼 Está na sua carteira"
+                  >
+                    {/* Brilho metálico animado */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent"
+                      animate={{
+                        opacity: [0.3, 0.6, 0.3],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Brilho deslizante */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent"
+                      animate={{
+                        x: ['-100%', '200%'],
+                      }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 3,
+                        ease: 'linear'
+                      }}
+                    />
+                    
+                    {/* Efeito de pulso externo */}
+                    <motion.div
+                      className="absolute -inset-2 bg-blue-400/30 blur-md rounded-lg"
+                      style={{
+                        clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%)',
+                      }}
+                      animate={{
+                        opacity: [0.3, 0.6, 0.3],
+                        scale: [1, 1.1, 1]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    
+                    {/* Partículas de brilho */}
+                    {[...Array(3)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute w-1 h-1 bg-white rounded-full"
+                        style={{
+                          left: `${20 + i * 30}%`,
+                          top: `${30 + i * 20}%`,
+                        }}
+                        animate={{
+                          opacity: [0, 1, 0],
+                          scale: [0, 1.5, 0],
+                          y: [0, -10, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: i * 0.3,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    ))}
+                    
+                    <span className="relative z-10 flex items-center gap-2">
+                      <motion.div
+                        animate={{ 
+                          rotate: [0, 360],
+                          scale: [1, 1.1, 1]
+                        }}
+                        transition={{
+                          rotate: {
+                            duration: 3,
+                            repeat: Infinity,
+                            ease: "linear"
+                          },
+                          scale: {
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                          }
+                        }}
+                      >
+                        <Wallet className="w-5 h-5" strokeWidth={3} />
+                      </motion.div>
+                      <motion.span 
+                        className="hidden sm:inline whitespace-nowrap"
+                        animate={{
+                          textShadow: [
+                            '0 0 5px rgba(255,255,255,0.5)',
+                            '0 0 10px rgba(255,255,255,0.8)',
+                            '0 0 5px rgba(255,255,255,0.5)',
+                          ]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        Na Carteira
+                      </motion.span>
+                      <motion.span 
+                        className="sm:hidden"
+                        animate={{
+                          scale: [1, 1.2, 1]
+                        }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        💼
+                      </motion.span>
+                    </span>
+                  </motion.div>
+                </motion.div>
+              )}
             </div>
             <div className="w-full mt-2 flex items-center gap-1 sm:gap-2 text-xs text-muted-foreground flex-wrap">
               <span className="hidden md:inline">Critérios:</span>
