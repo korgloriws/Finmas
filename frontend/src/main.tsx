@@ -16,8 +16,7 @@ const queryClient = new QueryClient({
       refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar - usa cache se disponível
       refetchOnReconnect: false, // Não recarrega ao reconectar
       throwOnError: false, // Não quebrar app em caso de erro
-      // PERFORMANCE: Cancelar queries automaticamente quando componente desmonta
-      // React Query já faz isso por padrão, mas garantimos que está ativo
+      
     },
   },
 })

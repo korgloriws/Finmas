@@ -22,6 +22,7 @@ import {
   Zap,
   Eye,
   EyeOff,
+  Receipt,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { carteiraService } from '../services/api'
@@ -36,6 +37,7 @@ import CarteiraGraficosTab from '../components/carteira/CarteiraGraficosTab'
 import CarteiraRankingTab from '../components/carteira/CarteiraRankingTab'
 import CarteiraProventosTab from '../components/carteira/CarteiraProventosTab'
 import CarteiraInsightsTab from '../components/carteira/CarteiraInsightsTab'
+import CarteiraImpostosTab from '../components/carteira/CarteiraImpostosTab'
 import CarteiraRebalanceamentoTab from '../components/carteira/CarteiraRebalanceamentoTab'
 import CarteiraMovimentacoesTab from '../components/carteira/CarteiraMovimentacoesTab'
 import CarteiraProjecaoTab from '../components/carteira/CarteiraProjecaoTab'
@@ -69,7 +71,7 @@ export default function CarteiraPage() {
   const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear())
   const [activeTab, setActiveTab] = useState(() => {
     const tabFromUrl = searchParams.get('tab')
-    const validTabs = ['ativos', 'graficos', 'ranking', 'proventos', 'insights', 'rebalance', 'movimentacoes', 'relatorios', 'projecao', 'simulador']
+    const validTabs = ['ativos', 'graficos', 'ranking', 'proventos', 'insights', 'rebalance', 'movimentacoes', 'relatorios', 'projecao', 'simulador', 'impostos']
     return validTabs.includes(tabFromUrl || '') ? tabFromUrl! : 'ativos'
   })
   const [manageTipoOpen, setManageTipoOpen] = useState<{open: boolean; tipo?: string}>({open: false})
@@ -199,7 +201,7 @@ export default function CarteiraPage() {
   const { data: movimentacoes, isLoading: loadingMovimentacoes } = useQuery<Movimentacao[]>({
     queryKey: ['movimentacoes', user, filtroMes, filtroAno], 
     queryFn: () => carteiraService.getMovimentacoes(filtroMes, filtroAno),
-    enabled: !!user && activeTab === 'movimentacoes',
+    enabled: !!user && (activeTab === 'movimentacoes' || activeTab === 'impostos'),
     staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
     refetchOnWindowFocus: false,
@@ -208,7 +210,7 @@ export default function CarteiraPage() {
   const { data: movimentacoesAll } = useQuery<Movimentacao[]>({
     queryKey: ['movimentacoes-all', user],
     queryFn: () => carteiraService.getMovimentacoes(),
-    enabled: !!user && activeTab === 'movimentacoes',
+    enabled: !!user && (activeTab === 'movimentacoes' || activeTab === 'impostos'),
     refetchOnWindowFocus: false,
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
     staleTime: 10 * 60 * 1000, // 10 minutos - dados completos mudam pouco
@@ -238,15 +240,9 @@ export default function CarteiraPage() {
   })
 
 
-  // PERFORMANCE: Atualização em background apenas quando necessário
-  // Não executa automaticamente ao montar - apenas quando o usuário solicita ou após ações
-  // Isso evita recarregamento desnecessário das telas
+
   useEffect(() => {
-    // Este useEffect não executa mais automaticamente
-    // As atualizações serão feitas apenas quando:
-    // 1. O usuário clicar em "Atualizar" manualmente
-    // 2. Após adicionar/remover/editar ativos (via mutations)
-    // 3. Quando necessário via invalidateQueries explícito
+
     return () => {}
   }, [])
 
@@ -265,7 +261,7 @@ export default function CarteiraPage() {
   const { data: proventosRecebidos, isLoading: loadingProventosRecebidos } = useQuery({
     queryKey: ['proventos-recebidos', user, filtroProventos],
     queryFn: () => carteiraService.getProventosRecebidos(filtroProventos),
-    enabled: !!user && !!carteira && carteira.length > 0 && (activeTab === 'proventos' || activeTab === 'projecao'),
+    enabled: !!user && !!carteira && carteira.length > 0 && (activeTab === 'proventos' || activeTab === 'projecao' || activeTab === 'impostos'),
     retry: 1,
     refetchOnWindowFocus: false,
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
@@ -658,6 +654,7 @@ export default function CarteiraPage() {
         <TabButton id="graficos" label="Gráficos" icon={BarChart3} isActive={activeTab === 'graficos'} />
         <TabButton id="ranking" label="Ranking" icon={Trophy} isActive={activeTab === 'ranking'} />
         <TabButton id="proventos" label="Proventos" icon={Calendar} isActive={activeTab === 'proventos'} />
+        <TabButton id="impostos" label="Impostos" icon={Receipt} isActive={activeTab === 'impostos'} />
         <TabButton id="insights" label="Insights" icon={Brain} isActive={activeTab === 'insights'} />
         <TabButton id="rebalance" label="Rebalanceamento" icon={Target} isActive={activeTab === 'rebalance'} />
         <TabButton id="movimentacoes" label="Movimentações" icon={History} isActive={activeTab === 'movimentacoes'} />
@@ -810,6 +807,15 @@ export default function CarteiraPage() {
           />
         )}
 
+        {activeTab === 'impostos' && (
+          <CarteiraImpostosTab
+            carteira={carteira || []}
+            movimentacoes={movimentacoesAll || []}
+            proventosRecebidos={proventosRecebidos || []}
+            loadingMovimentacoes={loadingMovimentacoes}
+            loadingProventos={loadingProventosRecebidos}
+          />
+        )}
 
         {activeTab === 'insights' && (
           <CarteiraInsightsTab

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PieChart, Calculator, CheckCircle, History } from 'lucide-react'
+import { PieChart, Calculator, CheckCircle, History, Lightbulb, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatters'
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip } from 'recharts'
 
@@ -438,6 +438,350 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
   )
 }
 
+// Componente para Sugestões Inteligentes
+function IntelligentSuggestions({ carteira, idealTargets, valorTotal }: {
+  carteira: any[]
+  idealTargets: Record<string, number>
+  valorTotal: number
+}) {
+  const [aporteDisponivel, setAporteDisponivel] = useState<string>('')
+
+  // Calcular distribuição atual
+  const ativosPorTipo = useMemo(() => {
+    return carteira.reduce((acc, ativo) => {
+      const tipo = ativo?.tipo || 'Desconhecido'
+      acc[tipo] = (acc[tipo] || 0) + (ativo?.valor_total || 0)
+      return acc
+    }, {} as Record<string, number>)
+  }, [carteira])
+
+  // Calcular percentuais atuais
+  const percentuaisAtuais = useMemo(() => {
+    return Object.entries(ativosPorTipo).reduce((acc, [tipo, valor]) => {
+      acc[tipo] = valorTotal > 0 ? ((valor as number) / valorTotal) * 100 : 0
+      return acc
+    }, {} as Record<string, number>)
+  }, [ativosPorTipo, valorTotal])
+
+  // Calcular performance de cada tipo (retorno baseado em preço médio vs preço atual)
+  const performancePorTipo = useMemo(() => {
+    const performance: Record<string, { retorno: number; totalInvestido: number; valorAtual: number }> = {}
+    
+    carteira.forEach(ativo => {
+      const tipo = ativo?.tipo || 'Desconhecido'
+      const precoMedio = ativo?.preco_medio || ativo?.preco_compra || 0
+      const precoAtual = ativo?.preco_atual || 0
+      const quantidade = ativo?.quantidade || 0
+      
+      const totalInvestido = precoMedio * quantidade
+      const valorAtual = precoAtual * quantidade
+      
+      if (!performance[tipo]) {
+        performance[tipo] = { retorno: 0, totalInvestido: 0, valorAtual: 0 }
+      }
+      
+      performance[tipo].totalInvestido += totalInvestido
+      performance[tipo].valorAtual += valorAtual
+    })
+    
+    // Calcular retorno percentual
+    Object.keys(performance).forEach(tipo => {
+      const { totalInvestido, valorAtual } = performance[tipo]
+      if (totalInvestido > 0) {
+        performance[tipo].retorno = ((valorAtual / totalInvestido) - 1) * 100
+      }
+    })
+    
+    return performance
+  }, [carteira])
+
+  // Calcular sugestões inteligentes
+  const sugestoesInteligentes = useMemo(() => {
+    const aporte = parseFloat(aporteDisponivel.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0
+    
+    if (aporte <= 0 && Object.keys(idealTargets).length === 0) {
+      return null
+    }
+
+    const sugestoes: Array<{
+      tipo: string
+      prioridade: number
+      razao: string
+      acao: 'comprar' | 'vender' | 'manter'
+      valorSugerido: number
+      percentualSugerido: number
+      desvio: number
+      performance: number
+    }> = []
+
+    Object.keys({ ...idealTargets, ...percentuaisAtuais }).forEach(tipo => {
+      const atual = percentuaisAtuais[tipo] || 0
+      const ideal = idealTargets[tipo] || 0
+      const desvio = ideal - atual
+      const performance = performancePorTipo[tipo]?.retorno || 0
+      
+      // Calcular prioridade (combinação de desvio, performance e aporte)
+      let prioridade = 0
+      let razao = ''
+      let acao: 'comprar' | 'vender' | 'manter' = 'manter'
+      let valorSugerido = 0
+      let percentualSugerido = 0
+
+      if (Math.abs(desvio) < 1) {
+        // Já está balanceado
+        return
+      }
+
+      if (desvio > 0) {
+        // Precisa comprar
+        acao = 'comprar'
+        const valorNecessario = (desvio / 100) * valorTotal
+        
+        if (aporte > 0) {
+          // Com aporte disponível
+          // Priorizar tipos com melhor performance E maior desvio
+          prioridade = (desvio * 2) + (performance > 0 ? performance : 0)
+          
+          // Sugerir alocação proporcional ao desvio e performance
+          const pesoDesvio = Math.abs(desvio) / 100
+          const pesoPerformance = performance > 0 ? (performance / 100) : 0
+          const pesoTotal = pesoDesvio + pesoPerformance
+          
+          if (pesoTotal > 0) {
+            percentualSugerido = (pesoDesvio / pesoTotal) * 100
+            valorSugerido = Math.min(aporte * (percentualSugerido / 100), valorNecessario)
+          } else {
+            valorSugerido = Math.min(aporte, valorNecessario)
+            percentualSugerido = (valorSugerido / aporte) * 100
+          }
+          
+          if (performance > 10) {
+            razao = `Performance superior (+${performance.toFixed(1)}%) e ${desvio.toFixed(1)}% abaixo da meta`
+          } else if (performance > 0) {
+            razao = `Performance positiva (+${performance.toFixed(1)}%) e ${desvio.toFixed(1)}% abaixo da meta`
+          } else {
+            razao = `${desvio.toFixed(1)}% abaixo da meta (performance: ${performance.toFixed(1)}%)`
+          }
+        } else {
+          // Sem aporte, apenas informar necessidade
+          prioridade = desvio
+          valorSugerido = valorNecessario
+          razao = `${desvio.toFixed(1)}% abaixo da meta`
+        }
+      } else {
+        // Precisa vender (está acima da meta)
+        acao = 'vender'
+        const valorExcesso = Math.abs(desvio / 100) * valorTotal
+        prioridade = Math.abs(desvio)
+        valorSugerido = valorExcesso
+        
+        if (performance < -5) {
+          razao = `Performance inferior (${performance.toFixed(1)}%) e ${Math.abs(desvio).toFixed(1)}% acima da meta - considere realizar lucros`
+        } else if (performance < 0) {
+          razao = `Performance negativa (${performance.toFixed(1)}%) e ${Math.abs(desvio).toFixed(1)}% acima da meta`
+        } else {
+          razao = `${Math.abs(desvio).toFixed(1)}% acima da meta (performance: +${performance.toFixed(1)}%)`
+        }
+      }
+
+      if (Math.abs(desvio) >= 1) { // Só incluir se desvio for significativo
+        sugestoes.push({
+          tipo,
+          prioridade,
+          razao,
+          acao,
+          valorSugerido,
+          percentualSugerido,
+          desvio,
+          performance
+        })
+      }
+    })
+
+    // Ordenar por prioridade (maior primeiro)
+    return sugestoes.sort((a, b) => b.prioridade - a.prioridade)
+  }, [aporteDisponivel, idealTargets, percentuaisAtuais, valorTotal, performancePorTipo])
+
+  const aporteNum = parseFloat(aporteDisponivel.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0
+
+  return (
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 md:p-6 shadow-xl">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 rounded-lg bg-blue-500/20">
+          <Lightbulb className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div>
+          <h3 className="text-lg md:text-xl font-semibold text-foreground">Sugestões Inteligentes</h3>
+          <p className="text-xs text-muted-foreground">Análise combinada: Desvio + Performance + Aportes</p>
+        </div>
+      </div>
+
+      {/* Campo de Aporte Disponível */}
+      <div className="mb-6">
+        <label htmlFor="aporte-disponivel" className="block text-sm font-medium mb-2">
+          Aporte Disponível (R$)
+        </label>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <input
+              id="aporte-disponivel"
+              type="text"
+              value={aporteDisponivel}
+              onChange={(e) => {
+                const value = e.target.value
+                // Permitir apenas números, vírgula e ponto
+                const cleaned = value.replace(/[^\d,.-]/g, '')
+                setAporteDisponivel(cleaned)
+              }}
+              placeholder="0,00"
+              className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              aria-label="Valor disponível para investir"
+            />
+          </div>
+        </div>
+        {aporteNum > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {formatCurrency(aporteNum)} disponível para alocação
+          </p>
+        )}
+      </div>
+
+      {/* Análise e Sugestões */}
+      {sugestoesInteligentes && sugestoesInteligentes.length > 0 ? (
+        <div className="space-y-4">
+          {/* Resumo da Análise */}
+          <div className="bg-background/80 rounded-lg p-4 border border-border">
+            <h4 className="text-sm font-semibold mb-3">Análise Combinada</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              {sugestoesInteligentes.slice(0, 3).map((sug, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="font-medium text-foreground">{sug.tipo}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Desvio: <span className={sug.desvio > 0 ? 'text-green-600' : 'text-red-600'}>
+                      {sug.desvio > 0 ? '+' : ''}{sug.desvio.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Performance: <span className={sug.performance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      {sug.performance >= 0 ? '+' : ''}{sug.performance.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sugestões Detalhadas */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold">Recomendações Prioritárias</h4>
+            {sugestoesInteligentes.map((sug, idx) => (
+              <div
+                key={idx}
+                className={`bg-background border rounded-lg p-4 ${
+                  sug.acao === 'comprar'
+                    ? 'border-green-200 dark:border-green-800'
+                    : sug.acao === 'vender'
+                    ? 'border-red-200 dark:border-red-800'
+                    : 'border-border'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    {sug.acao === 'comprar' ? (
+                      <TrendingUp className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    ) : sug.acao === 'vender' ? (
+                      <TrendingDown className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    )}
+                    <div>
+                      <div className="font-semibold text-foreground">{sug.tipo}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{sug.razao}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
+                      sug.acao === 'comprar'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                        : sug.acao === 'vender'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {sug.acao === 'comprar' ? 'Comprar' : sug.acao === 'vender' ? 'Vender' : 'Manter'}
+                  </span>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-border">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Valor sugerido:</span>
+                    <span
+                      className={`text-sm font-semibold ${
+                        sug.acao === 'comprar'
+                          ? 'text-green-600'
+                          : sug.acao === 'vender'
+                          ? 'text-red-600'
+                          : 'text-foreground'
+                      }`}
+                    >
+                      {formatCurrency(Math.abs(sug.valorSugerido))}
+                    </span>
+                  </div>
+                  {aporteNum > 0 && sug.acao === 'comprar' && sug.percentualSugerido > 0 && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-muted-foreground">Do aporte disponível:</span>
+                      <span className="text-xs font-medium text-foreground">
+                        {sug.percentualSugerido.toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Resumo Executivo */}
+          {aporteNum > 0 && (
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold mb-2">Resumo Executivo</h4>
+              <div className="text-sm text-foreground space-y-1">
+                <p>
+                  Com <strong>{formatCurrency(aporteNum)}</strong> disponíveis, recomendamos:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  {sugestoesInteligentes
+                    .filter(s => s.acao === 'comprar' && s.valorSugerido > 0)
+                    .map((sug, idx) => (
+                      <li key={idx}>
+                        <strong>{formatCurrency(sug.valorSugerido)}</strong> em <strong>{sug.tipo}</strong>
+                        {sug.performance > 10 && ' (performance superior)'}
+                      </li>
+                    ))}
+                </ul>
+                {sugestoesInteligentes.some(s => s.acao === 'vender') && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Considere também realizar lucros em posições acima da meta com performance inferior.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          <Lightbulb className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <p className="text-sm">
+            {aporteNum <= 0
+              ? 'Informe um aporte disponível para receber sugestões inteligentes'
+              : 'Carteira está balanceada ou não há sugestões no momento'}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Componente para cálculos de rebalanceamento
 function RebalanceCalculations({ carteira, idealTargets, valorTotal }: {
   carteira: any[]
@@ -766,6 +1110,13 @@ export default function CarteiraRebalanceamentoTab({
           </div>
         </div>
       </div>
+
+      {/* Sugestões Inteligentes */}
+      <IntelligentSuggestions
+        carteira={carteira}
+        idealTargets={idealTargets}
+        valorTotal={valorTotal}
+      />
 
       {/* Cálculos de Rebalanceamento */}
       <div className="bg-muted/30 rounded-lg p-6">
