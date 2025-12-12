@@ -54,7 +54,7 @@ import {
   Legend,
   Label
 } from '../components/LazyChart'
-import { carteiraService, homeService, batchService } from '../services/api'
+import { carteiraService, homeService } from '../services/api'
 import { formatCurrency } from '../utils/formatters'
 // Lazy loading de componentes pesados
 import { lazy, Suspense } from 'react'
@@ -114,53 +114,46 @@ export default function HomePage() {
 
   
 
-  const { data: batchData, isLoading: loadingBatch, isFetching: isFetchingBatch } = useQuery({
-    queryKey: ['batch-home', user, mesAtual, anoAtual],
-    queryFn: async () => {
-      try {
-        const results = await batchService.batch([
-          { endpoint: '/carteira', method: 'GET' },
-          { endpoint: '/indicadores', method: 'GET' },
-          { endpoint: '/home/resumo', method: 'GET', params: { mes: mesAtual.toString(), ano: anoAtual.toString() } }
-        ])
-        return results
-      } catch (error) {
-        console.error('Erro no batch request:', error)
-        // Em caso de erro, retornar null para cada endpoint
-        // O código abaixo tratará os nulls adequadamente
-        return {
-          '/carteira': null,
-          '/indicadores': null,
-          '/home/resumo': null
-        }
-      }
-    },
-    retry: 3,
+
+  
+  // Query 1: Carteira - consulta direta do banco
+  const { data: carteira, isLoading: loadingCarteiraRaw, isFetching: isFetchingCarteiraRaw } = useQuery({
+    queryKey: ['carteira', user],
+    queryFn: async () => await carteiraService.getCarteira(),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
+    gcTime: 15 * 60 * 1000, // 15 minutos - mantém em cache
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, // Não recarrega ao montar - usa cache se disponível
-    enabled: !!user,
-    staleTime: 30 * 60 * 1000, // 30 minutos - cache mais longo
-    gcTime: 60 * 60 * 1000, // 1 hora - mantém em cache por mais tempo
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível - não recarrega ao montar
   })
 
-  // Extrair dados do batch com validação de tipo
-  const carteira = (batchData && typeof batchData === 'object' && batchData !== null && '/carteira' in batchData)
-    ? (Array.isArray(batchData['/carteira']) ? batchData['/carteira'] : null)
-    : null
+  // Query 2: Indicadores - consulta direta do banco
+  // Nota: Query mantida para cache, mas dados não são usados diretamente na HomePage
+  useQuery({
+    queryKey: ['indicadores'],
+    queryFn: carteiraService.getIndicadores,
+    staleTime: 10 * 60 * 1000, // 10 minutos - indicadores mudam pouco
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+  })
+
+  // Query 3: Resumo Home - consulta direta do banco
+  const { data: resumoHome, isLoading: loadingResumoRaw } = useQuery({
+    queryKey: ['home-resumo', user, mesAtual, anoAtual],
+    queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
+    enabled: !!user,
+    retry: 3,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
+    gcTime: 15 * 60 * 1000, // 15 minutos - mantém em cache
+  })
   
-  const resumoHome = (batchData && typeof batchData === 'object' && batchData !== null && '/home/resumo' in batchData)
-    ? (batchData['/home/resumo'] && typeof batchData['/home/resumo'] === 'object' && !('error' in batchData['/home/resumo'])
-      ? batchData['/home/resumo']
-      : null)
-    : null
-  
-  // Estados de loading
-  // PERFORMANCE: Só mostrar loading se não houver dados em cache
-  // Isso evita recarregamento visual quando os dados já estão disponíveis
-  const loadingCarteira = loadingBatch && !carteira
-  const isFetchingCarteira = isFetchingBatch && !carteira
-  const loadingResumo = loadingBatch && !resumoHome
+
+  const loadingCarteira = loadingCarteiraRaw && !carteira
+  const isFetchingCarteira = isFetchingCarteiraRaw && !carteira
+  const loadingResumo = loadingResumoRaw && !resumoHome
 
 
   const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')

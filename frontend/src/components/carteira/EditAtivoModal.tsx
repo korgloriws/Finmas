@@ -154,6 +154,9 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
+      // Invalidar queries da HomePage para atualizar cards e gráficos
+      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
       // Backfill
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })

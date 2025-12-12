@@ -170,6 +170,11 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })
+      // Invalidar queries da HomePage para atualizar cards e gráficos
+      if (u) {
+        queryClient.invalidateQueries({ queryKey: ['home-resumo', u] })
+        queryClient.invalidateQueries({ queryKey: ['carteira-historico', u] })
+      }
       
       // Forçar refetch imediato da carteira para atualização instantânea
       if (u) {

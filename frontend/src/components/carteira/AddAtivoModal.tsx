@@ -324,6 +324,9 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
+      // Invalidar queries da HomePage para atualizar cards e gráficos
+      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
       // Backfill para qualquer chave sem user (segurança)
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })

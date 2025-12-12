@@ -338,6 +338,9 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
+      // Invalidar queries da HomePage para atualizar cards e gráficos
+      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
       
       // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
@@ -359,6 +362,9 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes-all', user] })
+      // Invalidar queries da HomePage para atualizar cards e gráficos
+      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
       
       // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
