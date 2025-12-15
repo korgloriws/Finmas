@@ -688,7 +688,7 @@ export default function CarteiraPage() {
         <TabButton id="insights" label="Insights" icon={Brain} isActive={activeTab === 'insights'} />
         <TabButton id="rebalance" label="Rebalanceamento" icon={Target} isActive={activeTab === 'rebalance'} />
         <TabButton id="movimentacoes" label="Movimentações" icon={History} isActive={activeTab === 'movimentacoes'} />
-        <TabButton id="relatorios" label="Relatórios" icon={FileText} isActive={activeTab === 'relatorios'} />
+        <TabButton id="relatorios" label="Relatórios & Backup" icon={FileText} isActive={activeTab === 'relatorios'} />
         <TabButton id="projecao" label="Projeção" icon={Calculator} isActive={activeTab === 'projecao'} />
         <TabButton id="simulador" label="Simulador" icon={Zap} isActive={activeTab === 'simulador'} />
       </div>

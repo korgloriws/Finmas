@@ -22,7 +22,7 @@ export default function CarteiraRelatoriosTab({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold mb-4">Relatórios</h2>
+      <h2 className="text-xl font-semibold mb-4">Relatórios e Backup</h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Movimentações */}
         <div className="bg-muted/30 rounded-lg p-4">

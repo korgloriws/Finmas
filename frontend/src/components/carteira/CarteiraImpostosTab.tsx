@@ -599,12 +599,21 @@ export default function CarteiraImpostosTab({
 
     const detalhes: any[] = []
     
+    // Debug: verificar estrutura dos dados
+    if (proventosRecebidos.length > 0 && !proventosRecebidos[0].proventos_recebidos) {
+      console.warn('Estrutura de proventos recebidos inesperada:', proventosRecebidos[0])
+    }
+    
     proventosRecebidos.forEach(provento => {
       if (provento.proventos_recebidos && Array.isArray(provento.proventos_recebidos)) {
         provento.proventos_recebidos.forEach((p: any) => {
           const ativo = carteira?.find(a => a.ticker === provento.ticker)
           const tipoAtivo = ativo?.tipo || 'Desconhecido'
-          const valorBruto = parseFloat(p.valor || 0)
+          
+          // Corrigir acesso ao valor: usar valor_recebido ou calcular de valor_unitario * quantidade
+          const valorBruto = p.valor_recebido !== undefined 
+            ? parseFloat(p.valor_recebido || 0)
+            : (parseFloat(p.valor_unitario || 0) * parseFloat(p.quantidade || 0))
           
           // Calcular IR retido/calculado (regras completas)
           let irRetido = 0
@@ -613,25 +622,33 @@ export default function CarteiraImpostosTab({
           let motivoIsencao = ''
           
           if (tipoAtivo === 'Ação' || tipoAtivo === 'Ações') {
-            // Dividendos de ações são isentos
+            // Dividendos de ações são isentos (desde 1995)
             isento = true
-            motivoIsencao = 'Dividendos de ações são isentos'
+            motivoIsencao = 'Dividendos de ações são isentos de IR'
             irRetido = 0
             aliquota = 0
           } else if (tipoAtivo === 'FII' || tipoAtivo === 'Fundos Imobiliários') {
             // Dividendos de FII são isentos
             isento = true
-            motivoIsencao = 'Dividendos de FII são isentos'
+            motivoIsencao = 'Dividendos de FII são isentos de IR'
             irRetido = 0
             aliquota = 0
           } else if (tipoAtivo === 'ETF') {
-            // ETFs: 15% retido na fonte
-            aliquota = 0.15
-            irRetido = valorBruto * aliquota
+            // ETFs: Dividendos são isentos (mesma regra de ações)
+            isento = true
+            motivoIsencao = 'Dividendos de ETF são isentos de IR'
+            irRetido = 0
+            aliquota = 0
           } else if (tipoAtivo === 'BDR') {
             // BDRs: tributação progressiva (7,5% a 27,5%)
             aliquota = calcularAliquotaBDRDividendos(valorBruto)
             irRetido = valorBruto * aliquota
+          } else {
+            // Desconhecido: tratar como isento por padrão (mais seguro)
+            isento = true
+            motivoIsencao = 'Tipo de ativo desconhecido - tratado como isento'
+            irRetido = 0
+            aliquota = 0
           }
 
           detalhes.push({
