@@ -9,12 +9,14 @@ import {
   FileSpreadsheet,
   Plus
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { formatCurrency, formatDividendYield, formatPercentage, formatNumber } from '../../utils/formatters'
 import TickerWithLogo from '../TickerWithLogo'
 import VencimentoStatus from '../VencimentoStatus'
 import B3ImportModal from './B3ImportModal'
 import { B3Ativo } from '../../utils/excelParser'
+import { ativoService } from '../../services/api'
 
 
 
@@ -36,7 +38,8 @@ function TabelaAtivosPorTipo({
   handleCancelarEdicao, 
   handleRemover, 
   setManageTipoOpen, 
-  setRenameTipoValue 
+  setRenameTipoValue,
+  getMetadadosAtivo
 }: {
   tipo: string
   carteira: any[]
@@ -56,6 +59,7 @@ function TabelaAtivosPorTipo({
   handleRemover: (id: number) => void
   setManageTipoOpen: (value: { open: boolean; tipo?: string }) => void
   setRenameTipoValue: (value: string) => void
+  getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string } | null
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
   const totalTipo = ativosDoTipo.reduce((total, ativo) => total + (ativo?.valor_total || 0), 0)
@@ -334,7 +338,13 @@ function TabelaAtivosPorTipo({
                           </>
                         )}
                         {isFii && (
-                          <td className="px-3 py-2 text-sm">{(ativo as any)?.segmento_fii || '-'}</td>
+                          <td className="px-3 py-2 text-sm">
+                            {(() => {
+                              // Buscar metadados do cache (sob demanda)
+                              const metadados = getMetadadosAtivo(ativo?.ticker || '')
+                              return metadados?.segmento || (ativo as any)?.segmento_fii || '-'
+                            })()}
+                          </td>
                         )}
                         {tipo.toLowerCase().includes('renda fixa') && (
                           <td className="px-3 py-2 text-sm">
@@ -537,14 +547,19 @@ function TabelaAtivosPorTipo({
                       </div>
 
                       {/* Segmento para FIIs */}
-                      {isFii && (ativo as any)?.segmento_fii && (
-                        <div className="pt-2 sm:pt-3 border-t border-border">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-muted-foreground">Segmento</span>
-                            <span className="text-xs sm:text-sm font-medium">{(ativo as any)?.segmento_fii}</span>
+                      {isFii && (() => {
+                        // Buscar metadados do cache (sob demanda)
+                        const metadados = getMetadadosAtivo(ativo?.ticker || '')
+                        const segmento = metadados?.segmento || (ativo as any)?.segmento_fii
+                        return segmento ? (
+                          <div className="pt-2 sm:pt-3 border-t border-border">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">Segmento</span>
+                              <span className="text-xs sm:text-sm font-medium">{segmento}</span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        ) : null
+                      })()}
 
                       {/* Status de Vencimento para Renda Fixa */}
                       {tipo.toLowerCase().includes('renda fixa') && ativo?.status_vencimento && (
@@ -712,6 +727,54 @@ export default function CarteiraAtivosTab({
   onPickTesouro
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
+
+  // Identificar FIIs na carteira para buscar metadados sob demanda
+  const fiisNaCarteira = useMemo(() => {
+    if (!carteira) return []
+    return carteira
+      .filter(ativo => {
+        const tipo = (ativo?.tipo || '').toLowerCase()
+        return tipo.includes('fii') || (ativo?.ticker || '').toUpperCase().endsWith('11')
+      })
+      .map(ativo => ativo.ticker)
+  }, [carteira])
+
+  // Buscar metadados de FIIs sob demanda (em background, não bloqueia UI)
+  // Cache de 1 hora (igual ROE, DY, etc)
+  const metadadosFiis = useQuery({
+    queryKey: ['fii-metadados-carteira', fiisNaCarteira],
+    queryFn: async () => {
+      const metadados: Record<string, { tipo?: string; segmento?: string }> = {}
+      
+      // Buscar metadados em paralelo para todos os FIIs
+      const promises = fiisNaCarteira.map(async (ticker) => {
+        try {
+          const metadata = await ativoService.getFiiMetadata(ticker, false)
+          if (metadata) {
+            metadados[ticker] = {
+              tipo: metadata.tipo,
+              segmento: metadata.segmento
+            }
+          }
+        } catch (error) {
+          console.warn(`Erro ao buscar metadados de ${ticker}:`, error)
+        }
+      })
+      
+      await Promise.all(promises)
+      return metadados
+    },
+    enabled: fiisNaCarteira.length > 0,
+    staleTime: 60 * 60 * 1000, // 1 hora - cache igual ROE, DY, etc
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // Usa cache se disponível
+  })
+
+  // Função auxiliar para obter metadados de um ativo
+  const getMetadadosAtivo = (ticker: string) => {
+    return metadadosFiis.data?.[ticker] || null
+  }
 
   const handleB3Import = async (ativos: B3Ativo[]) => {
     try {
@@ -889,6 +952,7 @@ export default function CarteiraAtivosTab({
               handleRemover={handleRemover}
               setManageTipoOpen={setManageTipoOpen}
               setRenameTipoValue={setRenameTipoValue}
+              getMetadadosAtivo={getMetadadosAtivo}
             />
           ))}
         </div>

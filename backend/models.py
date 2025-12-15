@@ -4344,8 +4344,8 @@ def obter_carteira_com_metadados_fii():
                 "preco_medio": (row[18] if row_len > 18 else None) if (row_len > 18 and row[18] is not None) else (preco_compra if preco_compra is not None else None),
             }
             
-            # Enriquecer dados de FIIs com metadados
-            ativo = _enriquecer_dados_fii(ativo)
+            # REMOVIDO: Enriquecimento automático de FIIs (agora é sob demanda no frontend)
+            # Isso melhora significativamente a performance do carregamento inicial
             ativos.append(ativo)
         
         conn.close()
@@ -4456,8 +4456,8 @@ def obter_carteira():
                 "status_vencimento": status_vencimento,
             }
             
-            # Enriquecer dados de FIIs com metadados
-            ativo = _enriquecer_dados_fii(ativo)
+            # REMOVIDO: Enriquecimento automático de FIIs (agora é sob demanda no frontend)
+            # Isso melhora significativamente a performance do carregamento inicial
             ativos.append(ativo)
         
         conn.close()
