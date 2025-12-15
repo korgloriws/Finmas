@@ -59,7 +59,7 @@ export default function CarteiraGraficosTab({
   ativosPorTipo,
   topAtivos
 }: CarteiraGraficosTabProps) {
-  const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi'>('ibov')
+  const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi' | 'todos'>('ibov')
   const [periodoPerformance, setPeriodoPerformance] = useState<'mensal' | 'trimestral' | 'anual'>('mensal')
   
   // Estado para modal de detalhes
@@ -174,6 +174,16 @@ export default function CarteiraGraficosTab({
 
   const indiceSeries = useMemo(() => {
     if (!historicoCarteira) return [] as Array<number | null>
+    if (indiceRef === 'todos') {
+      // Retornar objeto com todas as séries quando 'todos' estiver selecionado
+      return {
+        ibov: (historicoCarteira as any).ibov || [],
+        ivvb11: (historicoCarteira as any).ivvb11 || [],
+        ifix: (historicoCarteira as any).ifix || [],
+        ipca: (historicoCarteira as any).ipca || [],
+        cdi: (historicoCarteira as any).cdi || [],
+      }
+    }
     const series = (historicoCarteira as any)[indiceRef] as Array<number | null> | undefined
     return series || []
   }, [historicoCarteira, indiceRef])
@@ -185,11 +195,27 @@ export default function CarteiraGraficosTab({
 
   const indiceValorSeries = useMemo(() => {
     if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
-    return (indiceSeries || []).map((v) => {
+    
+    // Se 'todos' estiver selecionado, retornar objeto com todas as séries convertidas
+    if (indiceRef === 'todos' && typeof indiceSeries === 'object' && !Array.isArray(indiceSeries)) {
+      const seriesObj = indiceSeries as Record<string, Array<number | null>>
+      const result: Record<string, Array<number | null>> = {}
+      Object.keys(seriesObj).forEach(key => {
+        result[key] = (seriesObj[key] || []).map((v) => {
+          if (v == null || isNaN(Number(v))) return null
+          return initialWealth * (Number(v) / 100)
+        })
+      })
+      return result
+    }
+    
+    // Caso individual (array)
+    const series = Array.isArray(indiceSeries) ? indiceSeries : []
+    return series.map((v) => {
       if (v == null || isNaN(Number(v))) return null
       return initialWealth * (Number(v) / 100)
     })
-  }, [historicoCarteira, indiceSeries, initialWealth])
+  }, [historicoCarteira, indiceSeries, initialWealth, indiceRef])
 
   // Série de valor (R$) construída a partir do retorno por preço (sem aportes)
   const carteiraValorPrecoSeries = useMemo(() => {
@@ -202,9 +228,13 @@ export default function CarteiraGraficosTab({
   }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
 
   const comparativoResumo = useMemo(() => {
+    // Não mostrar resumo quando 'todos' estiver selecionado (múltiplos benchmarks)
+    if (indiceRef === 'todos') return null
+    
     // Usar carteiraValorPrecoSeries (sem aportes) em vez de carteira_valor (com aportes)
     const carteiraArr = carteiraValorPrecoSeries || []
-    if (!carteiraArr.length || !indiceValorSeries.length) return null as null | {
+    const indiceArr = Array.isArray(indiceValorSeries) ? indiceValorSeries : []
+    if (!carteiraArr.length || !indiceArr.length) return null as null | {
       indiceNome: string
       indiceInicial: number
       indiceFinal: number
@@ -216,8 +246,8 @@ export default function CarteiraGraficosTab({
     }
     const carteiraInicial = carteiraArr.find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
     const carteiraFinal = [...carteiraArr].reverse().find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
-    const indiceInicial = indiceValorSeries.find((v) => typeof v === 'number' && v !== null) || 0
-    const indiceFinal = [...indiceValorSeries].reverse().find((v) => typeof v === 'number' && v !== null) || 0
+    const indiceInicial = indiceArr.find((v) => typeof v === 'number' && v !== null) || 0
+    const indiceFinal = [...indiceArr].reverse().find((v) => typeof v === 'number' && v !== null) || 0
     const deltaIndice = (indiceFinal || 0) - (indiceInicial || 0)
     const deltaCarteira = (carteiraFinal || 0) - (carteiraInicial || 0)
     const gapAbsoluto = (carteiraFinal || 0) - (indiceFinal || 0)
@@ -234,15 +264,104 @@ export default function CarteiraGraficosTab({
     }
   }, [historicoCarteira, indiceValorSeries, indiceRef, carteiraValorPrecoSeries, initialWealth])
 
+  // Calcular Tracking Error e Beta (apenas quando benchmark específico selecionado)
+  const metricasAvancadas = useMemo(() => {
+    if (indiceRef === 'todos' || !historicoCarteira || !Array.isArray(indiceSeries)) {
+      return { trackingError: null, beta: null, dadosInsuficientes: true }
+    }
+
+    const carteiraRetornos = carteiraRetornoSeries || []
+    const benchmarkRetornos = indiceSeries || []
+
+    // Filtrar apenas valores válidos e calcular retornos percentuais
+    const retornosCarteira: number[] = []
+    const retornosBenchmark: number[] = []
+
+    for (let i = 1; i < carteiraRetornos.length && i < benchmarkRetornos.length; i++) {
+      const carteiraAtual = carteiraRetornos[i]
+      const carteiraAnterior = carteiraRetornos[i - 1]
+      const benchmarkAtual = benchmarkRetornos[i]
+      const benchmarkAnterior = benchmarkRetornos[i - 1]
+
+      if (
+        carteiraAtual !== null && carteiraAtual !== undefined && !isNaN(Number(carteiraAtual)) &&
+        carteiraAnterior !== null && carteiraAnterior !== undefined && !isNaN(Number(carteiraAnterior)) &&
+        benchmarkAtual !== null && benchmarkAtual !== undefined && !isNaN(Number(benchmarkAtual)) &&
+        benchmarkAnterior !== null && benchmarkAnterior !== undefined && !isNaN(Number(benchmarkAnterior)) &&
+        Number(carteiraAnterior) > 0 && Number(benchmarkAnterior) > 0
+      ) {
+        const retornoCarteira = (Number(carteiraAtual) - Number(carteiraAnterior)) / Number(carteiraAnterior)
+        const retornoBenchmark = (Number(benchmarkAtual) - Number(benchmarkAnterior)) / Number(benchmarkAnterior)
+        retornosCarteira.push(retornoCarteira)
+        retornosBenchmark.push(retornoBenchmark)
+      }
+    }
+
+    if (retornosCarteira.length < 2 || retornosBenchmark.length < 2) {
+      return { trackingError: null, beta: null, dadosInsuficientes: true }
+    }
+
+    // Calcular Tracking Error: desvio padrão da diferença entre retornos
+    const diferencas = retornosCarteira.map((r, i) => r - retornosBenchmark[i])
+    const mediaDiferencas = diferencas.reduce((sum, d) => sum + d, 0) / diferencas.length
+    const varianciaDiferencas = diferencas.reduce((sum, d) => sum + Math.pow(d - mediaDiferencas, 2), 0) / diferencas.length
+    const trackingError = Math.sqrt(varianciaDiferencas) * 100 // Converter para porcentagem
+
+    // Calcular Beta: Cov(carteira, benchmark) / Var(benchmark)
+    const mediaCarteira = retornosCarteira.reduce((sum, r) => sum + r, 0) / retornosCarteira.length
+    const mediaBenchmark = retornosBenchmark.reduce((sum, r) => sum + r, 0) / retornosBenchmark.length
+
+    const covariancia = retornosCarteira.reduce((sum, r, i) =>
+      sum + (r - mediaCarteira) * (retornosBenchmark[i] - mediaBenchmark), 0
+    ) / retornosCarteira.length
+
+    const varianciaBenchmark = retornosBenchmark.reduce((sum, r) =>
+      sum + Math.pow(r - mediaBenchmark, 2), 0
+    ) / retornosBenchmark.length
+
+    const beta = varianciaBenchmark > 0 ? covariancia / varianciaBenchmark : null
+
+    return {
+      trackingError: isFinite(trackingError) ? trackingError : null,
+      beta: beta !== null && isFinite(beta) ? beta : null,
+      dadosInsuficientes: false
+    }
+  }, [historicoCarteira, indiceSeries, indiceRef, carteiraRetornoSeries])
+
+  // Função para interpretar Tracking Error
+  const interpretarTrackingError = (te: number | null) => {
+    if (te === null) return { label: '-', cor: 'text-muted-foreground', descricao: 'Dados insuficientes', status: 'neutro' }
+    if (te < 2) return { label: 'Baixo', cor: 'text-green-600 dark:text-green-400', descricao: 'Carteira segue o benchmark de perto', status: 'bom' }
+    if (te < 5) return { label: 'Moderado', cor: 'text-yellow-600 dark:text-yellow-400', descricao: 'Desvio moderado do benchmark', status: 'moderado' }
+    return { label: 'Alto', cor: 'text-red-600 dark:text-red-400', descricao: 'Carteira se desvia bastante do benchmark', status: 'ruim' }
+  }
+
+  // Função para interpretar Beta
+  const interpretarBeta = (beta: number | null) => {
+    if (beta === null) return { label: '-', cor: 'text-muted-foreground', descricao: 'Dados insuficientes', status: 'neutro' }
+    if (beta < 0) return { label: 'Negativo', cor: 'text-purple-600 dark:text-purple-400', descricao: 'Move inversamente ao benchmark (raro)', status: 'especial' }
+    if (beta < 0.7) return { label: 'Defensivo', cor: 'text-blue-600 dark:text-blue-400', descricao: 'Menos volátil que o benchmark', status: 'bom' }
+    if (beta <= 1.3) return { label: 'Neutro', cor: 'text-green-600 dark:text-green-400', descricao: 'Move junto com o benchmark', status: 'bom' }
+    if (beta <= 1.7) return { label: 'Agressivo', cor: 'text-orange-600 dark:text-orange-400', descricao: 'Mais volátil que o benchmark', status: 'moderado' }
+    return { label: 'Muito Agressivo', cor: 'text-red-600 dark:text-red-400', descricao: 'Muito mais volátil que o benchmark', status: 'ruim' }
+  }
+
   // Calcular performance por período (mensal, trimestral, anual)
   const performancePorPeriodo = useMemo(() => {
     if (!historicoCarteira || !historicoCarteira.datas || historicoCarteira.datas.length === 0) {
       return []
     }
 
+    // Não calcular performance por período quando 'todos' estiver selecionado
+    // (múltiplos benchmarks não fazem sentido nessa tabela)
+    if (indiceRef === 'todos') {
+      return []
+    }
+
     const datas = historicoCarteira.datas
     const carteiraSeries = carteiraRetornoSeries || []
-    const indiceSeriesData = indiceSeries || []
+    // Garantir que indiceSeriesData é um array
+    const indiceSeriesData = Array.isArray(indiceSeries) ? indiceSeries : []
 
     // Agrupar dados por período
     const periodos: Record<string, {
@@ -606,6 +725,7 @@ export default function CarteiraGraficosTab({
                   <option value="ifix">IFIX</option>
                   <option value="ipca">IPCA</option>
                   <option value="cdi">CDI</option>
+                  <option value="todos">Todos os Benchmarks</option>
                 </select>
               </div>
             </div>
@@ -696,17 +816,127 @@ export default function CarteiraGraficosTab({
                     </div>
                   </div>
                 )}
+
+                {/* Cards de Métricas Avançadas (Tracking Error e Beta) - Apenas quando benchmark específico selecionado */}
+                {indiceRef !== 'todos' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {/* Tracking Error */}
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-lg bg-orange-500/20">
+                            <Activity className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-foreground">Tracking Error vs {indiceRef.toUpperCase()}</h4>
+                        </div>
+                      </div>
+                      {metricasAvancadas.dadosInsuficientes ? (
+                        <div className="space-y-2">
+                          <div className="text-2xl font-bold text-muted-foreground">-</div>
+                          <div className="text-xs text-muted-foreground">
+                            Dados insuficientes para cálculo
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            Necessário histórico mínimo de 2 períodos
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className={`text-3xl font-bold ${interpretarTrackingError(metricasAvancadas.trackingError).cor}`}>
+                            {metricasAvancadas.trackingError !== null ? `${metricasAvancadas.trackingError.toFixed(2)}%` : '-'}
+                          </div>
+                          <div className={`text-sm font-semibold ${interpretarTrackingError(metricasAvancadas.trackingError).cor}`}>
+                            {interpretarTrackingError(metricasAvancadas.trackingError).label}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {interpretarTrackingError(metricasAvancadas.trackingError).descricao}
+                          </div>
+                          {metricasAvancadas.trackingError !== null && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {metricasAvancadas.trackingError < 2
+                                ? ' Desvio controlado'
+                                : metricasAvancadas.trackingError < 5
+                                ? ' Desvio moderado'
+                                : ' Desvio elevado'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Beta */}
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/20 dark:to-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-lg bg-purple-500/20">
+                            <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-foreground">Beta vs {indiceRef.toUpperCase()}</h4>
+                        </div>
+                      </div>
+                      {metricasAvancadas.dadosInsuficientes ? (
+                        <div className="space-y-2">
+                          <div className="text-2xl font-bold text-muted-foreground">-</div>
+                          <div className="text-xs text-muted-foreground">
+                            Dados insuficientes para cálculo
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            Necessário histórico mínimo de 2 períodos
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className={`text-3xl font-bold ${interpretarBeta(metricasAvancadas.beta).cor}`}>
+                            {metricasAvancadas.beta !== null ? metricasAvancadas.beta.toFixed(2) : '-'}
+                          </div>
+                          <div className={`text-sm font-semibold ${interpretarBeta(metricasAvancadas.beta).cor}`}>
+                            {interpretarBeta(metricasAvancadas.beta).label}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {interpretarBeta(metricasAvancadas.beta).descricao}
+                          </div>
+                          {metricasAvancadas.beta !== null && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {metricasAvancadas.beta < 0.7
+                                ? ` ${((1 - metricasAvancadas.beta) * 100).toFixed(0)}% menos volátil que o ${indiceRef.toUpperCase()}`
+                                : metricasAvancadas.beta <= 1.3
+                                ? ` Sensibilidade similar ao ${indiceRef.toUpperCase()}`
+                                : ` ${((metricasAvancadas.beta - 1) * 100).toFixed(0)}% mais volátil que o ${indiceRef.toUpperCase()}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
-                {/* Gráfico único: Carteira (R$) vs Índice simulado (R$) */}
+                {/* Gráfico: Carteira (R$) vs Índice(s) simulado(s) (R$) */}
                 <div className="mb-2">
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Carteira vs {indiceRef.toUpperCase()} (simulado em R$)</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">
+                    {indiceRef === 'todos' 
+                      ? 'Carteira vs Todos os Benchmarks (simulado em R$)'
+                      : `Carteira vs ${indiceRef.toUpperCase()} (simulado em R$)`}
+                  </h4>
                   <div className="h-64 sm:h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={historicoCarteira.datas.map((d, i) => ({
-                        data: d,
-                        carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
-                        indice_valor: indiceValorSeries?.[i] ?? null,
-                      }))}>
+                      <AreaChart data={historicoCarteira.datas.map((d, i) => {
+                        const dataPoint: any = { data: d, carteira_valor: carteiraValorPrecoSeries?.[i] ?? null }
+                        
+                        if (indiceRef === 'todos' && typeof indiceValorSeries === 'object' && !Array.isArray(indiceValorSeries)) {
+                          // Múltiplos benchmarks
+                          const seriesObj = indiceValorSeries as Record<string, Array<number | null>>
+                          dataPoint.ibov_valor = seriesObj.ibov?.[i] ?? null
+                          dataPoint.ivvb11_valor = seriesObj.ivvb11?.[i] ?? null
+                          dataPoint.ifix_valor = seriesObj.ifix?.[i] ?? null
+                          dataPoint.ipca_valor = seriesObj.ipca?.[i] ?? null
+                          dataPoint.cdi_valor = seriesObj.cdi?.[i] ?? null
+                        } else {
+                          // Benchmark individual
+                          dataPoint.indice_valor = Array.isArray(indiceValorSeries) ? (indiceValorSeries[i] ?? null) : null
+                        }
+                        
+                        return dataPoint
+                      })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis 
                           dataKey="data" 
@@ -727,14 +957,32 @@ export default function CarteiraGraficosTab({
                             fontSize: '12px'
                           }}
                           formatter={(value: any, name: string) => {
-                            const label = name === 'carteira_valor' ? 'Carteira (preço)' : `${indiceRef.toUpperCase()} simulado`
-                            return [formatCurrency(value), label]
+                            const labelMap: Record<string, string> = {
+                              'carteira_valor': 'Carteira (preço)',
+                              'indice_valor': `${indiceRef.toUpperCase()} simulado`,
+                              'ibov_valor': 'IBOV simulado',
+                              'ivvb11_valor': 'IVVB11 simulado',
+                              'ifix_valor': 'IFIX simulado',
+                              'ipca_valor': 'IPCA simulado',
+                              'cdi_valor': 'CDI simulado',
+                            }
+                            return [formatCurrency(value), labelMap[name] || name]
                           }}
                           labelFormatter={(label) => `Data: ${label}`}
                         />
                         <Legend />
                         <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
-                        <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} simulado`} />
+                        {indiceRef === 'todos' ? (
+                          <>
+                            <Area type="monotone" dataKey="ibov_valor" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={1.5} name="IBOV" />
+                            <Area type="monotone" dataKey="ivvb11_valor" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.1} strokeWidth={1.5} name="IVVB11" />
+                            <Area type="monotone" dataKey="ifix_valor" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.1} strokeWidth={1.5} name="IFIX" />
+                            <Area type="monotone" dataKey="ipca_valor" stroke="#ec4899" fill="#ec4899" fillOpacity={0.1} strokeWidth={1.5} name="IPCA" />
+                            <Area type="monotone" dataKey="cdi_valor" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={1.5} name="CDI" />
+                          </>
+                        ) : (
+                          <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} simulado`} />
+                        )}
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -745,11 +993,26 @@ export default function CarteiraGraficosTab({
                 <div className="text-xs md:text-sm text-muted-foreground mb-2">Retorno (%) — preço (exclui aportes/retiradas)</div>
                 <div className="h-56 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={historicoCarteira.datas.map((d, i) => ({
-                      data: d,
-                      carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
-                      indice_idx: (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null,
-                    }))}>
+                    <AreaChart data={historicoCarteira.datas.map((d, i) => {
+                      const dataPoint: any = {
+                        data: d,
+                        carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
+                      }
+                      
+                      if (indiceRef === 'todos') {
+                        // Múltiplos benchmarks
+                        dataPoint.ibov_idx = (historicoCarteira?.ibov?.[i] ?? null) as number | null
+                        dataPoint.ivvb11_idx = (historicoCarteira?.ivvb11?.[i] ?? null) as number | null
+                        dataPoint.ifix_idx = (historicoCarteira?.ifix?.[i] ?? null) as number | null
+                        dataPoint.ipca_idx = (historicoCarteira?.ipca?.[i] ?? null) as number | null
+                        dataPoint.cdi_idx = (historicoCarteira?.cdi?.[i] ?? null) as number | null
+                      } else {
+                        // Benchmark individual
+                        dataPoint.indice_idx = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
+                      }
+                      
+                      return dataPoint
+                    })}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v: any) => (typeof v === 'number' ? `${(v - 100).toFixed(0)}%` : '')} />
@@ -762,14 +1025,32 @@ export default function CarteiraGraficosTab({
                           fontSize: '12px'
                         }}
                         formatter={(value: any, name: string) => {
-                          const label = name === 'carteira_idx' ? 'Carteira (preço)' : `${indiceRef.toUpperCase()} (índice)`
-                          return [`${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`, label]
+                          const labelMap: Record<string, string> = {
+                            'carteira_idx': 'Carteira (preço)',
+                            'indice_idx': `${indiceRef.toUpperCase()} (índice)`,
+                            'ibov_idx': 'IBOV (índice)',
+                            'ivvb11_idx': 'IVVB11 (índice)',
+                            'ifix_idx': 'IFIX (índice)',
+                            'ipca_idx': 'IPCA (índice)',
+                            'cdi_idx': 'CDI (índice)',
+                          }
+                          return [`${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`, labelMap[name] || name]
                         }}
                         labelFormatter={(label) => `Data: ${label}`}
                       />
                       <Legend />
                       <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
-                      <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} (índice)`} />
+                      {indiceRef === 'todos' ? (
+                        <>
+                          <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={1.5} name="IBOV" />
+                          <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.1} strokeWidth={1.5} name="IVVB11" />
+                          <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.1} strokeWidth={1.5} name="IFIX" />
+                          <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="#ec4899" fillOpacity={0.1} strokeWidth={1.5} name="IPCA" />
+                          <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={1.5} name="CDI" />
+                        </>
+                      ) : (
+                        <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} (índice)`} />
+                      )}
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -912,10 +1193,21 @@ export default function CarteiraGraficosTab({
               <>
                 <div className="text-center py-12 text-muted-foreground">
                   <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium mb-2">Nenhum dado de performance disponível</p>
-                  <p className="text-xs">
-                    Adicione movimentações à sua carteira para ver a performance por período
-                  </p>
+                  {indiceRef === 'todos' ? (
+                    <>
+                      <p className="text-sm font-medium mb-2">Comparação múltipla não disponível na tabela</p>
+                      <p className="text-xs">
+                        Selecione um benchmark específico para ver a performance por período detalhada
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium mb-2">Nenhum dado de performance disponível</p>
+                      <p className="text-xs">
+                        Adicione movimentações à sua carteira para ver a performance por período
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* Cards de Sharpe Ratio - Sempre visíveis, mesmo sem dados */}
@@ -1063,7 +1355,9 @@ export default function CarteiraGraficosTab({
                 {/* Gráfico de Barras Comparativo - Estilo Google Finance */}
                 <div className="mt-6">
                   <h4 className="text-sm font-medium text-muted-foreground mb-4">
-                    Comparativo de Performance: Carteira vs {indiceRef.toUpperCase()}
+                    {indiceRef === 'todos' 
+                      ? 'Comparativo de Performance: Carteira vs Todos os Benchmarks'
+                      : `Comparativo de Performance: Carteira vs ${indiceRef.toUpperCase()}`}
                   </h4>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">

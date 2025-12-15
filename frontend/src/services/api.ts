@@ -243,6 +243,24 @@ export const carteiraService = {
     return response.data
   },
 
+  downloadBackup: async (): Promise<Blob> => {
+    const response = await api.get('/carteira/backup/download', {
+      responseType: 'blob'
+    })
+    return response.data
+  },
+
+  restoreBackup: async (file: File): Promise<{ success: boolean; message?: string }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/carteira/backup/restore', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  },
+
   testarIndexador: async (params: { preco_inicial: number; indexador: string; indexador_pct: number; data_adicao?: string }): Promise<any> => {
     const response = await api.post('/teste-indexador', params)
     return response.data

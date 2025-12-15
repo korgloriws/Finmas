@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 import json
 import sys
 import os
+import shutil
+import zipfile
+import tempfile
 from math import isfinite
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from authlib.integrations.flask_client import OAuth
@@ -2158,6 +2161,224 @@ def api_refresh_carteira():
     except Exception as e:
         print(f"DEBUG: Erro no refresh da carteira: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
+
+@server.route("/api/carteira/backup/download", methods=["GET"])
+def api_download_backup():
+    """Fazer download do backup completo do banco de dados do usuário"""
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        from models import _is_postgres, get_db_path, _pg_conn_for_user
+        from io import BytesIO
+        
+        if _is_postgres():
+            # PostgreSQL: fazer dump SQL
+            try:
+                import subprocess
+                from models import DATABASE_URL
+                
+                # Criar dump SQL temporário
+                temp_dump = BytesIO()
+                
+                # Exportar via psycopg (mais confiável que pg_dump)
+                from models import psycopg
+                conn = psycopg.connect(DATABASE_URL)
+                try:
+                    with conn.cursor() as cursor:
+                        # Exportar todas as tabelas do usuário
+                        cursor.execute("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_schema = 'public' 
+                            AND table_name LIKE %s
+                            ORDER BY table_name
+                        """, (f"{usuario_atual}_%",))
+                        tables = [row[0] for row in cursor.fetchall()]
+                        
+                        dump_content = []
+                        dump_content.append(f"-- Backup gerado em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        dump_content.append(f"-- Usuário: {usuario_atual}\n\n")
+                        
+                        for table in tables:
+                            # Obter estrutura da tabela
+                            cursor.execute(f"""
+                                SELECT column_name, data_type 
+                                FROM information_schema.columns 
+                                WHERE table_name = %s
+                                ORDER BY ordinal_position
+                            """, (table,))
+                            columns = cursor.fetchall()
+                            
+                            if columns:
+                                dump_content.append(f"-- Table: {table}\n")
+                                dump_content.append(f"DROP TABLE IF EXISTS {table} CASCADE;\n")
+                                dump_content.append(f"CREATE TABLE {table} (\n")
+                                col_defs = []
+                                for col_name, col_type in columns:
+                                    col_defs.append(f"  {col_name} {col_type}")
+                                dump_content.append(",\n".join(col_defs))
+                                dump_content.append("\n);\n\n")
+                                
+                                # Exportar dados
+                                cursor.execute(f"SELECT * FROM {table}")
+                                rows = cursor.fetchall()
+                                if rows:
+                                    dump_content.append(f"INSERT INTO {table} VALUES\n")
+                                    row_values = []
+                                    for row in rows:
+                                        # Formatar valores para SQL
+                                        formatted_values = []
+                                        for val in row:
+                                            if val is None:
+                                                formatted_values.append("NULL")
+                                            elif isinstance(val, str):
+                                                # Escapar aspas simples para SQL
+                                                escaped_val = val.replace("'", "''")
+                                                formatted_values.append(f"'{escaped_val}'")
+                                            else:
+                                                formatted_values.append(str(val))
+                                        row_values.append(f"({', '.join(formatted_values)})")
+                                    dump_content.append(",\n".join(row_values))
+                                    dump_content.append(";\n\n")
+                        
+                        temp_dump.write('\n'.join(dump_content).encode('utf-8'))
+                finally:
+                    conn.close()
+                
+                temp_dump.seek(0)
+                filename = f"backup_{usuario_atual}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+                return send_file(temp_dump, as_attachment=True, download_name=filename, mimetype='application/sql')
+                
+            except Exception as e:
+                return jsonify({"error": f"Erro ao criar backup PostgreSQL: {str(e)}"}), 500
+        else:
+            # SQLite: copiar arquivos .db
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            bancos_dir = os.path.join(current_dir, "bancos_usuarios", usuario_atual)
+            
+            if not os.path.exists(bancos_dir):
+                return jsonify({"error": "Diretório de bancos não encontrado"}), 404
+            
+            # Criar ZIP com todos os arquivos .db
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for file in os.listdir(bancos_dir):
+                    if file.endswith('.db'):
+                        db_path = os.path.join(bancos_dir, file)
+                        zip_file.write(db_path, file)
+            
+            zip_buffer.seek(0)
+            filename = f"backup_{usuario_atual}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            return send_file(zip_buffer, as_attachment=True, download_name=filename, mimetype='application/zip')
+            
+    except Exception as e:
+        print(f"Erro ao fazer backup: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/carteira/backup/restore", methods=["POST"])
+def api_restore_backup():
+    """Restaurar backup do banco de dados do usuário"""
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        if 'file' not in request.files:
+            return jsonify({"error": "Nenhum arquivo enviado"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Arquivo vazio"}), 400
+        
+        from models import _is_postgres, get_db_path, _pg_conn_for_user
+        
+        if _is_postgres():
+            # PostgreSQL: restaurar dump SQL
+            try:
+                from models import psycopg, DATABASE_URL
+                import subprocess
+                
+                # Salvar arquivo temporariamente
+                with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.sql') as temp_file:
+                    file.save(temp_file.name)
+                    temp_path = temp_file.name
+                
+                try:
+                    # Tentar restaurar via psql
+                    try:
+                        result = subprocess.run(
+                            ['psql', DATABASE_URL, '-f', temp_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=60
+                        )
+                        if result.returncode != 0:
+                            raise Exception(f"psql falhou: {result.stderr}")
+                    except Exception:
+                        # Fallback: executar SQL manualmente
+                        conn = psycopg.connect(DATABASE_URL)
+                        try:
+                            with open(temp_path, 'r', encoding='utf-8') as f:
+                                sql_content = f.read()
+                            with conn.cursor() as cursor:
+                                cursor.execute(sql_content)
+                            conn.commit()
+                        finally:
+                            conn.close()
+                    
+                    os.unlink(temp_path)
+                    return jsonify({"success": True, "message": "Backup restaurado com sucesso"})
+                    
+                except Exception as e:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise e
+                    
+            except Exception as e:
+                return jsonify({"error": f"Erro ao restaurar backup PostgreSQL: {str(e)}"}), 500
+        else:
+            # SQLite: restaurar arquivos .db
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            bancos_dir = os.path.join(current_dir, "bancos_usuarios", usuario_atual)
+            os.makedirs(bancos_dir, exist_ok=True)
+            
+            # Verificar se é ZIP
+            if file.filename.endswith('.zip'):
+                with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.zip') as temp_file:
+                    file.save(temp_file.name)
+                    temp_path = temp_file.name
+                
+                try:
+                    with zipfile.ZipFile(temp_path, 'r') as zip_file:
+                        # Fazer backup dos arquivos existentes antes de restaurar
+                        backup_dir = os.path.join(bancos_dir, f"backup_antes_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                        os.makedirs(backup_dir, exist_ok=True)
+                        
+                        for existing_file in os.listdir(bancos_dir):
+                            if existing_file.endswith('.db'):
+                                shutil.copy2(
+                                    os.path.join(bancos_dir, existing_file),
+                                    os.path.join(backup_dir, existing_file)
+                                )
+                        
+                        # Extrair arquivos do ZIP
+                        zip_file.extractall(bancos_dir)
+                    
+                    os.unlink(temp_path)
+                    return jsonify({"success": True, "message": "Backup restaurado com sucesso"})
+                    
+                except Exception as e:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    return jsonify({"error": f"Erro ao restaurar backup: {str(e)}"}), 500
+            else:
+                return jsonify({"error": "Formato de arquivo não suportado. Use .zip para SQLite"}), 400
+            
+    except Exception as e:
+        print(f"Erro ao restaurar backup: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @server.route("/api/carteira/refresh-indexadores", methods=["POST"])
 def api_refresh_indexadores():
