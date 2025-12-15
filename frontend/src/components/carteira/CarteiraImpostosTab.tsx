@@ -138,6 +138,58 @@ export default function CarteiraImpostosTab({
     return 0.275                                   // 27,5%
   }
 
+  // Função auxiliar: Identificar se é renda fixa baseado no tipo ou indexador
+  const isRendaFixa = (tipo: string, indexador?: string | null) => {
+    if (!tipo && !indexador) return false
+    
+    const tipoLower = (tipo || '').toLowerCase()
+    const indexadorUpper = (indexador || '').toUpperCase()
+    
+    // Verificar pelo tipo
+    const tiposRendaFixa = [
+      'renda fixa',
+      'renda fixa pública',
+      'tesouro',
+      'cdb',
+      'lci',
+      'lca',
+      'debênture',
+      'debenture',
+      'cri',
+      'cra'
+    ]
+    
+    if (tiposRendaFixa.some(t => tipoLower.includes(t))) {
+      return true
+    }
+    
+    // Verificar pelo indexador (CDI, IPCA, SELIC, PREFIXADO)
+    const indexadoresRendaFixa = ['CDI', 'IPCA', 'SELIC', 'PREFIXADO', 'CDI+', 'IPCA+']
+    if (indexadoresRendaFixa.includes(indexadorUpper)) {
+      return true
+    }
+    
+    return false
+  }
+
+  // Função auxiliar: Calcular alíquota progressiva de renda fixa baseada no prazo
+  const calcularAliquotaRendaFixa = (dataCompra: string, dataVenda: string) => {
+    try {
+      const compra = new Date(dataCompra)
+      const venda = new Date(dataVenda)
+      const dias = Math.floor((venda.getTime() - compra.getTime()) / (1000 * 60 * 60 * 24))
+      
+      // Tabela progressiva do IR para renda fixa (baseada no prazo)
+      if (dias <= 180) return 0.225      // 22,5% (até 180 dias)
+      if (dias <= 360) return 0.20       // 20% (de 181 a 360 dias)
+      if (dias <= 720) return 0.175      // 17,5% (de 361 a 720 dias)
+      return 0.15                        // 15% (acima de 720 dias)
+    } catch (error) {
+      // Se houver erro no cálculo, usar alíquota padrão de 15%
+      return 0.15
+    }
+  }
+
   // Filtrar movimentações de venda
   const vendas = useMemo(() => {
     if (!movimentacoes) return []
@@ -240,6 +292,21 @@ export default function CarteiraImpostosTab({
       const ativo = carteira?.find(a => a.ticker === venda.ticker)
       let tipoAtivo = ativo?.tipo || 'Desconhecido'
       
+      // IMPORTANTE: Verificar se é renda fixa ANTES de buscar na API
+      // Renda fixa pode estar como "Desconhecido" mas ter indexador
+      if (tipoAtivo === 'Desconhecido' && ativo?.indexador) {
+        if (isRendaFixa('', ativo.indexador)) {
+          tipoAtivo = 'Renda Fixa'
+        }
+      }
+      
+      // Se ainda é "Desconhecido", verificar se o tipo contém palavras-chave de renda fixa
+      if (tipoAtivo === 'Desconhecido' && ativo?.tipo) {
+        if (isRendaFixa(ativo.tipo, ativo.indexador)) {
+          tipoAtivo = 'Renda Fixa'
+        }
+      }
+      
       // Se tipo é "Desconhecido", buscar na API (yfinance)
       if (tipoAtivo === 'Desconhecido' && tiposAtivos.data && venda.ticker) {
         const tipoBuscado = tiposAtivos.data[venda.ticker]
@@ -252,6 +319,11 @@ export default function CarteiraImpostosTab({
             tipoAtivo = 'Ação' // Tratar como ação
           }
         }
+      }
+      
+      // Última verificação: se ainda é "Desconhecido" mas tem indexador, tratar como renda fixa
+      if (tipoAtivo === 'Desconhecido' && ativo?.indexador) {
+        tipoAtivo = 'Renda Fixa'
       }
       
       // Calcular preço médio usando FIFO (prioridade 1)
@@ -329,6 +401,20 @@ export default function CarteiraImpostosTab({
             const vAtivo = carteira?.find(a => a.ticker === v.ticker)
             let vTipo = vAtivo?.tipo || 'Desconhecido'
             
+            // IMPORTANTE: Verificar se é renda fixa ANTES de buscar na API (mesma lógica do cálculo principal)
+            if (vTipo === 'Desconhecido' && vAtivo?.indexador) {
+              if (isRendaFixa('', vAtivo.indexador)) {
+                vTipo = 'Renda Fixa'
+              }
+            }
+            
+            // Se ainda é "Desconhecido", verificar se o tipo contém palavras-chave de renda fixa
+            if (vTipo === 'Desconhecido' && vAtivo?.tipo) {
+              if (isRendaFixa(vAtivo.tipo, vAtivo.indexador)) {
+                vTipo = 'Renda Fixa'
+              }
+            }
+            
             // Se tipo é "Desconhecido", buscar na API (mesma lógica do cálculo principal)
             if (vTipo === 'Desconhecido' && tiposAtivos.data && v.ticker) {
               const tipoBuscado = tiposAtivos.data[v.ticker]
@@ -341,6 +427,11 @@ export default function CarteiraImpostosTab({
                   vTipo = 'Ação'
                 }
               }
+            }
+            
+            // Última verificação: se ainda é "Desconhecido" mas tem indexador, tratar como renda fixa
+            if (vTipo === 'Desconhecido' && vAtivo?.indexador) {
+              vTipo = 'Renda Fixa'
             }
             
             // Só processar se for do MESMO TIPO
@@ -424,6 +515,22 @@ export default function CarteiraImpostosTab({
             irCalculado = lucro * aliquota
           } else {
             // BDR: 15% sempre, sem isenção
+            aliquota = 0.15
+            irCalculado = lucro * aliquota
+          }
+        } else if (tipoAtivo === 'Renda Fixa' || tipoAtivo === 'Renda Fixa Pública' || 
+                   isRendaFixa(tipoAtivo, ativo?.indexador)) {
+          // Renda Fixa: alíquota progressiva baseada no prazo (data de compra até data de venda)
+          // Buscar data de compra nas movimentações
+          const primeiraCompra = movimentacoes
+            .filter(m => m.ticker === venda.ticker && (m.tipo === 'compra' || m.tipo?.toLowerCase() === 'compra') && m.data <= venda.data)
+            .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0]
+          
+          if (primeiraCompra && primeiraCompra.data) {
+            aliquota = calcularAliquotaRendaFixa(primeiraCompra.data, venda.data)
+            irCalculado = lucro * aliquota
+          } else {
+            // Se não encontrou data de compra, usar alíquota padrão de 15%
             aliquota = 0.15
             irCalculado = lucro * aliquota
           }
@@ -729,7 +836,7 @@ export default function CarteiraImpostosTab({
       totalIsento: number
     }> = {}
 
-    // Usar vendasFiltradas que já considera o filtro de período
+   
     vendasFiltradas.forEach(venda => {
       const tipo = venda.tipo || 'Desconhecido'
       

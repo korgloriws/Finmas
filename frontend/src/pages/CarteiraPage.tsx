@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
@@ -168,10 +168,13 @@ export default function CarteiraPage() {
 
   const queryClient = useQueryClient()
 
+  // Controle para evitar atualizações muito frequentes
+  const ultimaAtualizacaoPrecos = useRef<number>(0)
+  const MIN_INTERVALO_ATUALIZACAO = 30 * 1000 // 30 segundos - mínimo entre atualizações
 
   // Carregamento prioritário - carteira principal
   // PERFORMANCE: Usa cache se disponível, atualiza dados em background se necessário
-  const { data: carteira, isLoading: loadingCarteira } = useQuery<AtivoCarteira[]>({
+  const { data: carteira, isLoading: loadingCarteira, refetch: refetchCarteira } = useQuery<AtivoCarteira[]>({
     queryKey: ['carteira', user], 
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user, 
@@ -182,6 +185,33 @@ export default function CarteiraPage() {
     refetchOnMount: false, // PERFORMANCE: Não recarrega ao montar - usa cache se disponível
     // Os dados serão atualizados em background quando necessário via refresh manual ou invalidação
   })
+
+  // Atualizar preços em background quando abrir a aba "Ativos"
+  // Isso mantém o carregamento instantâneo (mostra cache) e atualiza preços em background
+  useEffect(() => {
+    if (activeTab === 'ativos' && carteira) {
+      const agora = Date.now()
+      const tempoDesdeUltimaAtualizacao = agora - ultimaAtualizacaoPrecos.current
+      
+      // Só atualiza se passou o intervalo mínimo (evita atualizações muito frequentes)
+      if (tempoDesdeUltimaAtualizacao >= MIN_INTERVALO_ATUALIZACAO) {
+        ultimaAtualizacaoPrecos.current = agora
+        
+        // Atualizar preços no backend primeiro (em background, não bloqueia UI)
+        carteiraService.refreshCarteira()
+          .then(() => {
+            // Após atualizar no backend, fazer refetch para buscar dados atualizados
+            // Isso acontece em background, não bloqueia a UI
+            refetchCarteira()
+          })
+          .catch((error) => {
+            // Se der erro no refresh, ainda tenta fazer refetch (pode ter dados atualizados)
+            console.warn('Erro ao atualizar preços:', error)
+            refetchCarteira()
+          })
+      }
+    }
+  }, [activeTab, refetchCarteira]) // Não incluir 'carteira' nas dependências para evitar loops
 
   const { data: tiposApi } = useQuery({
     queryKey: ['tipos-ativos', user],
