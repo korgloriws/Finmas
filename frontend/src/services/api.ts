@@ -8,7 +8,7 @@ const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as Impo
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 120 segundos (2 minutos) - necessário para processamento pesado de análise de ativos
+  timeout: 300000, // 300 segundos (5 minutos) - necessário para processamento pesado de análise de ativos
   withCredentials: true,
 })
 

@@ -33,7 +33,7 @@ export default function DetalhesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [inputTicker, setInputTicker] = useState('')
   const [periodo, setPeriodo] = useState('1y')
-  const [periodoOverview, setPeriodoOverview] = useState<'1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'>('1y') // Período para gráfico da visão geral
+  const [periodoOverview, setPeriodoOverview] = useState<'1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'>('1m') // Período para gráfico da visão geral
   const [fiPeriodo, setFiPeriodo] = useState<'6m' | '1y' | '3y' | '5y' | 'max'>('1y')
   const [, setTickersComparar] = useState<string[]>([])
   const compararInputRef = useRef<HTMLInputElement>(null)

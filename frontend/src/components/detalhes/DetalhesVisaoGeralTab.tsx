@@ -338,7 +338,7 @@ export default function DetalhesVisaoGeralTab({
                       repeat: Infinity,
                       ease: "easeInOut"
                     }}
-                    title="✅ Está dentro da estratégia"
+                    title=" Está dentro da estratégia"
                   >
                     {/* Brilho metálico animado */}
                     <motion.div
@@ -455,7 +455,7 @@ export default function DetalhesVisaoGeralTab({
                           ease: "easeInOut"
                         }}
                       >
-                        ✓
+                        
                       </motion.span>
                     </span>
                   </motion.div>
@@ -480,7 +480,7 @@ export default function DetalhesVisaoGeralTab({
                       repeat: Infinity,
                       ease: "easeInOut"
                     }}
-                    title="❌ Está fora da estratégia"
+                    title=" Está fora da estratégia"
                   >
                     {/* Brilho metálico animado */}
                     <motion.div
@@ -615,7 +615,7 @@ export default function DetalhesVisaoGeralTab({
                           ease: "easeInOut"
                         }}
                       >
-                        ✗
+                        
                       </motion.span>
                     </span>
                   </motion.div>
@@ -783,7 +783,7 @@ export default function DetalhesVisaoGeralTab({
                           ease: "easeInOut"
                         }}
                       >
-                        💼
+                        
                       </motion.span>
                     </span>
                   </motion.div>
