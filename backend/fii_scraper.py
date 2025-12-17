@@ -201,6 +201,63 @@ def obter_dados_fii_fundsexplorer(ticker: str, include_portfolio: bool = False) 
                     resultado['gestora'] = gestora
                     break
         
+        # Extrair P/VP (Preço sobre Valor Patrimonial)
+        # Estrutura HTML: <p>P/VP</p><p><b>0,89</b></p>
+        # Vamos tentar múltiplas abordagens
+        pvp_patterns = [
+            # Padrão específico para a estrutura do FundsExplorer
+            r'<p>\s*P/VP\s*</p>\s*<p>\s*<b>\s*(\d+[,\.]\d+)\s*</b>',
+            r'<p>P/VP</p>.*?<b>\s*(\d+[,\.]\d+)\s*</b>',
+            r'P/VP[^<]*?<b>\s*(\d+[,\.]\d+)\s*</b>',
+            # Padrões genéricos
+            r'"P/VP:\s*([\d,\.]+)"',  # "P/VP: 0,89"
+            r'P/VP[:\s]*(\d+[,\.]\d+)',  # P/VP: 0,89 ou P/VP 0,89
+            r'P\/VP[:\s]*(\d+[,\.]\d+)',  # P\/VP: 0,89
+        ]
+        
+        pvp_encontrado = None
+        for pattern in pvp_patterns:
+            matches = re.finditer(pattern, html, re.I | re.DOTALL)
+            for match in matches:
+                pvp_str = match.group(1).strip()
+                # Limpar caracteres extras e normalizar
+                pvp_str = re.sub(r'[^\d,\.]', '', pvp_str)
+                pvp_str = pvp_str.replace(',', '.')
+                try:
+                    pvp = float(pvp_str)
+                    if 0 < pvp < 10:  # Validação razoável para P/VP
+                        pvp_encontrado = round(pvp, 2)
+                        print(f"[P/VP] Encontrado: {pvp_encontrado}")
+                        break
+                except (ValueError, AttributeError):
+                    continue
+            if pvp_encontrado:
+                break
+        
+        if pvp_encontrado:
+            resultado['p_vp'] = pvp_encontrado
+        
+        # Extrair Valor Patrimonial por Cota (VP)
+        # Padrões: "Valor Patrimonial", "VP por Cota", "R$ 84,83"
+        vp_patterns = [
+            r'Valor\s+Patrimonial[^<]*?R\$\s*([\d.,]+)',
+            r'VP\s+por\s+Cota[^<]*?R\$\s*([\d.,]+)',
+            r'Valor\s+Patrimonial[^<]*?por\s+cota[^<]*?R\$\s*([\d.,]+)',
+        ]
+        
+        for pattern in vp_patterns:
+            match = re.search(pattern, html, re.I)
+            if match:
+                vp_str = match.group(1).replace('.', '').replace(',', '.')
+                try:
+                    vp = float(vp_str)
+                    if vp > 0:
+                        resultado['valor_patrimonial'] = round(vp, 2)
+                        print(f"[VP] Encontrado: R$ {vp}")
+                        break
+                except ValueError:
+                    continue
+        
        
         if include_portfolio:
             portfolio = extrair_portfolio_fundsexplorer(html, ticker_limpo)
@@ -230,13 +287,21 @@ def obter_metadata_fii(ticker: str, include_portfolio: bool = False) -> Optional
 if __name__ == '__main__':
     print("\n=== TESTE DE SCRAPING DE FIIs (V2) ===\n")
     
-    tickers = ['HGLG11', 'MXRF11', 'VISC11', 'KNRI11', 'XPML11',"XPCI11"]
+    tickers = ['HGLG11', 'MXRF11', 'VISC11', 'KNRI11', 'XPML11', 'XPCI11', 'SNFF11']
     
     for ticker in tickers:
         print(f"\n--- {ticker} ---")
         dados = obter_metadata_fii(ticker)
         if dados:
             print(f"[OK] Tipo: {dados.get('tipo')}, Segmento: {dados.get('segmento')}")
+            if 'p_vp' in dados:
+                print(f"[P/VP] {dados.get('p_vp')}")
+            else:
+                print(f"[P/VP] NÃO ENCONTRADO")
+            if 'valor_patrimonial' in dados:
+                print(f"[VP] R$ {dados.get('valor_patrimonial')}")
+            else:
+                print(f"[VP] NÃO ENCONTRADO")
         else:
             print(f"[FAIL]")
         print("-" * 50)

@@ -150,6 +150,8 @@ export const ativoService = {
     num_cotistas?: number
     gestora?: string
     fonte?: string
+    p_vp?: number
+    valor_patrimonial?: number
     portfolio?: import('../types').PortfolioFII
   } | null> => {
     try {

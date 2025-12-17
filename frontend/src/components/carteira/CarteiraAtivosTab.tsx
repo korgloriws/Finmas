@@ -59,7 +59,7 @@ function TabelaAtivosPorTipo({
   handleRemover: (id: number) => void
   setManageTipoOpen: (value: { open: boolean; tipo?: string }) => void
   setRenameTipoValue: (value: string) => void
-  getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string } | null
+  getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number } | null
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
   const totalTipo = ativosDoTipo.reduce((total, ativo) => total + (ativo?.valor_total || 0), 0)
@@ -197,7 +197,7 @@ function TabelaAtivosPorTipo({
                     <th className="px-3 py-2 text-left font-medium text-sm">Valorização</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Rendimento</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">% Carteira</th>
-                    {!isRendaFixa && !isCripto && (
+                    {!isRendaFixa && !isCripto && !isFii && (
                       <>
                         <th className="px-3 py-2 text-left font-medium text-sm">DY</th>
                         <th className="px-3 py-2 text-left font-medium text-sm">ROE</th>
@@ -206,7 +206,10 @@ function TabelaAtivosPorTipo({
                       </>
                     )}
                     {isFii && (
-                      <th className="px-3 py-2 text-left font-medium text-sm">Segmento</th>
+                      <>
+                        <th className="px-3 py-2 text-left font-medium text-sm">Segmento</th>
+                        <th className="px-3 py-2 text-left font-medium text-sm">P/VP</th>
+                      </>
                     )}
                     {tipo.toLowerCase().includes('renda fixa') && (
                       <th className="px-3 py-2 text-left font-medium text-sm">Vencimento</th>
@@ -325,7 +328,7 @@ function TabelaAtivosPorTipo({
                           {rendimentoPct != null ? `${rendimentoPct.toFixed(1).replace('.', ',')}%` : '-'}
                         </td>
                         <td className="px-3 py-2 text-sm text-muted-foreground">{porcentagemAtivo}%</td>
-                        {!isRendaFixa && !isCripto && (
+                        {!isRendaFixa && !isCripto && !isFii && (
                           <>
                             <td className="px-3 py-2 text-green-600 font-medium text-sm">
                               {formatDividendYield(ativo?.dy)}
@@ -338,13 +341,29 @@ function TabelaAtivosPorTipo({
                           </>
                         )}
                         {isFii && (
-                          <td className="px-3 py-2 text-sm">
-                            {(() => {
-                              // Buscar metadados do cache (sob demanda)
-                              const metadados = getMetadadosAtivo(ativo?.ticker || '')
-                              return metadados?.segmento || (ativo as any)?.segmento_fii || '-'
-                            })()}
-                          </td>
+                          <>
+                            <td className="px-3 py-2 text-sm">
+                              {(() => {
+                                // Buscar metadados do cache (sob demanda)
+                                const metadados = getMetadadosAtivo(ativo?.ticker || '')
+                                return metadados?.segmento || (ativo as any)?.segmento_fii || '-'
+                              })()}
+                            </td>
+                            <td className="px-3 py-2 text-sm">
+                              {(() => {
+                                const metadados = getMetadadosAtivo(ativo?.ticker || '')
+                                const pvp = metadados?.p_vp
+                                if (pvp !== undefined && pvp !== null) {
+                                  return (
+                                    <span className={pvp < 1 ? 'text-green-600 font-medium' : pvp > 1.1 ? 'text-orange-600 font-medium' : ''}>
+                                      {pvp.toFixed(2)}
+                                    </span>
+                                  )
+                                }
+                                return '-'
+                              })()}
+                            </td>
+                          </>
                         )}
                         {tipo.toLowerCase().includes('renda fixa') && (
                           <td className="px-3 py-2 text-sm">
@@ -520,7 +539,7 @@ function TabelaAtivosPorTipo({
                           </div>
                         </div>
                         
-                        {!isRendaFixa && !isCripto && (
+                        {!isRendaFixa && !isCripto && !isFii && (
                           <div className="space-y-1.5 sm:space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-muted-foreground">DY</span>
@@ -546,17 +565,30 @@ function TabelaAtivosPorTipo({
                         )}
                       </div>
 
-                      {/* Segmento para FIIs */}
+                      {/* Segmento e P/VP para FIIs */}
                       {isFii && (() => {
                         // Buscar metadados do cache (sob demanda)
                         const metadados = getMetadadosAtivo(ativo?.ticker || '')
                         const segmento = metadados?.segmento || (ativo as any)?.segmento_fii
-                        return segmento ? (
-                          <div className="pt-2 sm:pt-3 border-t border-border">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-muted-foreground">Segmento</span>
-                              <span className="text-xs sm:text-sm font-medium">{segmento}</span>
-                            </div>
+                        const pvp = metadados?.p_vp
+                        return (segmento || pvp !== undefined) ? (
+                          <div className="pt-2 sm:pt-3 border-t border-border space-y-2">
+                            {segmento && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-muted-foreground">Segmento</span>
+                                <span className="text-xs sm:text-sm font-medium">{segmento}</span>
+                              </div>
+                            )}
+                            {pvp !== undefined && pvp !== null && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-muted-foreground">P/VP</span>
+                                <span className={`text-xs sm:text-sm font-medium ${
+                                  pvp < 1 ? 'text-green-600' : pvp > 1.1 ? 'text-orange-600' : ''
+                                }`}>
+                                  {pvp.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         ) : null
                       })()}
@@ -744,7 +776,7 @@ export default function CarteiraAtivosTab({
   const metadadosFiis = useQuery({
     queryKey: ['fii-metadados-carteira', fiisNaCarteira],
     queryFn: async () => {
-      const metadados: Record<string, { tipo?: string; segmento?: string }> = {}
+      const metadados: Record<string, { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number }> = {}
       
       // Buscar metadados em paralelo para todos os FIIs
       const promises = fiisNaCarteira.map(async (ticker) => {
@@ -753,7 +785,9 @@ export default function CarteiraAtivosTab({
           if (metadata) {
             metadados[ticker] = {
               tipo: metadata.tipo,
-              segmento: metadata.segmento
+              segmento: metadata.segmento,
+              p_vp: metadata.p_vp,
+              valor_patrimonial: metadata.valor_patrimonial
             }
           }
         } catch (error) {
