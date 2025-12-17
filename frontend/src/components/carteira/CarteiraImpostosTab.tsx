@@ -724,9 +724,9 @@ export default function CarteiraImpostosTab({
     return data
   }
 
-  // Calcular DARFs pendentes (agrupados por mês de vencimento)
+  
   const darfsPendentes = useMemo(() => {
-    // Agrupar vendas por mês de vencimento do DARF
+
     const darfsPorMes: Record<string, { vendas: any[], totalIR: number, vencimento: Date }> = {}
     
     vendasFiltradas.forEach(venda => {
@@ -735,7 +735,7 @@ export default function CarteiraImpostosTab({
         const mesVenda = dataVenda.getMonth() + 1
         const anoVenda = dataVenda.getFullYear()
         
-        // DARF vence no último dia útil do mês seguinte
+       
         let mesVencimento = mesVenda + 1
         let anoVencimento = anoVenda
         
@@ -760,7 +760,7 @@ export default function CarteiraImpostosTab({
       }
     })
     
-    // Converter para array e ordenar por data de vencimento
+  
     return Object.entries(darfsPorMes)
       .map(([chave, dados]) => ({
         mes: chave,

@@ -903,6 +903,19 @@ def api_analise_ativos():
         tipo = data.get('tipo', 'acoes')  
         filtros = data.get('filtros', {})
         
+        # Criar chave de cache baseada nos parâmetros da requisição
+        import hashlib
+        cache_key_data = {
+            'tipo': tipo,
+            'filtros': filtros
+        }
+        cache_key_str = f"analise_ativos_{hashlib.md5(json.dumps(cache_key_data, sort_keys=True).encode()).hexdigest()}"
+        
+        # Verificar cache primeiro
+        cached_result = cache.get(cache_key_str)
+        if cached_result is not None:
+            return jsonify(cached_result)
+        
         from models import (
             processar_ativos_acoes_com_filtros,
             processar_ativos_bdrs_com_filtros,
@@ -939,6 +952,9 @@ def api_analise_ativos():
             )
         else:
             return jsonify({"error": "Tipo inválido"}), 400
+        
+        # Armazenar no cache por 30 minutos (1800 segundos)
+        cache.set(cache_key_str, dados, timeout=1800)
             
         return jsonify(dados)
     except Exception as e:
