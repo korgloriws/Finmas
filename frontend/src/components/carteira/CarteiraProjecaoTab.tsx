@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -62,6 +62,9 @@ export default function CarteiraProjecaoTab({
   const [metaAporteDataInicio, setMetaAporteDataInicio] = useState(new Date().toISOString().split('T')[0])
   const [metaAporteDataFim, setMetaAporteDataFim] = useState('')
   
+  // queryClient precisa ser declarado ANTES de ser usado nas mutations
+  const queryClient = useQueryClient()
+  
   const { data: metasAportes } = useQuery({
     queryKey: ['metas-aportes', user],
     queryFn: carteiraService.getMetasAportes,
@@ -105,7 +108,6 @@ export default function CarteiraProjecaoTab({
     }
   })
 
-
   const valorAtualCarteira = useMemo(() => {
     return carteira?.reduce((total, ativo) => total + (ativo.valor_total || 0), 0) || 0
   }, [carteira])
@@ -118,8 +120,6 @@ export default function CarteiraProjecaoTab({
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   })
-
-  const queryClient = useQueryClient()
   const { data: goal } = useQuery({
     queryKey: ['goals', user],
     queryFn: carteiraService.getGoals,
@@ -154,9 +154,39 @@ export default function CarteiraProjecaoTab({
   })
 
   // Invalidar status integrado quando goals ou metas de aportes mudarem
+  // Usar useRef para evitar loops infinitos
+  const prevGoalRef = useRef<any>(null)
+  const prevMetasAportesRef = useRef<any>(null)
+  const invalidatingRef = useRef(false)
+  const lastInvalidationRef = useRef<number>(0)
+  
   useEffect(() => {
-    if (goal || metasAportes) {
+    // Prevenir múltiplas invalidações simultâneas ou muito frequentes
+    const now = Date.now()
+    if (invalidatingRef.current || (now - lastInvalidationRef.current) < 2000) {
+      return
+    }
+    
+    // Só invalidar se realmente mudou (comparação profunda básica)
+    const goalId = goal?.id || goal?.tipo || JSON.stringify(goal) || null
+    const prevGoalId = prevGoalRef.current?.id || prevGoalRef.current?.tipo || JSON.stringify(prevGoalRef.current) || null
+    const goalChanged = goalId !== prevGoalId
+    
+    const metasKey = metasAportes ? `${metasAportes.length}-${JSON.stringify(metasAportes.map((m: any) => m.id))}` : 'null'
+    const prevMetasKey = prevMetasAportesRef.current ? `${prevMetasAportesRef.current.length}-${JSON.stringify(prevMetasAportesRef.current.map((m: any) => m.id))}` : 'null'
+    const metasChanged = metasKey !== prevMetasKey
+    
+    if ((goalChanged || metasChanged) && (goal || metasAportes)) {
+      invalidatingRef.current = true
+      lastInvalidationRef.current = now
       queryClient.invalidateQueries({ queryKey: ['status-integrado-metas', user] })
+      prevGoalRef.current = goal
+      prevMetasAportesRef.current = metasAportes
+      
+      // Resetar flag após um delay
+      setTimeout(() => {
+        invalidatingRef.current = false
+      }, 2000)
     }
   }, [goal, metasAportes, user, queryClient])
 
@@ -301,58 +331,74 @@ export default function CarteiraProjecaoTab({
 
 
   const projecao = useMemo(() => {
-    const valorInicialNumRaw = parseFloat(valorInicial)
-    const valorInicialNum = Number.isFinite(valorInicialNumRaw) && valorInicialNumRaw > 0 ? valorInicialNumRaw : valorAtualCarteira
-    
-    // Usar crescimento manual se ativado, senão usar o automático
-    const crescimentoAnualUsado = usarCrescimentoManual && crescimentoManual 
-      ? parseFloat(crescimentoManual) / 100 
-      : crescimentoMedioAnual
-    const taxaMensalRaw = crescimentoAnualUsado / 12
-    const taxaMensal = Number.isFinite(taxaMensalRaw) ? taxaMensalRaw : 0
-    const dividendosMensais = dividendosMediosMensais
-    const anosInt = Math.max(1, parseInt(String(anosProjecao)) || 1)
-    const meses = anosInt * 12
-    const aporteMensalNumRaw = parseFloat(aporteMensal)
-    const aporteMensalNum = considerarAportes && Number.isFinite(aporteMensalNumRaw) && aporteMensalNumRaw > 0 ? aporteMensalNumRaw : 0
+    try {
+      const valorInicialNumRaw = parseFloat(valorInicial)
+      const valorInicialNum = Number.isFinite(valorInicialNumRaw) && valorInicialNumRaw > 0 ? valorInicialNumRaw : valorAtualCarteira
+      
+      // Usar crescimento manual se ativado, senão usar o automático
+      const crescimentoAnualUsado = usarCrescimentoManual && crescimentoManual 
+        ? parseFloat(crescimentoManual) / 100 
+        : crescimentoMedioAnual
+      const taxaMensalRaw = crescimentoAnualUsado / 12
+      const taxaMensal = Number.isFinite(taxaMensalRaw) && !isNaN(taxaMensalRaw) ? taxaMensalRaw : 0
+      const dividendosMensais = Number.isFinite(dividendosMediosMensais) && !isNaN(dividendosMediosMensais) ? dividendosMediosMensais : 0
+      
+      // Limitar anos de projeção para evitar travamentos (máximo 50 anos = 600 meses)
+      const anosInt = Math.min(50, Math.max(1, parseInt(String(anosProjecao)) || 1))
+      const meses = anosInt * 12
+      const aporteMensalNumRaw = parseFloat(aporteMensal)
+      const aporteMensalNum = considerarAportes && Number.isFinite(aporteMensalNumRaw) && aporteMensalNumRaw > 0 ? aporteMensalNumRaw : 0
 
-    const dados: ProjecaoData[] = []
-    let valorAtual = valorInicialNum
-    let valorComDividendosAtual = valorInicialNum
-    let dividendosAcumulados = 0
-    let aportesAcumulados = 0
+      const dados: ProjecaoData[] = []
+      let valorAtual = Number.isFinite(valorInicialNum) && !isNaN(valorInicialNum) ? valorInicialNum : 0
+      let valorComDividendosAtual = valorAtual
+      let dividendosAcumulados = 0
+      let aportesAcumulados = 0
 
-    for (let mes = 0; mes <= meses; mes++) {
-      dados.push({
-        mes,
-        valor: Number.isFinite(valorAtual) ? valorAtual : 0,
-        valorComDividendos: Number.isFinite(valorComDividendosAtual) ? valorComDividendosAtual : 0,
-        dividendosAcumulados: Number.isFinite(dividendosAcumulados) ? dividendosAcumulados : 0
-      })
+      for (let mes = 0; mes <= meses; mes++) {
+        // Validar valores antes de adicionar
+        const valorSafe = Number.isFinite(valorAtual) && !isNaN(valorAtual) ? valorAtual : 0
+        const valorComDividendosSafe = Number.isFinite(valorComDividendosAtual) && !isNaN(valorComDividendosAtual) ? valorComDividendosAtual : 0
+        const dividendosSafe = Number.isFinite(dividendosAcumulados) && !isNaN(dividendosAcumulados) ? dividendosAcumulados : 0
+        
+        dados.push({
+          mes,
+          valor: valorSafe,
+          valorComDividendos: valorComDividendosSafe,
+          dividendosAcumulados: dividendosSafe
+        })
 
-      if (mes < meses) {
+        if (mes < meses) {
+          // Calcular crescimento com validação
+          const crescimento = Number.isFinite(valorAtual) && !isNaN(valorAtual) && Number.isFinite(taxaMensal) && !isNaN(taxaMensal)
+            ? (valorAtual * taxaMensal)
+            : 0
+          
+          valorAtual = (Number.isFinite(valorAtual) && !isNaN(valorAtual) ? valorAtual : 0) + (Number.isFinite(crescimento) && !isNaN(crescimento) ? crescimento : 0)
 
-        const crescimento = Number.isFinite(valorAtual) ? (valorAtual * taxaMensal) : 0
-        valorAtual = (Number.isFinite(valorAtual) ? valorAtual : 0) + (Number.isFinite(crescimento) ? crescimento : 0)
+          if (considerarDividendos) {
+            const dividendosMes = Number.isFinite(dividendosMensais) && !isNaN(dividendosMensais) ? dividendosMensais : 0
+            dividendosAcumulados = (Number.isFinite(dividendosAcumulados) && !isNaN(dividendosAcumulados) ? dividendosAcumulados : 0) + dividendosMes
+            const crescimentoSafe = Number.isFinite(crescimento) && !isNaN(crescimento) ? crescimento : 0
+            valorComDividendosAtual = (Number.isFinite(valorComDividendosAtual) && !isNaN(valorComDividendosAtual) ? valorComDividendosAtual : 0) + crescimentoSafe + dividendosMes
+          } else {
+            valorComDividendosAtual = valorAtual
+          }
 
-        if (considerarDividendos) {
-         
-          const dividendosMes = Number.isFinite(dividendosMensais) ? dividendosMensais : 0
-          dividendosAcumulados = (Number.isFinite(dividendosAcumulados) ? dividendosAcumulados : 0) + dividendosMes
-          valorComDividendosAtual = (Number.isFinite(valorComDividendosAtual) ? valorComDividendosAtual : 0) + (Number.isFinite(crescimento) ? crescimento : 0) + dividendosMes
-        } else {
-          valorComDividendosAtual = valorAtual
-        }
-
-        if (aporteMensalNum > 0) {
-          valorAtual += aporteMensalNum
-          valorComDividendosAtual += aporteMensalNum
-          aportesAcumulados += aporteMensalNum
+          if (aporteMensalNum > 0 && Number.isFinite(aporteMensalNum) && !isNaN(aporteMensalNum)) {
+            valorAtual += aporteMensalNum
+            valorComDividendosAtual += aporteMensalNum
+            aportesAcumulados += aporteMensalNum
+          }
         }
       }
-    }
 
-    return dados
+      return dados
+    } catch (error) {
+      console.error('Erro ao calcular projeção:', error)
+      // Retornar dados vazios em caso de erro
+      return []
+    }
   }, [valorInicial, valorAtualCarteira, crescimentoMedioAnual, dividendosMediosMensais, anosProjecao, considerarDividendos, considerarAportes, aporteMensal, usarCrescimentoManual, crescimentoManual])
 
   const anosIntOut = Math.max(1, parseInt(String(anosProjecao)) || 1)
@@ -560,7 +606,9 @@ export default function CarteiraProjecaoTab({
       </motion.div>
 
       {/* Status Integrado Completo: Goals + Metas de Aportes + Projeções */}
-      {statusIntegrado && statusIntegrado.analise_completa && (
+      {statusIntegrado && statusIntegrado.analise_completa && 
+       statusIntegrado.analise_completa.progresso_objetivo !== undefined && 
+       statusIntegrado.analise_completa.progresso_objetivo !== null && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -582,13 +630,13 @@ export default function CarteiraProjecaoTab({
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-lg">Progresso do Objetivo</h4>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  statusIntegrado.analise_completa.progresso_objetivo >= 50
+                  (statusIntegrado.analise_completa.progresso_objetivo ?? 0) >= 50
                     ? 'bg-green-500/20 text-green-700 dark:text-green-400'
-                    : statusIntegrado.analise_completa.progresso_objetivo >= 25
+                    : (statusIntegrado.analise_completa.progresso_objetivo ?? 0) >= 25
                     ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
                     : 'bg-red-500/20 text-red-700 dark:text-red-400'
                 }`}>
-                  {statusIntegrado.analise_completa.progresso_objetivo.toFixed(1)}%
+                  {(statusIntegrado.analise_completa.progresso_objetivo ?? 0).toFixed(1)}%
                 </span>
               </div>
               
@@ -611,11 +659,11 @@ export default function CarteiraProjecaoTab({
                 <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.progresso_objetivo)}%` }}
+                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.progresso_objetivo ?? 0)}%` }}
                     transition={{ duration: 1.5 }}
                     className={`h-full ${
-                      statusIntegrado.analise_completa.progresso_objetivo >= 50 ? 'bg-green-500'
-                        : statusIntegrado.analise_completa.progresso_objetivo >= 25 ? 'bg-yellow-500'
+                      (statusIntegrado.analise_completa.progresso_objetivo ?? 0) >= 50 ? 'bg-green-500'
+                        : (statusIntegrado.analise_completa.progresso_objetivo ?? 0) >= 25 ? 'bg-yellow-500'
                         : 'bg-red-500'
                     }`}
                   />
@@ -628,13 +676,13 @@ export default function CarteiraProjecaoTab({
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-lg">Comparação de Aportes</h4>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  statusIntegrado.analise_completa.percentual_vs_sugerido >= 100
+                  (statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0) >= 100
                     ? 'bg-green-500/20 text-green-700 dark:text-green-400'
-                    : statusIntegrado.analise_completa.percentual_vs_sugerido >= 50
+                    : (statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0) >= 50
                     ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
                     : 'bg-red-500/20 text-red-700 dark:text-red-400'
                 }`}>
-                  {statusIntegrado.analise_completa.percentual_vs_sugerido.toFixed(1)}%
+                  {(statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0).toFixed(1)}%
                 </span>
               </div>
               
@@ -663,11 +711,11 @@ export default function CarteiraProjecaoTab({
                 <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.percentual_vs_sugerido)}%` }}
+                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0)}%` }}
                     transition={{ duration: 1.5 }}
                     className={`h-full ${
-                      statusIntegrado.analise_completa.percentual_vs_sugerido >= 100 ? 'bg-green-500'
-                        : statusIntegrado.analise_completa.percentual_vs_sugerido >= 50 ? 'bg-yellow-500'
+                      (statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0) >= 100 ? 'bg-green-500'
+                        : (statusIntegrado.analise_completa.percentual_vs_sugerido ?? 0) >= 50 ? 'bg-yellow-500'
                         : 'bg-red-500'
                     }`}
                   />
@@ -685,11 +733,11 @@ export default function CarteiraProjecaoTab({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Horizonte Original</span>
-                  <span className="font-semibold">{statusIntegrado.analise_completa.horizonte_original_meses / 12} anos</span>
+                  <span className="font-semibold">{((statusIntegrado.analise_completa.horizonte_original_meses ?? 0) / 12).toFixed(1)} anos</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Taxa Mensal</span>
-                  <span className="font-semibold">{statusIntegrado.analise_completa.taxa_mensal.toFixed(2)}%</span>
+                  <span className="font-semibold">{(statusIntegrado.analise_completa.taxa_mensal ?? 0).toFixed(2)}%</span>
                 </div>
               </div>
             </div>
@@ -707,10 +755,10 @@ export default function CarteiraProjecaoTab({
                       <span className="font-semibold text-blue-800 dark:text-blue-300">Cenário Ideal</span>
                     </div>
                     <div className="text-sm space-y-1">
-                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_aporte_sugerido.aporte_mensal)}/mês</p>
-                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_aporte_sugerido.anos_necessarios} anos</p>
-                      <p className={(statusIntegrado as any).projecoes.com_aporte_sugerido.atingivel ? 'text-green-600' : 'text-red-600'}>
-                        {(statusIntegrado as any).projecoes.com_aporte_sugerido.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes?.com_aporte_sugerido?.aporte_mensal ?? 0)}/mês</p>
+                      <p><strong>Tempo:</strong> {((statusIntegrado as any).projecoes?.com_aporte_sugerido?.anos_necessarios ?? 0).toFixed(1)} anos</p>
+                      <p className={(statusIntegrado as any).projecoes?.com_aporte_sugerido?.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes?.com_aporte_sugerido?.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
                       </p>
                     </div>
                   </div>
@@ -723,10 +771,10 @@ export default function CarteiraProjecaoTab({
                       <span className="font-semibold text-green-800 dark:text-green-300">Cenário Atual</span>
                     </div>
                     <div className="text-sm space-y-1">
-                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_aporte_real.aporte_mensal)}/mês</p>
-                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_aporte_real.anos_necessarios} anos</p>
-                      <p className={(statusIntegrado as any).projecoes.com_aporte_real.atingivel ? 'text-green-600' : 'text-red-600'}>
-                        {(statusIntegrado as any).projecoes.com_aporte_real.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes?.com_aporte_real?.aporte_mensal ?? 0)}/mês</p>
+                      <p><strong>Tempo:</strong> {((statusIntegrado as any).projecoes?.com_aporte_real?.anos_necessarios ?? 0).toFixed(1)} anos</p>
+                      <p className={(statusIntegrado as any).projecoes?.com_aporte_real?.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes?.com_aporte_real?.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
                       </p>
                     </div>
                   </div>
@@ -739,10 +787,10 @@ export default function CarteiraProjecaoTab({
                       <span className="font-semibold text-purple-800 dark:text-purple-300">Com Meta Definida</span>
                     </div>
                     <div className="text-sm space-y-1">
-                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_meta_aporte.aporte_mensal)}/mês</p>
-                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_meta_aporte.anos_necessarios} anos</p>
-                      <p className={(statusIntegrado as any).projecoes.com_meta_aporte.atingivel ? 'text-green-600' : 'text-red-600'}>
-                        {(statusIntegrado as any).projecoes.com_meta_aporte.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes?.com_meta_aporte?.aporte_mensal ?? 0)}/mês</p>
+                      <p><strong>Tempo:</strong> {((statusIntegrado as any).projecoes?.com_meta_aporte?.anos_necessarios ?? 0).toFixed(1)} anos</p>
+                      <p className={(statusIntegrado as any).projecoes?.com_meta_aporte?.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes?.com_meta_aporte?.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
                       </p>
                     </div>
                   </div>
@@ -909,13 +957,13 @@ export default function CarteiraProjecaoTab({
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-semibold text-lg">Status da Meta Ativa</h4>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                statusAportes.percentual_concluido >= 100 
-                  ? 'bg-green-500/20 text-green-700 dark:text-green-400' 
-                  : statusAportes.percentual_concluido >= 50
+                (statusAportes.percentual_concluido ?? 0) >= 100 
+                  ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                  : (statusAportes.percentual_concluido ?? 0) >= 50
                   ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
                   : 'bg-red-500/20 text-red-700 dark:text-red-400'
               }`}>
-                {statusAportes.percentual_concluido.toFixed(1)}% concluído
+                {(statusAportes.percentual_concluido ?? 0).toFixed(1)}% concluído
               </span>
             </div>
             
@@ -945,15 +993,15 @@ export default function CarteiraProjecaoTab({
               <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, statusAportes.percentual_concluido)}%` }}
-                  transition={{ duration: 1 }}
-                  className={`h-full ${
-                    statusAportes.percentual_concluido >= 100 
-                      ? 'bg-green-500' 
-                      : statusAportes.percentual_concluido >= 50
-                      ? 'bg-yellow-500'
-                      : 'bg-red-500'
-                  }`}
+                    animate={{ width: `${Math.min(100, statusAportes.percentual_concluido ?? 0)}%` }}
+                    transition={{ duration: 1 }}
+                    className={`h-full ${
+                      (statusAportes.percentual_concluido ?? 0) >= 100 
+                        ? 'bg-green-500' 
+                        : (statusAportes.percentual_concluido ?? 0) >= 50
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                    }`}
                 />
               </div>
             </div>
@@ -1075,12 +1123,12 @@ export default function CarteiraProjecaoTab({
                     step="0.1"
                     value={crescimentoManual}
                     onChange={(e) => setCrescimentoManual(e.target.value)}
-                    placeholder={`Ex.: ${(crescimentoMedioAnual * 100).toFixed(1)}`}
+                    placeholder={`Ex.: ${((crescimentoMedioAnual ?? 0) * 100).toFixed(1)}`}
                     className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     title="Taxa de crescimento anual em porcentagem"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Taxa automática: {formatPercentage(crescimentoMedioAnual * 100)} • 
+                    Taxa automática: {formatPercentage((crescimentoMedioAnual ?? 0) * 100)} • 
                     Digite a taxa desejada (ex: 12.5 para 12,5% ao ano)
                   </p>
                 </div>
@@ -1143,7 +1191,7 @@ export default function CarteiraProjecaoTab({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Crescimento médio anual:</span>
               <span className="font-medium text-green-600">
-                {formatPercentage(crescimentoMedioAnual * 100)}
+                {formatPercentage((crescimentoMedioAnual ?? 0) * 100)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -1151,7 +1199,7 @@ export default function CarteiraProjecaoTab({
               <span className={`font-medium ${usarCrescimentoManual ? 'text-primary' : 'text-green-600'}`}>
                 {usarCrescimentoManual && crescimentoManual 
                   ? formatPercentage(parseFloat(crescimentoManual) || 0)
-                  : formatPercentage(crescimentoMedioAnual * 100)
+                  : formatPercentage((crescimentoMedioAnual ?? 0) * 100)
                 }
                 {usarCrescimentoManual && crescimentoManual && (
                   <span className="text-xs text-muted-foreground ml-1">(manual)</span>
