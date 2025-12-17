@@ -4145,6 +4145,615 @@ def compute_goals_projection(goal: dict):
         'taxa_manual': taxa_crescimento is not None,
         'roadmap': roadmap,
     }
+
+# ==================== METAS DE APORTES ====================
+
+def _ensure_metas_aportes_schema():
+    """Cria schema para tabela de metas de aportes"""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as c:
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS metas_aportes (
+                        id SERIAL PRIMARY KEY,
+                        tipo_periodo TEXT NOT NULL,
+                        valor_meta NUMERIC NOT NULL,
+                        data_inicio TEXT NOT NULL,
+                        data_fim TEXT,
+                        ativo BOOLEAN DEFAULT TRUE,
+                        integrado_com_goal INTEGER,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                conn.commit()
+        except Exception as e:
+            print(f"Erro ao criar tabela metas_aportes: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+    else:
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS metas_aportes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipo_periodo TEXT NOT NULL,
+                    valor_meta REAL NOT NULL,
+                    data_inicio TEXT NOT NULL,
+                    data_fim TEXT,
+                    ativo INTEGER DEFAULT 1,
+                    integrado_com_goal INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            ''')
+            conn.commit()
+        finally:
+            conn.close()
+
+def calcular_aportes_reais(tipo_periodo='mensal', mes=None, ano=None, data_inicio=None, data_fim=None):
+    """
+    Calcula aportes reais a partir das movimentações de compra
+    tipo_periodo: 'mensal' | 'rebalanceamento' | 'anual'
+    """
+    try:
+        movimentacoes = obter_movimentacoes(mes=mes, ano=ano)
+        
+        # Filtrar apenas compras
+        compras = [m for m in movimentacoes if m.get('tipo') == 'compra']
+        
+        # Se tem data_inicio e data_fim, filtrar por período
+        if data_inicio and data_fim:
+            compras = [
+                c for c in compras 
+                if c.get('data') >= data_inicio and c.get('data') < data_fim
+            ]
+        
+        # Calcular total de aportes
+        total_aporte = sum(
+            float(c.get('quantidade', 0)) * float(c.get('preco', 0))
+            for c in compras
+        )
+        
+        return {
+            'valor': round(total_aporte, 2),
+            'quantidade_movimentacoes': len(compras),
+            'data_inicio': data_inicio or (f"{ano}-{mes:02d}-01" if mes and ano else None),
+            'data_fim': data_fim or (f"{ano}-{mes:02d}-{28 if mes == 2 else 30 if mes in [4,6,9,11] else 31}" if mes and ano else None)
+        }
+    except Exception as e:
+        print(f"Erro ao calcular aportes reais: {e}")
+        return {
+            'valor': 0.0,
+            'quantidade_movimentacoes': 0,
+            'data_inicio': None,
+            'data_fim': None
+        }
+
+def get_metas_aportes():
+    """Obtém todas as metas de aportes ativas"""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return []
+    _ensure_metas_aportes_schema()
+    
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as c:
+                # Garantir que a tabela existe antes de consultar
+                try:
+                    c.execute('''
+                        SELECT id, tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, created_at, updated_at
+                        FROM metas_aportes
+                        WHERE ativo = TRUE
+                        ORDER BY created_at DESC
+                    ''')
+                    rows = c.fetchall()
+                    return [
+                        {
+                            'id': row[0],
+                            'tipo_periodo': row[1],
+                            'valor_meta': float(row[2]),
+                            'data_inicio': row[3],
+                            'data_fim': row[4],
+                            'ativo': row[5],
+                            'integrado_com_goal': row[6],
+                            'created_at': row[7],
+                            'updated_at': row[8]
+                        }
+                        for row in rows
+                    ]
+                except Exception as e:
+                    # Se a tabela não existe, criar novamente
+                    print(f"Tabela metas_aportes não encontrada, recriando: {e}")
+                    _ensure_metas_aportes_schema()
+                    return []
+        except Exception as e:
+            print(f"Erro ao obter metas de aportes: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        finally:
+            conn.close()
+    else:
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT id, tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, created_at, updated_at
+                FROM metas_aportes
+                WHERE ativo = 1
+                ORDER BY created_at DESC
+            ''')
+            rows = cur.fetchall()
+            return [
+                {
+                    'id': row[0],
+                    'tipo_periodo': row[1],
+                    'valor_meta': float(row[2]),
+                    'data_inicio': row[3],
+                    'data_fim': row[4],
+                    'ativo': bool(row[5]),
+                    'integrado_com_goal': row[6],
+                    'created_at': row[7],
+                    'updated_at': row[8]
+                }
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+def save_meta_aporte(payload: dict):
+    """Salva ou atualiza uma meta de aporte"""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return {'success': False, 'message': 'Não autenticado'}
+    _ensure_metas_aportes_schema()
+    
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    meta_id = payload.get('id')
+    tipo_periodo = payload.get('tipo_periodo', 'mensal')
+    valor_meta = float(payload.get('valor_meta', 0))
+    data_inicio = payload.get('data_inicio', now[:10])
+    data_fim = payload.get('data_fim')
+    ativo = payload.get('ativo', True)
+    integrado_com_goal = payload.get('integrado_com_goal')
+    
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as c:
+                try:
+                    if meta_id:
+                        c.execute('''
+                            UPDATE metas_aportes
+                            SET tipo_periodo=%s, valor_meta=%s, data_inicio=%s, data_fim=%s, ativo=%s, integrado_com_goal=%s, updated_at=%s
+                            WHERE id=%s
+                        ''', (tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, now, meta_id))
+                    else:
+                        c.execute('''
+                            INSERT INTO metas_aportes (tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ''', (tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, now, now))
+                    conn.commit()
+                    return {'success': True}
+                except Exception as e:
+                    print(f"Erro ao salvar meta de aporte: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    conn.rollback()
+                    return {'success': False, 'message': str(e)}
+        except Exception as e:
+            print(f"Erro na conexão ao salvar meta de aporte: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'message': str(e)}
+        finally:
+            conn.close()
+    else:
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cur = conn.cursor()
+            if meta_id:
+                cur.execute('''
+                    UPDATE metas_aportes
+                    SET tipo_periodo=?, valor_meta=?, data_inicio=?, data_fim=?, ativo=?, integrado_com_goal=?, updated_at=?
+                    WHERE id=?
+                ''', (tipo_periodo, valor_meta, data_inicio, data_fim, 1 if ativo else 0, integrado_com_goal, now, meta_id))
+            else:
+                cur.execute('''
+                    INSERT INTO metas_aportes (tipo_periodo, valor_meta, data_inicio, data_fim, ativo, integrado_com_goal, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (tipo_periodo, valor_meta, data_inicio, data_fim, 1 if ativo else 0, integrado_com_goal, now, now))
+            conn.commit()
+            return {'success': True}
+        finally:
+            conn.close()
+
+def delete_meta_aporte(meta_id: int):
+    """Desativa uma meta de aporte"""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return {'success': False, 'message': 'Não autenticado'}
+    _ensure_metas_aportes_schema()
+    
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as c:
+                c.execute('UPDATE metas_aportes SET ativo=FALSE, updated_at=%s WHERE id=%s', (now, meta_id))
+                conn.commit()
+                return {'success': True}
+        finally:
+            conn.close()
+    else:
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cur = conn.cursor()
+            cur.execute('UPDATE metas_aportes SET ativo=0, updated_at=? WHERE id=?', (now, meta_id))
+            conn.commit()
+            return {'success': True}
+        finally:
+            conn.close()
+
+def calcular_projecao_com_aporte(saldo_inicial, capital_alvo, aporte_mensal, taxa_mensal, max_meses=600):
+    """
+    Calcula em quantos meses vai atingir o capital_alvo com aporte_mensal fixo
+    Retorna: (meses_necessarios, atingivel, projecao_meses)
+    """
+    from math import log
+    
+    if capital_alvo <= saldo_inicial:
+        return 0, True, []
+    
+    if taxa_mensal <= 0 or aporte_mensal <= 0:
+        # Sem crescimento, cálculo simples
+        faltante = capital_alvo - saldo_inicial
+        meses = faltante / aporte_mensal if aporte_mensal > 0 else float('inf')
+        return int(meses), meses <= max_meses, []
+    
+    # Fórmula: FV = PV * (1 + i)^n + PMT * [((1 + i)^n - 1) / i]
+    # Resolvendo para n:
+    # capital_alvo = saldo_inicial * (1 + taxa_mensal)^n + aporte_mensal * [((1 + taxa_mensal)^n - 1) / taxa_mensal]
+    
+    try:
+        # Simplificando: capital_alvo ≈ saldo_inicial * (1 + i)^n + aporte_mensal * n (aproximação)
+        # Ou usando fórmula exata
+        if saldo_inicial * (1 + taxa_mensal) ** max_meses + aporte_mensal * (((1 + taxa_mensal) ** max_meses - 1) / taxa_mensal) < capital_alvo:
+            # Não é atingível em max_meses
+            return max_meses, False, []
+        
+        # Calcular iterativamente
+        saldo = saldo_inicial
+        meses = 0
+        projecao = []
+        while saldo < capital_alvo and meses < max_meses:
+            meses += 1
+            saldo = saldo * (1 + taxa_mensal) + aporte_mensal
+            if meses % 12 == 0:  # A cada ano
+                projecao.append({'ano': meses // 12, 'meses': meses, 'saldo': round(saldo, 2)})
+        
+        return meses, saldo >= capital_alvo, projecao
+    except Exception:
+        return max_meses, False, []
+
+def get_status_integrado_metas():
+    """
+    Sistema completo integrado de metas:
+    - Meta de patrimônio/renda (goal)
+    - Meta de aporte (opcional)
+    - Aporte real (calculado)
+    - Projeções com diferentes cenários
+    - Sugestões inteligentes
+    """
+    usuario = get_usuario_atual()
+    if not usuario:
+        return None
+    
+    # Obter goal (meta de patrimônio/renda)
+    goal = get_goals()
+    
+    # Obter metas de aportes
+    metas_aportes = get_metas_aportes()
+    meta_aporte_ativa = metas_aportes[0] if metas_aportes else None
+    
+    # Calcular projeção da goal
+    projecao_goal = None
+    if goal:
+        projecao_goal = compute_goals_projection(goal)
+    
+    # Calcular aportes reais (mês atual)
+    hoje = datetime.now()
+    aportes_reais_mes = calcular_aportes_reais('mensal', mes=hoje.month, ano=hoje.year)
+    
+    # Calcular aportes reais da meta (se houver)
+    aportes_reais_meta = None
+    if meta_aporte_ativa:
+        status_aportes = get_status_aportes(meta_aporte_ativa.get('id'))
+        if status_aportes:
+            aportes_reais_meta = status_aportes.get('realizado', {})
+    
+    # Preparar resultado base
+    resultado = {
+        'goal': goal,
+        'meta_aporte': meta_aporte_ativa,
+        'projecao_goal': projecao_goal,
+        'aportes_reais_mes': aportes_reais_mes,
+        'aportes_reais_meta': aportes_reais_meta,
+        'analise_completa': {},
+        'projecoes': {},
+        'sugestoes': []
+    }
+    
+    if not goal or not projecao_goal:
+        resultado['sugestoes'].append("Configure uma meta de patrimônio ou renda para ver análises completas")
+        return resultado
+    
+    # Dados base
+    saldo_atual = projecao_goal.get('saldo_inicial', 0)
+    capital_alvo = projecao_goal.get('capital_alvo', 0)
+    aporte_sugerido = projecao_goal.get('aporte_sugerido', 0)
+    taxa_mensal = projecao_goal.get('taxa_mensal', 0)
+    horizonte_meses = projecao_goal.get('horizonte_meses', 0)
+    
+    # Aportes
+    aporte_real_mes = aportes_reais_mes.get('valor', 0) if aportes_reais_mes else 0
+    aporte_meta_definida = meta_aporte_ativa.get('valor_meta', 0) if meta_aporte_ativa else 0
+    
+    # Usar aporte real da meta se disponível, senão usar do mês
+    aporte_real_para_analise = aportes_reais_meta.get('valor', aporte_real_mes) if aportes_reais_meta else aporte_real_mes
+    
+    # Calcular projeções com diferentes cenários
+    projecoes = {}
+    
+    # Cenário 1: Com aporte sugerido (ideal)
+    if aporte_sugerido > 0:
+        meses_ideal, atingivel_ideal, proj_ideal = calcular_projecao_com_aporte(
+            saldo_atual, capital_alvo, aporte_sugerido, taxa_mensal
+        )
+        projecoes['com_aporte_sugerido'] = {
+            'aporte_mensal': round(aporte_sugerido, 2),
+            'meses_necessarios': meses_ideal,
+            'atingivel': atingivel_ideal,
+            'anos_necessarios': round(meses_ideal / 12, 1),
+            'projecao_anual': proj_ideal
+        }
+    
+    # Cenário 2: Com aporte real atual
+    if aporte_real_para_analise > 0:
+        meses_real, atingivel_real, proj_real = calcular_projecao_com_aporte(
+            saldo_atual, capital_alvo, aporte_real_para_analise, taxa_mensal
+        )
+        projecoes['com_aporte_real'] = {
+            'aporte_mensal': round(aporte_real_para_analise, 2),
+            'meses_necessarios': meses_real,
+            'atingivel': atingivel_real,
+            'anos_necessarios': round(meses_real / 12, 1),
+            'projecao_anual': proj_real
+        }
+    
+    # Cenário 3: Com meta de aporte definida (se diferente)
+    if aporte_meta_definida > 0 and aporte_meta_definida != aporte_real_para_analise:
+        meses_meta, atingivel_meta, proj_meta = calcular_projecao_com_aporte(
+            saldo_atual, capital_alvo, aporte_meta_definida, taxa_mensal
+        )
+        projecoes['com_meta_aporte'] = {
+            'aporte_mensal': round(aporte_meta_definida, 2),
+            'meses_necessarios': meses_meta,
+            'atingivel': atingivel_meta,
+            'anos_necessarios': round(meses_meta / 12, 1),
+            'projecao_anual': proj_meta
+        }
+    
+    # Análise completa
+    progresso_objetivo = (saldo_atual / capital_alvo * 100) if capital_alvo > 0 else 0
+    faltante_objetivo = max(0, capital_alvo - saldo_atual)
+    
+    # Comparação de aportes
+    percentual_vs_sugerido = (aporte_real_para_analise / aporte_sugerido * 100) if aporte_sugerido > 0 else 0
+    faltante_vs_sugerido = max(0, aporte_sugerido - aporte_real_para_analise)
+    
+    resultado['analise_completa'] = {
+        'saldo_atual': round(saldo_atual, 2),
+        'capital_alvo': round(capital_alvo, 2),
+        'progresso_objetivo': round(progresso_objetivo, 2),
+        'faltante_objetivo': round(faltante_objetivo, 2),
+        'aporte_sugerido': round(aporte_sugerido, 2),
+        'aporte_real': round(aporte_real_para_analise, 2),
+        'aporte_meta_definida': round(aporte_meta_definida, 2),
+        'percentual_vs_sugerido': round(percentual_vs_sugerido, 2),
+        'faltante_vs_sugerido': round(faltante_vs_sugerido, 2),
+        'taxa_mensal': round(taxa_mensal * 100, 4),
+        'horizonte_original_meses': horizonte_meses
+    }
+    
+    resultado['projecoes'] = projecoes
+    
+    # Gerar sugestões inteligentes
+    sugestoes = []
+    
+    # Sugestão 1: Comparação com aporte sugerido
+    if aporte_sugerido > 0:
+        if aporte_real_para_analise < aporte_sugerido * 0.5:
+            sugestoes.append({
+                'tipo': 'critico',
+                'titulo': 'Aporte muito abaixo do sugerido',
+                'mensagem': f'Você está aportando R$ {aporte_real_para_analise:,.2f}, mas o sugerido é R$ {aporte_sugerido:,.2f}. Considere aumentar seus aportes para atingir sua meta no prazo desejado.',
+                'acao_sugerida': f'Aumentar aporte para pelo menos R$ {aporte_sugerido * 0.7:,.2f}'
+            })
+        elif aporte_real_para_analise < aporte_sugerido:
+            sugestoes.append({
+                'tipo': 'atencao',
+                'titulo': 'Aporte abaixo do sugerido',
+                'mensagem': f'Você está aportando R$ {aporte_real_para_analise:,.2f}, mas o ideal seria R$ {aporte_sugerido:,.2f}. Isso pode atrasar o alcance da sua meta.',
+                'acao_sugerida': f'Considere aumentar o aporte em R$ {faltante_vs_sugerido:,.2f} por mês'
+            })
+        elif aporte_real_para_analise >= aporte_sugerido:
+            sugestoes.append({
+                'tipo': 'sucesso',
+                'titulo': 'Aporte adequado!',
+                'mensagem': f'Parabéns! Você está aportando R$ {aporte_real_para_analise:,.2f}, que está acima ou igual ao sugerido de R$ {aporte_sugerido:,.2f}.',
+                'acao_sugerida': 'Continue mantendo esse ritmo de aportes'
+            })
+    
+    # Sugestão 2: Projeção de tempo
+    if 'com_aporte_real' in projecoes:
+        proj_real = projecoes['com_aporte_real']
+        if proj_real['atingivel']:
+            if proj_real['anos_necessarios'] > horizonte_meses / 12:
+                sugestoes.append({
+                    'tipo': 'atencao',
+                    'titulo': 'Prazo estendido',
+                    'mensagem': f'Com o aporte atual de R$ {aporte_real_para_analise:,.2f}, você atingirá sua meta em {proj_real["anos_necessarios"]} anos, mas sua meta original era {horizonte_meses / 12:.1f} anos.',
+                    'acao_sugerida': f'Para atingir no prazo, aumente o aporte para R$ {aporte_sugerido:,.2f}'
+                })
+            else:
+                sugestoes.append({
+                    'tipo': 'sucesso',
+                    'titulo': 'No caminho certo!',
+                    'mensagem': f'Com o aporte atual, você atingirá sua meta em aproximadamente {proj_real["anos_necessarios"]} anos.',
+                    'acao_sugerida': 'Continue mantendo esse ritmo'
+                })
+        else:
+            sugestoes.append({
+                'tipo': 'critico',
+                'titulo': 'Meta pode não ser atingida',
+                'mensagem': f'Com o aporte atual de R$ {aporte_real_para_analise:,.2f}, pode ser difícil atingir a meta no prazo desejado.',
+                'acao_sugerida': f'Considere aumentar significativamente o aporte para R$ {aporte_sugerido:,.2f}'
+            })
+    
+    # Sugestão 3: Progresso do objetivo
+    if progresso_objetivo < 10:
+        sugestoes.append({
+            'tipo': 'info',
+            'titulo': 'Início da jornada',
+            'mensagem': f'Você está no início da jornada. Faltam R$ {faltante_objetivo:,.2f} para atingir seu objetivo.',
+            'acao_sugerida': 'Mantenha a disciplina nos aportes mensais'
+        })
+    elif progresso_objetivo >= 50:
+        sugestoes.append({
+            'tipo': 'sucesso',
+            'titulo': 'Mais da metade do caminho!',
+            'mensagem': f'Parabéns! Você já atingiu {progresso_objetivo:.1f}% do seu objetivo.',
+            'acao_sugerida': 'Continue firme, você está quase lá!'
+        })
+    
+    # Sugestão 4: Comparação entre cenários
+    if 'com_aporte_sugerido' in projecoes and 'com_aporte_real' in projecoes:
+        proj_sugerido = projecoes['com_aporte_sugerido']
+        proj_real = projecoes['com_aporte_real']
+        diferenca_anos = proj_real['anos_necessarios'] - proj_sugerido['anos_necessarios']
+        if diferenca_anos > 2:
+            sugestoes.append({
+                'tipo': 'atencao',
+                'titulo': 'Diferença significativa',
+                'mensagem': f'Aumentar o aporte de R$ {aporte_real_para_analise:,.2f} para R$ {aporte_sugerido:,.2f} reduziria o tempo em {diferenca_anos:.1f} anos.',
+                'acao_sugerida': f'Considere aumentar o aporte em R$ {faltante_vs_sugerido:,.2f} por mês'
+            })
+    
+    resultado['sugestoes'] = sugestoes
+    
+    return resultado
+
+def get_status_aportes(meta_id=None):
+    """
+    Calcula status de aportes: realizado vs meta
+    Se meta_id for None, usa a meta ativa mais recente
+    """
+    usuario = get_usuario_atual()
+    if not usuario:
+        return None
+    
+    metas = get_metas_aportes()
+    if not metas:
+        return None
+    
+    # Se não especificou meta_id, pega a mais recente
+    if meta_id:
+        meta = next((m for m in metas if m['id'] == meta_id), None)
+    else:
+        meta = metas[0] if metas else None
+    
+    if not meta:
+        return None
+    
+    tipo_periodo = meta['tipo_periodo']
+    data_inicio = meta['data_inicio']
+    data_fim = meta['data_fim']
+    
+    # Calcular aportes reais
+    hoje = datetime.now()
+    aporte_real = None
+    
+    if tipo_periodo == 'mensal':
+        # Meta mensal: calcular aportes do mês atual
+        mes = hoje.month
+        ano = hoje.year
+        aporte_real = calcular_aportes_reais('mensal', mes=mes, ano=ano)
+    elif tipo_periodo == 'rebalanceamento':
+        # Meta por rebalanceamento: calcular desde data_inicio até data_fim ou hoje
+        if data_fim:
+            aporte_real = calcular_aportes_reais('rebalanceamento', data_inicio=data_inicio, data_fim=data_fim)
+        else:
+            # Se não tem data_fim, calcular até hoje
+            aporte_real = calcular_aportes_reais('rebalanceamento', data_inicio=data_inicio, data_fim=hoje.strftime('%Y-%m-%d'))
+    elif tipo_periodo == 'anual':
+        # Meta anual: calcular aportes do ano atual
+        ano = hoje.year
+        aporte_real = calcular_aportes_reais('anual', ano=ano)
+    
+    if not aporte_real:
+        aporte_real = {'valor': 0.0, 'quantidade_movimentacoes': 0}
+    
+    valor_realizado = aporte_real.get('valor', 0.0)
+    valor_meta = meta.get('valor_meta', 0.0)
+    faltante = max(0, valor_meta - valor_realizado)
+    percentual_concluido = (valor_realizado / valor_meta * 100) if valor_meta > 0 else 0
+    
+    # Calcular sugestão mensal baseada no faltante e dias restantes
+    sugestao_mensal = 0
+    if faltante > 0:
+        if tipo_periodo == 'mensal':
+            dias_restantes = max(1, (datetime(hoje.year, hoje.month, 28) - hoje).days)
+            sugestao_mensal = faltante / max(1, dias_restantes) * 30
+        elif tipo_periodo == 'anual':
+            dias_restantes = max(1, (datetime(hoje.year, 12, 31) - hoje).days)
+            sugestao_mensal = faltante / max(1, dias_restantes) * 30
+    
+    # Gerar alertas
+    alertas = []
+    if percentual_concluido < 50 and faltante > 0:
+        alertas.append(f"Meta abaixo de 50% - faltam R$ {faltante:,.2f}")
+    if faltante > valor_meta * 0.3:
+        alertas.append("Atenção: mais de 30% da meta ainda não foi atingida")
+    
+    return {
+        'meta': meta,
+        'realizado': {
+            'valor': valor_realizado,
+            'quantidade_movimentacoes': aporte_real.get('quantidade_movimentacoes', 0),
+            'data_inicio': aporte_real.get('data_inicio'),
+            'data_fim': aporte_real.get('data_fim')
+        },
+        'percentual_concluido': round(percentual_concluido, 2),
+        'faltante': round(faltante, 2),
+        'sugestao_mensal': round(sugestao_mensal, 2),
+        'alertas': alertas
+    }
+
 def migrar_preco_compra_existente():
     """
     MIGRAÇÃO ÚNICA: Executa apenas uma vez para corrigir ativos existentes

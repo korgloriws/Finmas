@@ -63,6 +63,12 @@ from models import (
     get_goals,
     save_goals,
     compute_goals_projection,
+    get_metas_aportes,
+    save_meta_aporte,
+    delete_meta_aporte,
+    get_status_aportes,
+    get_status_integrado_metas,
+    calcular_aportes_reais,
     obter_preco_historico,
     obter_preco_atual,
     simular_choques_indexadores,
@@ -2882,6 +2888,114 @@ def api_goals_projecao():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ==================== METAS DE APORTES ====================
+
+@server.route("/api/metas-aportes", methods=["GET"])
+def api_get_metas_aportes():
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        metas = get_metas_aportes()
+        return jsonify(metas or [])
+    except Exception as e:
+        import traceback
+        print(f"Erro ao obter metas de aportes: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/metas-aportes", methods=["POST"])
+def api_save_meta_aporte():
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        data = request.get_json()
+        resultado = save_meta_aporte(data)
+        if resultado.get('success'):
+            return jsonify(resultado), 200
+        else:
+            return jsonify(resultado), 400
+    except Exception as e:
+        import traceback
+        print(f"Erro ao salvar meta de aporte: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/metas-aportes/<int:meta_id>", methods=["DELETE"])
+def api_delete_meta_aporte(meta_id):
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        resultado = delete_meta_aporte(meta_id)
+        if resultado.get('success'):
+            return jsonify(resultado), 200
+        else:
+            return jsonify(resultado), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/metas-aportes/status", methods=["GET"])
+def api_get_status_aportes():
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        meta_id = request.args.get('meta_id', type=int)
+        status = get_status_aportes(meta_id=meta_id)
+        if status:
+            return jsonify(status), 200
+        else:
+            return jsonify({"message": "Nenhuma meta ativa encontrada"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/aportes-reais", methods=["GET"])
+def api_calcular_aportes_reais():
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        tipo_periodo = request.args.get('tipo_periodo', 'mensal')
+        mes = request.args.get('mes', type=int)
+        ano = request.args.get('ano', type=int)
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        resultado = calcular_aportes_reais(
+            tipo_periodo=tipo_periodo,
+            mes=mes,
+            ano=ano,
+            data_inicio=data_inicio,
+            data_fim=data_fim
+        )
+        return jsonify(resultado), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/metas/status-integrado", methods=["GET"])
+def api_get_status_integrado_metas():
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        
+        status = get_status_integrado_metas()
+        if status:
+            return jsonify(status), 200
+        else:
+            return jsonify({"message": "Nenhuma meta configurada"}), 404
+    except Exception as e:
+        import traceback
+        print(f"Erro ao obter status integrado: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 # ==================== EXPORT RELATÓRIOS ====================
 

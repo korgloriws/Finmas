@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,7 +11,12 @@ import {
   Calendar,
   AlertTriangle,
   BarChart3,
-  Target
+  Target,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Info
 } from 'lucide-react'
 import { formatCurrency, formatPercentage } from '../../utils/formatters'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -49,6 +54,56 @@ export default function CarteiraProjecaoTab({
   const [goalHorizonteMeses, setGoalHorizonteMeses] = useState('')
   const [usarCrescimentoManual, setUsarCrescimentoManual] = useState(false)
   const [crescimentoManual, setCrescimentoManual] = useState('')
+  
+  // Metas de Aportes
+  const [showMetaAporteForm, setShowMetaAporteForm] = useState(false)
+  const [metaAporteTipo, setMetaAporteTipo] = useState<'mensal' | 'rebalanceamento' | 'anual'>('mensal')
+  const [metaAporteValor, setMetaAporteValor] = useState('')
+  const [metaAporteDataInicio, setMetaAporteDataInicio] = useState(new Date().toISOString().split('T')[0])
+  const [metaAporteDataFim, setMetaAporteDataFim] = useState('')
+  
+  const { data: metasAportes } = useQuery({
+    queryKey: ['metas-aportes', user],
+    queryFn: carteiraService.getMetasAportes,
+    enabled: !!user,
+    staleTime: 30_000,
+  })
+  
+  const { data: statusAportes } = useQuery({
+    queryKey: ['status-aportes', user],
+    queryFn: () => carteiraService.getStatusAportes(),
+    enabled: !!user && !!metasAportes && metasAportes.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000, // Atualiza a cada minuto
+  })
+  
+  // Status integrado: combina goals com metas de aportes
+  const { data: statusIntegrado } = useQuery({
+    queryKey: ['status-integrado-metas', user],
+    queryFn: carteiraService.getStatusIntegradoMetas,
+    enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000, // Atualiza a cada minuto
+  }) as { data: any }
+  
+  const saveMetaAporteMutation = useMutation({
+    mutationFn: carteiraService.saveMetaAporte,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['metas-aportes', user] })
+      queryClient.invalidateQueries({ queryKey: ['status-aportes', user] })
+      setShowMetaAporteForm(false)
+      setMetaAporteValor('')
+    }
+  })
+  
+  const deleteMetaAporteMutation = useMutation({
+    mutationFn: carteiraService.deleteMetaAporte,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['metas-aportes', user] })
+      queryClient.invalidateQueries({ queryKey: ['status-aportes', user] })
+      queryClient.invalidateQueries({ queryKey: ['status-integrado-metas', user] })
+    }
+  })
 
 
   const valorAtualCarteira = useMemo(() => {
@@ -97,6 +152,13 @@ export default function CarteiraProjecaoTab({
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   })
+
+  // Invalidar status integrado quando goals ou metas de aportes mudarem
+  useEffect(() => {
+    if (goal || metasAportes) {
+      queryClient.invalidateQueries({ queryKey: ['status-integrado-metas', user] })
+    }
+  }, [goal, metasAportes, user, queryClient])
 
   const crescimentoMedioAnual = useMemo(() => {
     const datas: string[] = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
@@ -495,6 +557,458 @@ export default function CarteiraProjecaoTab({
             </motion.div>
           )}
         </div>
+      </motion.div>
+
+      {/* Status Integrado Completo: Goals + Metas de Aportes + Projeções */}
+      {statusIntegrado && statusIntegrado.analise_completa && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-primary/10 via-secondary/5 to-primary/10 border-2 border-primary/30 rounded-xl p-6 shadow-lg"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-bold flex items-center gap-3">
+              <Target className="w-7 h-7 text-primary" />
+              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                Visão Completa: Objetivo, Aportes & Projeções
+              </span>
+            </h3>
+          </div>
+
+          {/* Análise Completa */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {/* Progresso do Objetivo */}
+            <div className="bg-background/80 rounded-lg p-6 border border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-lg">Progresso do Objetivo</h4>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  statusIntegrado.analise_completa.progresso_objetivo >= 50
+                    ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    : statusIntegrado.analise_completa.progresso_objetivo >= 25
+                    ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                    : 'bg-red-500/20 text-red-700 dark:text-red-400'
+                }`}>
+                  {statusIntegrado.analise_completa.progresso_objetivo.toFixed(1)}%
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Patrimônio Atual</span>
+                  <span className="font-semibold">{formatCurrency(statusIntegrado.analise_completa.saldo_atual)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Objetivo Final</span>
+                  <span className="font-semibold text-primary">{formatCurrency(statusIntegrado.analise_completa.capital_alvo)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Faltante</span>
+                  <span className="font-semibold text-orange-600">{formatCurrency(statusIntegrado.analise_completa.faltante_objetivo)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.progresso_objetivo)}%` }}
+                    transition={{ duration: 1.5 }}
+                    className={`h-full ${
+                      statusIntegrado.analise_completa.progresso_objetivo >= 50 ? 'bg-green-500'
+                        : statusIntegrado.analise_completa.progresso_objetivo >= 25 ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Comparação de Aportes */}
+            <div className="bg-background/80 rounded-lg p-6 border border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-lg">Comparação de Aportes</h4>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  statusIntegrado.analise_completa.percentual_vs_sugerido >= 100
+                    ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    : statusIntegrado.analise_completa.percentual_vs_sugerido >= 50
+                    ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                    : 'bg-red-500/20 text-red-700 dark:text-red-400'
+                }`}>
+                  {statusIntegrado.analise_completa.percentual_vs_sugerido.toFixed(1)}%
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Aporte Sugerido</span>
+                  <span className="font-semibold text-primary">{formatCurrency(statusIntegrado.analise_completa.aporte_sugerido)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Aporte Real</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(statusIntegrado.analise_completa.aporte_real)}</span>
+                </div>
+                {statusIntegrado.analise_completa.aporte_meta_definida > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Meta Definida</span>
+                    <span className="font-semibold text-blue-600">{formatCurrency(statusIntegrado.analise_completa.aporte_meta_definida)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Faltante</span>
+                  <span className="font-semibold text-orange-600">{formatCurrency(statusIntegrado.analise_completa.faltante_vs_sugerido)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, statusIntegrado.analise_completa.percentual_vs_sugerido)}%` }}
+                    transition={{ duration: 1.5 }}
+                    className={`h-full ${
+                      statusIntegrado.analise_completa.percentual_vs_sugerido >= 100 ? 'bg-green-500'
+                        : statusIntegrado.analise_completa.percentual_vs_sugerido >= 50 ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Informações da Meta */}
+            <div className="bg-background/80 rounded-lg p-6 border border-primary/20">
+              <h4 className="font-semibold text-lg mb-4">Informações da Meta</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tipo</span>
+                  <span className="font-semibold capitalize">{statusIntegrado.goal?.tipo || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Horizonte Original</span>
+                  <span className="font-semibold">{statusIntegrado.analise_completa.horizonte_original_meses / 12} anos</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Taxa Mensal</span>
+                  <span className="font-semibold">{statusIntegrado.analise_completa.taxa_mensal.toFixed(2)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Projeções com Diferentes Cenários */}
+          {(statusIntegrado as any).projecoes && Object.keys((statusIntegrado as any).projecoes).length > 0 && (
+            <div className="mb-6">
+              <h4 className="font-semibold text-lg mb-4">Projeções: Quando Você Atingirá a Meta</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(statusIntegrado as any).projecoes.com_aporte_sugerido && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-5 h-5 text-blue-600" />
+                      <span className="font-semibold text-blue-800 dark:text-blue-300">Cenário Ideal</span>
+                    </div>
+                    <div className="text-sm space-y-1">
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_aporte_sugerido.aporte_mensal)}/mês</p>
+                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_aporte_sugerido.anos_necessarios} anos</p>
+                      <p className={(statusIntegrado as any).projecoes.com_aporte_sugerido.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes.com_aporte_sugerido.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {(statusIntegrado as any).projecoes.com_aporte_real && (
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-green-800 dark:text-green-300">Cenário Atual</span>
+                    </div>
+                    <div className="text-sm space-y-1">
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_aporte_real.aporte_mensal)}/mês</p>
+                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_aporte_real.anos_necessarios} anos</p>
+                      <p className={(statusIntegrado as any).projecoes.com_aporte_real.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes.com_aporte_real.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {(statusIntegrado as any).projecoes.com_meta_aporte && (
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-5 h-5 text-purple-600" />
+                      <span className="font-semibold text-purple-800 dark:text-purple-300">Com Meta Definida</span>
+                    </div>
+                    <div className="text-sm space-y-1">
+                      <p><strong>Aporte:</strong> {formatCurrency((statusIntegrado as any).projecoes.com_meta_aporte.aporte_mensal)}/mês</p>
+                      <p><strong>Tempo:</strong> {(statusIntegrado as any).projecoes.com_meta_aporte.anos_necessarios} anos</p>
+                      <p className={(statusIntegrado as any).projecoes.com_meta_aporte.atingivel ? 'text-green-600' : 'text-red-600'}>
+                        {(statusIntegrado as any).projecoes.com_meta_aporte.atingivel ? '✓ Atingível' : '⚠ Pode não ser atingível'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sugestões Inteligentes */}
+          {(statusIntegrado as any).sugestoes && (statusIntegrado as any).sugestoes.length > 0 && (
+            <div className="mb-6">
+              <h4 className="font-semibold text-lg mb-4">Sugestões e Recomendações</h4>
+              <div className="space-y-3">
+                {(statusIntegrado as any).sugestoes.map((sugestao: any, idx: number) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className={`rounded-lg p-4 border ${
+                      sugestao.tipo === 'critico' 
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                        : sugestao.tipo === 'atencao'
+                        ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                        : sugestao.tipo === 'sucesso'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {sugestao.tipo === 'critico' && <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />}
+                      {sugestao.tipo === 'atencao' && <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />}
+                      {sugestao.tipo === 'sucesso' && <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />}
+                      {sugestao.tipo === 'info' && <Info className="w-5 h-5 text-blue-600 mt-0.5" />}
+                      <div className="flex-1">
+                        <h5 className="font-semibold mb-1">{sugestao.titulo}</h5>
+                        <p className="text-sm mb-2">{sugestao.mensagem}</p>
+                        {sugestao.acao_sugerida && (
+                          <p className="text-sm font-medium text-primary">{sugestao.acao_sugerida}</p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Metas de Aportes */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card border border-border rounded-xl p-6 shadow-sm"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold flex items-center gap-3">
+            <Target className="w-6 h-6 text-primary" />
+            Metas de Aportes
+          </h3>
+          <button
+            onClick={() => setShowMetaAporteForm(!showMetaAporteForm)}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Meta
+          </button>
+        </div>
+
+        {/* Formulário de Nova Meta */}
+        {showMetaAporteForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-muted/30 border border-border rounded-lg p-4 mb-6"
+          >
+            <h4 className="font-semibold mb-4">Criar Nova Meta de Aporte</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Tipo de Período</label>
+                <select
+                  value={metaAporteTipo}
+                  onChange={(e) => setMetaAporteTipo(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  aria-label="Tipo de período da meta de aporte"
+                >
+                  <option value="mensal">Mensal</option>
+                  <option value="rebalanceamento">Por Rebalanceamento</option>
+                  <option value="anual">Anual</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Valor da Meta (R$)</label>
+                <input
+                  type="number"
+                  value={metaAporteValor}
+                  onChange={(e) => setMetaAporteValor(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  placeholder="Ex.: 5000"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Data Início</label>
+                <input
+                  type="date"
+                  value={metaAporteDataInicio}
+                  onChange={(e) => setMetaAporteDataInicio(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  aria-label="Data de início da meta de aporte"
+                />
+              </div>
+              {(metaAporteTipo === 'rebalanceamento' || metaAporteTipo === 'anual') && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Data Fim (opcional)</label>
+                  <input
+                    type="date"
+                    value={metaAporteDataFim}
+                    onChange={(e) => setMetaAporteDataFim(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                    aria-label="Data de fim da meta de aporte (opcional)"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => {
+                  if (!metaAporteValor) return
+                  saveMetaAporteMutation.mutate({
+                    tipo_periodo: metaAporteTipo,
+                    valor_meta: parseFloat(metaAporteValor),
+                    data_inicio: metaAporteDataInicio,
+                    data_fim: metaAporteDataFim || undefined,
+                    ativo: true
+                  })
+                }}
+                disabled={saveMetaAporteMutation.isPending || !metaAporteValor}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+              >
+                {saveMetaAporteMutation.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowMetaAporteForm(false)
+                  setMetaAporteValor('')
+                }}
+                className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 text-sm font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Status das Metas */}
+        {statusAportes && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-br from-primary/10 to-secondary/10 border-2 border-primary/20 rounded-lg p-6 mb-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-lg">Status da Meta Ativa</h4>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                statusAportes.percentual_concluido >= 100 
+                  ? 'bg-green-500/20 text-green-700 dark:text-green-400' 
+                  : statusAportes.percentual_concluido >= 50
+                  ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                  : 'bg-red-500/20 text-red-700 dark:text-red-400'
+              }`}>
+                {statusAportes.percentual_concluido.toFixed(1)}% concluído
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-background/50 rounded-lg p-4">
+                <div className="text-sm text-muted-foreground mb-1">Meta</div>
+                <div className="text-xl font-bold">{formatCurrency(statusAportes.meta.valor_meta)}</div>
+                <div className="text-xs text-muted-foreground mt-1 capitalize">{statusAportes.meta.tipo_periodo}</div>
+              </div>
+              <div className="bg-background/50 rounded-lg p-4">
+                <div className="text-sm text-muted-foreground mb-1">Realizado</div>
+                <div className="text-xl font-bold text-green-600">{formatCurrency(statusAportes.realizado.valor)}</div>
+                <div className="text-xs text-muted-foreground mt-1">{statusAportes.realizado.quantidade_movimentacoes} movimentações</div>
+              </div>
+              <div className="bg-background/50 rounded-lg p-4">
+                <div className="text-sm text-muted-foreground mb-1">Faltante</div>
+                <div className="text-xl font-bold text-orange-600">{formatCurrency(statusAportes.faltante)}</div>
+              </div>
+              <div className="bg-background/50 rounded-lg p-4">
+                <div className="text-sm text-muted-foreground mb-1">Sugestão Mensal</div>
+                <div className="text-xl font-bold text-primary">{formatCurrency(statusAportes.sugestao_mensal)}</div>
+              </div>
+            </div>
+
+            {/* Barra de Progresso */}
+            <div className="mb-4">
+              <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, statusAportes.percentual_concluido)}%` }}
+                  transition={{ duration: 1 }}
+                  className={`h-full ${
+                    statusAportes.percentual_concluido >= 100 
+                      ? 'bg-green-500' 
+                      : statusAportes.percentual_concluido >= 50
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Alertas */}
+            {statusAportes.alertas && statusAportes.alertas.length > 0 && (
+              <div className="space-y-2">
+                {statusAportes.alertas.map((alerta, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 dark:bg-orange-900/20 p-2 rounded">
+                    <AlertTriangle className="w-4 h-4" />
+                    {alerta}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Lista de Metas */}
+        {metasAportes && metasAportes.length > 0 ? (
+          <div className="space-y-3">
+            {metasAportes.map((meta) => (
+              <div key={meta.id} className="bg-muted/30 border border-border rounded-lg p-4 flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold">{formatCurrency(meta.valor_meta)}</span>
+                    <span className="text-xs text-muted-foreground capitalize">({meta.tipo_periodo})</span>
+                    {meta.ativo ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {meta.data_inicio} {meta.data_fim && `- ${meta.data_fim}`}
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteMetaAporteMutation.mutate(meta.id)}
+                  disabled={deleteMetaAporteMutation.isPending}
+                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Excluir meta"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <Target className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>Nenhuma meta de aporte cadastrada</p>
+            <p className="text-sm mt-1">Crie uma meta para acompanhar seus aportes</p>
+          </div>
+        )}
       </motion.div>
 
       {/* Configurações */}

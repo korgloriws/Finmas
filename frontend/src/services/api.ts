@@ -409,6 +409,118 @@ export const carteiraService = {
     return response.data
   },
 
+  // Metas de Aportes
+  getMetasAportes: async (): Promise<Array<{
+    id: number
+    tipo_periodo: 'mensal' | 'rebalanceamento' | 'anual'
+    valor_meta: number
+    data_inicio: string
+    data_fim?: string
+    ativo: boolean
+    integrado_com_goal?: number
+    created_at: string
+    updated_at: string
+  }>> => {
+    const response = await api.get('/metas-aportes')
+    return response.data
+  },
+  saveMetaAporte: async (payload: {
+    id?: number
+    tipo_periodo: 'mensal' | 'rebalanceamento' | 'anual'
+    valor_meta: number
+    data_inicio: string
+    data_fim?: string
+    ativo?: boolean
+    integrado_com_goal?: number
+  }): Promise<{ success: boolean }> => {
+    const response = await api.post('/metas-aportes', payload)
+    return response.data
+  },
+  deleteMetaAporte: async (metaId: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/metas-aportes/${metaId}`)
+    return response.data
+  },
+  getStatusAportes: async (metaId?: number): Promise<{
+    meta: any
+    realizado: { valor: number; quantidade_movimentacoes: number; data_inicio?: string; data_fim?: string }
+    percentual_concluido: number
+    faltante: number
+    sugestao_mensal: number
+    alertas: string[]
+  }> => {
+    const params = metaId ? `?meta_id=${metaId}` : ''
+    const response = await api.get(`/metas-aportes/status${params}`)
+    return response.data
+  },
+  calcularAportesReais: async (params: {
+    tipo_periodo?: 'mensal' | 'rebalanceamento' | 'anual'
+    mes?: number
+    ano?: number
+    data_inicio?: string
+    data_fim?: string
+  }): Promise<{ valor: number; quantidade_movimentacoes: number; data_inicio?: string; data_fim?: string }> => {
+    const queryParams = new URLSearchParams()
+    if (params.tipo_periodo) queryParams.append('tipo_periodo', params.tipo_periodo)
+    if (params.mes) queryParams.append('mes', params.mes.toString())
+    if (params.ano) queryParams.append('ano', params.ano.toString())
+    if (params.data_inicio) queryParams.append('data_inicio', params.data_inicio)
+    if (params.data_fim) queryParams.append('data_fim', params.data_fim)
+    const response = await api.get(`/aportes-reais?${queryParams.toString()}`)
+    return response.data
+  },
+  getStatusIntegradoMetas: async (): Promise<{
+    goal: any
+    meta_aporte: any
+    projecao_goal: any
+    aportes_reais_mes: any
+    aportes_reais_meta: any
+    analise_completa: {
+      saldo_atual: number
+      capital_alvo: number
+      progresso_objetivo: number
+      faltante_objetivo: number
+      aporte_sugerido: number
+      aporte_real: number
+      aporte_meta_definida: number
+      percentual_vs_sugerido: number
+      faltante_vs_sugerido: number
+      taxa_mensal: number
+      horizonte_original_meses: number
+    }
+    projecoes: {
+      com_aporte_sugerido?: {
+        aporte_mensal: number
+        meses_necessarios: number
+        atingivel: boolean
+        anos_necessarios: number
+        projecao_anual: Array<{ ano: number; meses: number; saldo: number }>
+      }
+      com_aporte_real?: {
+        aporte_mensal: number
+        meses_necessarios: number
+        atingivel: boolean
+        anos_necessarios: number
+        projecao_anual: Array<{ ano: number; meses: number; saldo: number }>
+      }
+      com_meta_aporte?: {
+        aporte_mensal: number
+        meses_necessarios: number
+        atingivel: boolean
+        anos_necessarios: number
+        projecao_anual: Array<{ ano: number; meses: number; saldo: number }>
+      }
+    }
+    sugestoes: Array<{
+      tipo: 'critico' | 'atencao' | 'sucesso' | 'info'
+      titulo: string
+      mensagem: string
+      acao_sugerida?: string
+    }>
+  }> => {
+    const response = await api.get('/metas/status-integrado')
+    return response.data
+  },
+
 
   downloadMovimentacoesCSV: async (params: { mes?: string; ano?: string; inicio?: string; fim?: string }) => {
     const p = new URLSearchParams()
