@@ -1246,4 +1246,5 @@ LISTA_BDRS = [
     "USBC34.SA",
     "XPBR31.SA",
     "STLA",
+    "BYDDY",
 ]

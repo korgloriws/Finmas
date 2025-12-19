@@ -977,6 +977,8 @@ COMPLETE_B3_LOGOS_MAPPING = {
 
     # Z - Z
     "ZAMP3.sa": "https://img.logo.dev/ticker/ZAMP3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
+    "BYDDY":"https://img.logo.dev/byd.com?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
+    "STLA":"https://img.logo.dev/stellantis.com?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true"
 
 }
 

@@ -8,18 +8,23 @@ export function normalizeTicker(ticker: string): string {
 
   const cleanTicker = ticker.trim().toUpperCase()
   
-  
-  if (cleanTicker.includes('-')) {
-    return cleanTicker
-  }
-
-
-  if (cleanTicker.includes('.')) {
+  // Se já tem hífen ou ponto, retorna como está (já está normalizado)
+  if (cleanTicker.includes('-') || cleanTicker.includes('.')) {
     return cleanTicker
   }
   
-
-  return `${cleanTicker}.SA`
+  // Verifica se termina em número (0-9)
+  // Ações brasileiras terminam em números: PETR4, VALE3, ITUB4, VISC11, etc.
+  // ADRs e Stocks não terminam em números: BYDYY, STLA, AAPL, TSLA, etc.
+  const endsWithNumber = /[0-9]$/.test(cleanTicker)
+  
+  if (endsWithNumber) {
+    // Termina em número → ação brasileira → adiciona .SA
+    return `${cleanTicker}.SA`
+  }
+  
+  // Não termina em número → ADR/Stock → retorna sem .SA
+  return cleanTicker
 }
 
 /**

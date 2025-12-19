@@ -2409,11 +2409,20 @@ def _normalize_ticker_for_yf(ticker: str) -> str:
         if not t:
             return t
 
+        # Se já tem hífen ou ponto, retorna como está (já está normalizado)
         if '-' in t or '.' in t:
             return t
         
-        if len(t) <= 6:
+        # Verifica se termina em número (0-9)
+        # Ações brasileiras terminam em números: PETR4, VALE3, ITUB4, VISC11, etc.
+        # ADRs e Stocks não terminam em números: BYDYY, STLA, AAPL, TSLA, etc.
+        ends_with_number = bool(re.search(r'[0-9]$', t))
+        
+        if ends_with_number:
+            # Termina em número → ação brasileira → adiciona .SA
             return t + '.SA'
+        
+        # Não termina em número → ADR/Stock → retorna sem .SA
         return t
     except Exception:
         return (ticker or "").upper()

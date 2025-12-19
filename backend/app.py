@@ -9,6 +9,7 @@ import os
 import shutil
 import zipfile
 import tempfile
+import re
 from math import isfinite
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from authlib.integrations.flask_client import OAuth
@@ -1092,8 +1093,11 @@ def api_get_ativo_details(ticker):
     try:
         ticker = ticker.strip().upper()
         
-        if '-' not in ticker and '.' not in ticker and len(ticker) <= 6:
-            ticker += '.SA'
+        # Se já tem hífen ou ponto, mantém como está
+        if '-' not in ticker and '.' not in ticker:
+            # Verifica se termina em número (ações brasileiras)
+            if re.search(r'[0-9]$', ticker):
+                ticker += '.SA'
         
         acao = yf.Ticker(ticker)
         info = acao.info or {}
@@ -1810,8 +1814,13 @@ def _buscar_info_ticker_para_comparacao(ticker):
     """
     try:
         ticker_original = ticker.strip().upper()
-        if '.' not in ticker_original and len(ticker_original) <= 6:
-            ticker_yf = ticker_original + '.SA'
+        # Se já tem ponto ou hífen, mantém como está
+        if '.' not in ticker_original and '-' not in ticker_original:
+            # Verifica se termina em número (ações brasileiras)
+            if re.search(r'[0-9]$', ticker_original):
+                ticker_yf = ticker_original + '.SA'
+            else:
+                ticker_yf = ticker_original
         else:
             ticker_yf = ticker_original
             

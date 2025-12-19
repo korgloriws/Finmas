@@ -38,9 +38,19 @@ export function formatDividendYield(value: number | null | undefined): string {
 
 export function normalizeTicker(ticker: string): string {
   const normalized = ticker.trim().toUpperCase()
-  if (!normalized.includes('.') && normalized.length <= 6) {
+  
+  // Se já tem ponto ou hífen, retorna como está
+  if (normalized.includes('.') || normalized.includes('-')) {
+    return normalized
+  }
+  
+  // Verifica se termina em número (ações brasileiras)
+  const endsWithNumber = /[0-9]$/.test(normalized)
+  
+  if (endsWithNumber) {
     return normalized + '.SA'
   }
+  
   return normalized
 } 
 
