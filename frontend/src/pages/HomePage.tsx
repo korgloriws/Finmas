@@ -60,6 +60,7 @@ import { formatCurrency } from '../utils/formatters'
 import { lazy, Suspense } from 'react'
 import CardPrincipal from '../components/home/CardPrincipal'
 import InsightCard from '../components/home/InsightCard'
+import NoticiasWidget from '../components/home/NoticiasWidget'
 
 const AtivosDetalhesModal = lazy(() => import('../components/carteira/AtivosDetalhesModal'))
 const TopRankingsCarousel = lazy(() => import('../components/home/TopRankingsCarousel'))
@@ -2115,6 +2116,9 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Carrossel de Notícias - No final da página */}
+      <NoticiasWidget delay={0.8} />
 
       {/* Modal de Detalhes dos Ativos */}
       <Suspense fallback={null}>

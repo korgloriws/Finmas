@@ -23,6 +23,7 @@ import RankingsPage from './pages/RankingsPage'
 import ConfiguracoesPage from './pages/ConfiguracoesPage'
 import GoogleCallbackPage from './pages/GoogleCallbackPage'
 import HomePage from './pages/HomePage'
+import NoticiasPage from './pages/NoticiasPage'
 
 function App() {
   return (
@@ -137,7 +138,17 @@ function App() {
               </SecurityCheck>
             </ProtectedRoute>
           } />
-
+          
+          <Route path="/noticias" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <NoticiasPage />
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+          
           <Route path="/configuracoes" element={
             <ProtectedRoute>
               <SecurityCheck>

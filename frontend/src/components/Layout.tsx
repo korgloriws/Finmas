@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
@@ -14,6 +14,7 @@ const menuItems = [
   { path: '/analise', label: 'Análise de oportunidades', icon: BarChart3 },
   { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
   { path: '/carteira', label: 'Carteira', icon: Wallet },
+  { path: '/noticias', label: 'Notícias', icon: Newspaper },
   { path: '/agenda-dividendos', label: 'Agenda de Dividendos', icon: Calendar },
   { path: '/juros-compostos', label: 'Calculadora de Juros Compostos', icon: TrendingUp },
   { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
@@ -67,6 +68,7 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Carteira – Proventos', path: '/carteira', keywords: 'carteira proventos dividendos', params: { tab: 'proventos' } },
     { label: 'Carteira – Rebalanceamento', path: '/carteira', keywords: 'carteira rebalanceamento metas', params: { tab: 'rebalanceamento' } },
     { label: 'Rankings', path: '/rankings', keywords: 'rankings mercado acoes fiis bdrs', params: {} },
+    { label: 'Notícias', path: '/noticias', keywords: 'noticias mercado financeiro valor infomoney', params: {} },
   ]
 
   const filteredResults = searchQuery

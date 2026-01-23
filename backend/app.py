@@ -1027,6 +1027,98 @@ def api_rf_catalog():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+@server.route("/api/noticias", methods=["GET"])
+def api_noticias():
+    """
+    Endpoint para obter últimas notícias do mercado
+    Query params:
+        - limite: Número máximo de notícias (padrão: 20, máximo: 50)
+        - refresh: Se 'true', força atualização ignorando cache
+    """
+    try:
+        limite = request.args.get('limite', 20, type=int)
+        refresh = request.args.get('refresh', 'false').lower() == 'true'
+        
+        # Limitar máximo
+        limite = min(limite, 50)
+        limite = max(limite, 1)
+        
+        # Chave de cache
+        cache_key = f"noticias:{limite}"
+        
+        # Verificar cache (se não for refresh)
+        if not refresh and cache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return jsonify(cached)
+        
+        # Buscar notícias
+        from scraper_noticias import obter_noticias
+        noticias = obter_noticias(limite=limite)
+        
+        # Salvar no cache (30 minutos)
+        if cache:
+            try:
+                cache.set(cache_key, noticias, timeout=1800)
+            except Exception:
+                pass
+        
+        return jsonify(noticias)
+        
+    except Exception as e:
+        print(f"Erro ao obter notícias: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/noticias/detalhes", methods=["GET"])
+def api_noticia_detalhes():
+    """
+    Endpoint para obter detalhes completos de uma notícia
+    Query params:
+        - url: URL da notícia (obrigatório)
+    """
+    try:
+        url = request.args.get('url')
+        
+        if not url:
+            return jsonify({"error": "URL é obrigatória"}), 400
+        
+        # Validar URL
+        if not url.startswith('http'):
+            return jsonify({"error": "URL inválida"}), 400
+        
+        # Chave de cache
+        cache_key = f"noticia_detalhes:{url}"
+        
+        # Verificar cache
+        if cache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return jsonify(cached)
+        
+        # Buscar detalhes
+        from scraper_noticias import obter_detalhes_noticia
+        detalhes = obter_detalhes_noticia(url)
+        
+        if not detalhes:
+            return jsonify({"error": "Não foi possível obter detalhes da notícia"}), 404
+        
+        # Salvar no cache (1 hora)
+        if cache:
+            try:
+                cache.set(cache_key, detalhes, timeout=3600)
+            except Exception:
+                pass
+        
+        return jsonify(detalhes)
+        
+    except Exception as e:
+        print(f"Erro ao obter detalhes da notícia: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @server.route("/api/analise/resumo", methods=["GET"])
 def api_analise_resumo():
     

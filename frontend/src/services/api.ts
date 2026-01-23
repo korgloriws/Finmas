@@ -1155,4 +1155,40 @@ export const dividendosService = {
   },
 }
 
+// ==================== NOTÍCIAS ====================
+export interface Noticia {
+  titulo: string
+  resumo: string
+  url: string
+  data: string
+  autor: string | null
+  categoria: string | null
+  fonte: string | null
+  imagem_url: string | null
+}
+
+export interface NoticiaDetalhes {
+  conteudo: string
+  url: string
+}
+
+export const noticiasService = {
+  getNoticias: async (limite: number = 20, refresh: boolean = false): Promise<Noticia[]> => {
+    const params = new URLSearchParams()
+    params.append('limite', limite.toString())
+    if (refresh) params.append('refresh', 'true')
+    
+    const response = await api.get(`/noticias?${params.toString()}`)
+    return response.data
+  },
+
+  getNoticiaDetalhes: async (url: string): Promise<NoticiaDetalhes> => {
+    const params = new URLSearchParams()
+    params.append('url', url)
+    
+    const response = await api.get(`/noticias/detalhes?${params.toString()}`)
+    return response.data
+  },
+}
+
 export default api 
