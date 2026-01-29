@@ -646,7 +646,7 @@ COMPLETE_B3_LOGOS_MAPPING = {
     "CSED3.sa": "https://img.logo.dev/ticker/CSED3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CSMG3.sa": "https://img.logo.dev/ticker/CSMG3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CSNA3.sa": "https://img.logo.dev/ticker/CSNA3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
-    "CSUD3.sa": "https://img.logo.dev/ticker/CSUD3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
+    "CSUD3.sa": "https://img.logo.dev/csu.com.br?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CTKA3.sa": "https://img.logo.dev/ticker/CTKA3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CTKA4.sa": "https://img.logo.dev/ticker/CTKA4.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CTSA3.sa": "https://img.logo.dev/ticker/CTSA3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",

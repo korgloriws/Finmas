@@ -8,10 +8,7 @@ interface LazyDataOptions {
   refetchOnWindowFocus?: boolean
 }
 
-/**
- * Hook para carregamento sob demanda de dados
- * Só carrega quando o componente está visível na tela
- */
+
 export function useLazyData<T>(
   queryKey: string[],
   queryFn: () => Promise<T>,
@@ -99,10 +96,7 @@ export function useSequentialData<T>(
   })
 }
 
-/**
- * Hook para carregamento sob demanda baseado em scroll
- * Carrega dados conforme o usuário faz scroll
- */
+
 export function useScrollBasedData<T>(
   queryKey: string[],
   queryFn: () => Promise<T>,

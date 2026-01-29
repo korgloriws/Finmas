@@ -207,6 +207,7 @@ function TabelaAtivosPorTipo({
                     )}
                     {isFii && (
                       <>
+                        <th className="px-3 py-2 text-left font-medium text-sm">DY</th>
                         <th className="px-3 py-2 text-left font-medium text-sm">Segmento</th>
                         <th className="px-3 py-2 text-left font-medium text-sm">P/VP</th>
                       </>
@@ -342,6 +343,9 @@ function TabelaAtivosPorTipo({
                         )}
                         {isFii && (
                           <>
+                            <td className="px-3 py-2 text-green-600 font-medium text-sm">
+                              {formatDividendYield(ativo?.dy)}
+                            </td>
                             <td className="px-3 py-2 text-sm">
                               {(() => {
                                 // Buscar metadados do cache (sob demanda)
@@ -565,14 +569,22 @@ function TabelaAtivosPorTipo({
                         )}
                       </div>
 
-                      {/* Segmento e P/VP para FIIs */}
+                      {/* DY, Segmento e P/VP para FIIs */}
                       {isFii && (() => {
                         // Buscar metadados do cache (sob demanda)
                         const metadados = getMetadadosAtivo(ativo?.ticker || '')
                         const segmento = metadados?.segmento || (ativo as any)?.segmento_fii
                         const pvp = metadados?.p_vp
-                        return (segmento || pvp !== undefined) ? (
+                        return (ativo?.dy !== undefined || segmento || pvp !== undefined) ? (
                           <div className="pt-2 sm:pt-3 border-t border-border space-y-2">
+                            {ativo?.dy !== undefined && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-muted-foreground">DY</span>
+                                <span className="text-xs sm:text-sm text-green-600 font-medium">
+                                  {formatDividendYield(ativo.dy)}
+                                </span>
+                              </div>
+                            )}
                             {segmento && (
                               <div className="flex justify-between items-center">
                                 <span className="text-xs text-muted-foreground">Segmento</span>
