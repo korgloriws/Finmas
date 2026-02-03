@@ -17,6 +17,8 @@ try:
 except Exception:
     psycopg = None
 
+# Concorrência segura para requisições ao yfinance (evita rate limit; 5-8 costuma ser estável)
+YF_MAX_CONCURRENT = 5
 
 USUARIO_ATUAL = None  
 SESSION_LOCK = threading.Lock()
@@ -1629,38 +1631,25 @@ def aplicar_filtros_fiis(dados):
 
 
 def processar_ativos(lista, tipo):
-    """Processa lista de ativos em paralelo para melhor performance"""
+    """Processa lista de ativos com até YF_MAX_CONCURRENT requisições simultâneas ao yfinance."""
     if not lista:
         return []
     
-    # OTIMIZAÇÃO: Aumentado para 200 workers (com 8GB RAM e 2 vCPUs, suporta bem)
-    # Processa muito mais rápido sem sobrecarregar o yfinance
     dados = []
-    max_workers = min(len(lista), 200)  # Até 200 workers simultâneos
-    
+    max_workers = min(len(lista), YF_MAX_CONCURRENT)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submete todas as tarefas
         future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, tipo): ticker 
+            executor.submit(obter_informacoes, ticker, tipo): ticker
             for ticker in lista
         }
-        
-        # Coleta resultados conforme terminam
-        # Delay menor (a cada 50 requisições) para não sobrecarregar yfinance
-        completed_count = 0
         for future in as_completed(future_to_ticker):
             try:
                 resultado = future.result()
                 if resultado is not None:
                     dados.append(resultado)
-                completed_count += 1
-                # Delay a cada 50 requisições para evitar rate limit do yfinance
-                if completed_count % 50 == 0:
-                    time.sleep(0.1)  # 100ms de pausa
             except Exception as e:
                 ticker = future_to_ticker[future]
                 print(f"Erro ao processar {ticker}: {str(e)}")
-                continue 
 
     print(f"🔍 {tipo}: {len(dados)} ativos recuperados antes dos filtros.")
 
@@ -2076,22 +2065,17 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
             conn.close()
 
 def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
-    """Processa lista de ativos com filtros em paralelo para melhor performance"""
+    """Processa lista de ativos com filtros. Até YF_MAX_CONCURRENT requisições simultâneas ao yfinance."""
     if not lista_ativos:
         return []
     
-    # OTIMIZAÇÃO: Aumentado para 200 workers para processar muito mais rápido
     dados = []
-    max_workers = min(len(lista_ativos), 200)  # Até 200 workers simultâneos
-    
+    max_workers = min(len(lista_ativos), YF_MAX_CONCURRENT)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submete todas as tarefas
         future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker 
+            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker
             for ticker in lista_ativos
         }
-        
-        # Coleta resultados conforme terminam
         for future in as_completed(future_to_ticker):
             try:
                 resultado = future.result()
@@ -2100,7 +2084,6 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
             except Exception as e:
                 ticker = future_to_ticker[future]
                 print(f"Erro ao processar {ticker}: {str(e)}")
-                continue
     filtrados = [
         ativo for ativo in dados if (
             ativo['roe'] >= (roe_min or 0) and
@@ -2124,23 +2107,18 @@ def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, 
     return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
-    """Processa lista de FIIs com filtros em paralelo para melhor performance"""
+    """Processa lista de FIIs com filtros. Até YF_MAX_CONCURRENT requisições simultâneas ao yfinance."""
     fiis = LISTA_FIIS
     if not fiis:
         return []
     
-    # OTIMIZAÇÃO: Aumentado para 200 workers para processar muito mais rápido
     dados = []
-    max_workers = min(len(fiis), 200)  # Até 200 workers simultâneos
-    
+    max_workers = min(len(fiis), YF_MAX_CONCURRENT)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submete todas as tarefas
         future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, 'FII'): ticker 
+            executor.submit(obter_informacoes, ticker, 'FII'): ticker
             for ticker in fiis
         }
-        
-        # Coleta resultados conforme terminam
         for future in as_completed(future_to_ticker):
             try:
                 resultado = future.result()
@@ -2149,8 +2127,6 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
             except Exception as e:
                 ticker = future_to_ticker[future]
                 print(f"Erro ao processar FII {ticker}: {str(e)}")
-                continue
-    
 
     filtrados = [
         ativo for ativo in dados if (
@@ -2942,101 +2918,66 @@ def converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl=None):
     
     return preco_usd * taxa_usd_brl
 
+def _obter_preco_um_ticker(ticker, taxa_usd_brl):
+    """Worker: obtém preço e indicadores de um único ticker (para uso em ThreadPoolExecutor)."""
+    try:
+        normalized = _normalize_ticker_for_yf(ticker)
+        ticker_obj = yf.Ticker(normalized)
+        info = ticker_obj.info
+        preco_usd = None
+        if info and info.get('currentPrice'):
+            preco_usd = float(info['currentPrice'])
+        else:
+            hist = ticker_obj.history(period="1d")
+            if not hist.empty:
+                preco_usd = float(hist['Close'].iloc[-1])
+        if preco_usd is None:
+            return None
+        if is_crypto_ticker(ticker) and taxa_usd_brl:
+            preco_final = converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl)
+        else:
+            preco_final = preco_usd
+        return (ticker, {
+            'preco_atual': preco_final,
+            'dy': info.get('dividendYield') if info else None,
+            'pl': info.get('trailingPE') if info else None,
+            'pvp': info.get('priceToBook') if info else None,
+            'roe': info.get('returnOnEquity') if info else None
+        })
+    except Exception as e:
+        print(f"[AVISO] Erro ao obter preco para {ticker}: {e}")
+        return None
+
+
 def obter_precos_batch(tickers):
     """
-    Obtém preços de múltiplos tickers em uma única requisição
-    Muito mais eficiente que fazer 1 requisição por ticker
+    Obtém preços de múltiplos tickers com até YF_MAX_CONCURRENT requisições simultâneas ao yfinance.
     """
     if not tickers:
         return {}
     
     try:
-        print(f"🔄 Buscando preços em batch para {len(tickers)} tickers...")
+        print(f"🔄 Buscando preços (até {YF_MAX_CONCURRENT} simultâneos) para {len(tickers)} tickers...")
         
-        # Obter taxa USD/BRL uma vez para todas as criptomoedas
         taxa_usd_brl = None
-        tem_crypto = any(is_crypto_ticker(ticker) for ticker in tickers)
-        if tem_crypto:
+        if any(is_crypto_ticker(t) for t in tickers):
             taxa_usd_brl = obter_taxa_usd_brl()
         
-        # OTIMIZAÇÃO: Processar em lotes de 200 tickers (limite seguro do yfinance)
-        # yfinance suporta até ~2000 req/min, então 200 por batch com delay de 0.1s é seguro
-        batch_size = 200
         precos_totais = {}
+        max_workers = min(len(tickers), YF_MAX_CONCURRENT)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_obter_preco_um_ticker, ticker, taxa_usd_brl): ticker
+                for ticker in tickers
+            }
+            for future in as_completed(futures):
+                resultado = future.result()
+                if resultado:
+                    ticker, dados = resultado
+                    precos_totais[ticker] = dados
         
-        for i in range(0, len(tickers), batch_size):
-            batch_tickers = tickers[i:i + batch_size]
-            print(f"🔄 Processando lote {i//batch_size + 1}/{(len(tickers) + batch_size - 1)//batch_size} ({len(batch_tickers)} tickers)")
-            
-            # Normalizar tickers para o formato do Yahoo Finance
-            normalized_tickers = [_normalize_ticker_for_yf(ticker) for ticker in batch_tickers]
-            
-            # Buscar todos os preços de uma vez usando yfinance (batch nativo)
-            ticker_objects = yf.Tickers(' '.join(normalized_tickers))
-            
-            # Processar cada ticker do lote atual em paralelo usando ThreadPoolExecutor
-            def processar_ticker(idx, ticker):
-                try:
-                    normalized = normalized_tickers[idx]
-                    ticker_obj = ticker_objects.tickers[normalized]
-                
-                    # Obter informações do ticker
-                    info = ticker_obj.info
-                    preco_usd = None
-                    
-                    if info and 'currentPrice' in info and info['currentPrice']:
-                        preco_usd = float(info['currentPrice'])
-                    else:
-                        # Fallback: tentar obter preço do histórico
-                        hist = ticker_obj.history(period="1d")
-                        if not hist.empty:
-                            preco_usd = float(hist['Close'].iloc[-1])
-                    
-                    if preco_usd is not None:
-                        # Verificar se é criptomoeda e converter USD → BRL
-                        if is_crypto_ticker(ticker) and taxa_usd_brl:
-                            preco_brl = converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl)
-                            print(f" {ticker}: ${preco_usd:.2f} USD → R$ {preco_brl:.2f} BRL (taxa: {taxa_usd_brl:.4f})")
-                            preco_final = preco_brl
-                        else:
-                            preco_final = preco_usd
-                        
-                        return (ticker, {
-                            'preco_atual': preco_final,
-                            'dy': info.get('dividendYield', None) if info else None,
-                            'pl': info.get('trailingPE', None) if info else None,
-                            'pvp': info.get('priceToBook', None) if info else None,
-                            'roe': info.get('returnOnEquity', None) if info else None
-                        })
-                    else:
-                        print(f"[AVISO] Nao foi possivel obter preco para {ticker}")
-                        return None
-                            
-                except Exception as e:
-                    print(f"[AVISO] Erro ao obter preco para {ticker}: {e}")
-                    return None
-            
-            # Processar em paralelo com até 200 workers (um por ticker no batch)
-            max_workers = min(len(batch_tickers), 200)
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(processar_ticker, idx, ticker): ticker 
-                    for idx, ticker in enumerate(batch_tickers)
-                }
-                
-                for future in as_completed(futures):
-                    resultado = future.result()
-                    if resultado:
-                        ticker, dados = resultado
-                        precos_totais[ticker] = dados
-            
-            # Pequena pausa entre lotes para evitar rate limits (reduzido para 0.1s)
-            if i + batch_size < len(tickers):
-                time.sleep(0.1)  # 100ms de pausa entre lotes (suficiente com batch maior)
-        
-        print(f"[OK] Batch concluido: {len(precos_totais)} precos obtidos de {len(tickers)} tickers")
+        print(f"[OK] Concluido: {len(precos_totais)} precos obtidos de {len(tickers)} tickers")
         return precos_totais
-        
     except Exception as e:
         print(f"[ERRO] Erro no batch de precos: {e}")
         return {}

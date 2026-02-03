@@ -1,34 +1,58 @@
 """
 Scraper de notícias do Dados de Mercado
 URL: https://www.dadosdemercado.com.br/ultimas-noticias
+Resumo: extraído da meta description ou og:description da URL da notícia.
 """
 
+import re
 import requests
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Dict, Optional
-import time
-import re
+
+# Limite de notícias para buscar resumo (evita muitas requisições)
+MAX_RESUMOS_PARALELOS = 20
+TIMEOUT_RESUMO_SEGUNDOS = 5
+WORKERS_RESUMO = 4
+
+
+def extrair_resumo_da_url(url: str, timeout: int = TIMEOUT_RESUMO_SEGUNDOS) -> str:
+    """
+    Obtém o resumo da notícia a partir da página do artigo:
+    meta name="description" ou meta property="og:description".
+    Retorna string vazia em caso de erro ou se não houver descrição.
+    """
+    if not url or not url.startswith("http"):
+        return ""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        }
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+        # Só parsear o início da resposta (meta costuma estar no head)
+        soup = BeautifulSoup(resp.content[:150000], "html.parser")
+        # 1) og:description (comum em portais)
+        og = soup.find("meta", property="og:description")
+        if og and og.get("content"):
+            text = og["content"].strip()
+            if len(text) > 20:
+                return text[:500]  # limitar tamanho
+        # 2) meta description
+        meta = soup.find("meta", attrs={"name": "description"})
+        if meta and meta.get("content"):
+            text = meta["content"].strip()
+            if len(text) > 20:
+                return text[:500]
+        return ""
+    except Exception:
+        return ""
 
 def obter_noticias(limite: int = 20) -> List[Dict]:
-    """
-    Obtém as últimas notícias do Dados de Mercado
-    
-    Args:
-        limite: Número máximo de notícias a retornar (padrão: 20)
-    
-    Returns:
-        Lista de dicionários com informações das notícias:
-        {
-            'titulo': str,
-            'resumo': str,
-            'url': str,
-            'data': str (ISO format),
-            'autor': str (opcional),
-            'categoria': str (opcional),
-            'imagem_url': str (opcional)
-        }
-    """
+
     try:
         url = "https://www.dadosdemercado.com.br/ultimas-noticias"
         
@@ -42,23 +66,16 @@ def obter_noticias(limite: int = 20) -> List[Dict]:
             'Upgrade-Insecure-Requests': '1'
         }
         
-        # Fazer requisição
+
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         
-        # Parsear HTML
+  
         soup = BeautifulSoup(response.content, 'html.parser')
         
         noticias = []
         
-        # Estratégia: Buscar elementos que contêm notícias completas
-        # No dadosdemercado, cada notícia está em um bloco (div, p, li, etc) que contém:
-        # - Link com título
-        # - Data e hora
-        # - Categoria
-        # - Fonte
-        
-        # Buscar todos os elementos que podem conter notícias
+      
         elementos_noticias = []
         
         # Tentar encontrar por padrão de texto (data + categoria + fonte)
@@ -174,13 +191,10 @@ def obter_noticias(limite: int = 20) -> List[Dict]:
                     except:
                         pass
                 
-                # Resumo vazio (será preenchido se necessário buscar detalhes)
-                resumo = ''
-                
-                # Adicionar notícia
+                # Resumo será preenchido depois via meta description da URL
                 noticias.append({
                     'titulo': titulo,
-                    'resumo': resumo,
+                    'resumo': '',
                     'url': url_noticia,
                     'data': data_iso,
                     'autor': None,
@@ -200,7 +214,23 @@ def obter_noticias(limite: int = 20) -> List[Dict]:
             if noticia['url'] not in urls_vistas:
                 urls_vistas.add(noticia['url'])
                 noticias_unicas.append(noticia)
-        
+
+        # Buscar resumos (meta description / og:description) em paralelo
+        lista_para_resumo = noticias_unicas[: min(limite, MAX_RESUMOS_PARALELOS)]
+        with ThreadPoolExecutor(max_workers=WORKERS_RESUMO) as executor:
+            futuros = {executor.submit(extrair_resumo_da_url, n["url"]): n for n in lista_para_resumo}
+            try:
+                for fut in as_completed(futuros, timeout=30):
+                    noticia = futuros[fut]
+                    try:
+                        noticia["resumo"] = (fut.result() or "").strip()
+                    except Exception:
+                        noticia["resumo"] = ""
+            except Exception:
+                for n in lista_para_resumo:
+                    if not n.get("resumo"):
+                        n["resumo"] = ""
+
         # Limitar quantidade
         return noticias_unicas[:limite]
         
@@ -250,15 +280,7 @@ def _parsear_data_dadosdemercado(data_str: str) -> str:
 
 
 def obter_detalhes_noticia(url: str) -> Optional[Dict]:
-    """
-    Obtém detalhes completos de uma notícia específica
-    
-    Args:
-        url: URL da notícia
-    
-    Returns:
-        Dicionário com detalhes completos da notícia ou None se erro
-    """
+
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

@@ -326,6 +326,13 @@ export default function CarteiraImpostosTab({
         tipoAtivo = 'Renda Fixa'
       }
       
+      // FIIs (ticker terminado em 11): sempre tributáveis no lucro com venda — não podem ser isentos
+      // Corrige caso a carteira ou a API retornem tipo "Ação" ou "ETF" para FII
+      const tickerNorm = (venda.ticker || '').toUpperCase().replace(/\.SA$/i, '')
+      if (tickerNorm.endsWith('11')) {
+        tipoAtivo = 'FII'
+      }
+      
       // Calcular preço médio usando FIFO (prioridade 1)
       let precoMedio = calcularPrecoMedio(venda.ticker, venda.data, movimentacoes)
       
@@ -432,6 +439,12 @@ export default function CarteiraImpostosTab({
             // Última verificação: se ainda é "Desconhecido" mas tem indexador, tratar como renda fixa
             if (vTipo === 'Desconhecido' && vAtivo?.indexador) {
               vTipo = 'Renda Fixa'
+            }
+            
+            // FIIs (ticker terminado em 11): forçar tipo FII para não misturar com ações na isenção
+            const vTickerNorm = (v.ticker || '').toUpperCase().replace(/\.SA$/i, '')
+            if (vTickerNorm.endsWith('11')) {
+              vTipo = 'FII'
             }
             
             // Só processar se for do MESMO TIPO
