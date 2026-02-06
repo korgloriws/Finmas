@@ -66,7 +66,7 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Carteira – Projeção', path: '/carteira', keywords: 'carteira projecao projeção simulacao', params: { tab: 'projecao' } },
     { label: 'Carteira – Ativos', path: '/carteira', keywords: 'carteira ativos posicoes', params: { tab: 'ativos' } },
     { label: 'Carteira – Proventos', path: '/carteira', keywords: 'carteira proventos dividendos', params: { tab: 'proventos' } },
-    { label: 'Carteira – Rebalanceamento', path: '/carteira', keywords: 'carteira rebalanceamento metas', params: { tab: 'rebalanceamento' } },
+    { label: 'Carteira – Rebalanceamento', path: '/carteira', keywords: 'carteira rebalanceamento metas', params: { tab: 'rebalance' } },
     { label: 'Rankings', path: '/rankings', keywords: 'rankings mercado acoes fiis bdrs', params: {} },
     { label: 'Notícias', path: '/noticias', keywords: 'noticias mercado financeiro valor infomoney', params: {} },
   ]

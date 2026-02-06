@@ -101,18 +101,30 @@ export default function CarteiraImpostosTab({
     }
   }, [])
 
-  // Função auxiliar: Detectar day trade (compra e venda no mesmo dia)
+  // Função auxiliar: Detectar day trade (compra e venda no mesmo dia, no fuso local)
   const isDayTrade = (ticker: string, dataVenda: string, movimentacoes: any[]) => {
     const dataVendaObj = new Date(dataVenda)
-    const dataVendaStr = dataVendaObj.toISOString().split('T')[0]
-    
-    // Verificar se houve compra no mesmo dia
-    const compraNoMesmoDia = movimentacoes.some(m => 
-      m.ticker === ticker && 
-      m.tipo === 'compra' &&
-      new Date(m.data).toISOString().split('T')[0] === dataVendaStr
-    )
-    
+    if (isNaN(dataVendaObj.getTime())) return false
+
+    const dvY = dataVendaObj.getFullYear()
+    const dvM = dataVendaObj.getMonth()
+    const dvD = dataVendaObj.getDate()
+
+    const tickerNorm = (ticker || '').toString().trim().toUpperCase()
+    if (!tickerNorm) return false
+
+    const compraNoMesmoDia = movimentacoes.some(m => {
+      const tipoNorm = (m.tipo || '').toString().toLowerCase().trim()
+      if (tipoNorm !== 'compra') return false
+
+      const mTickerNorm = (m.ticker || '').toString().trim().toUpperCase()
+      if (mTickerNorm !== tickerNorm) return false
+
+      const mDataObj = new Date(m.data)
+      if (isNaN(mDataObj.getTime())) return false
+      return mDataObj.getFullYear() === dvY && mDataObj.getMonth() === dvM && mDataObj.getDate() === dvD
+    })
+
     return compraNoMesmoDia
   }
 
@@ -179,7 +191,7 @@ export default function CarteiraImpostosTab({
       const venda = new Date(dataVenda)
       const dias = Math.floor((venda.getTime() - compra.getTime()) / (1000 * 60 * 60 * 24))
       
-      // Tabela progressiva do IR para renda fixa (baseada no prazo)
+
       if (dias <= 180) return 0.225      // 22,5% (até 180 dias)
       if (dias <= 360) return 0.20       // 20% (de 181 a 360 dias)
       if (dias <= 720) return 0.175      // 17,5% (de 361 a 720 dias)
@@ -214,7 +226,7 @@ export default function CarteiraImpostosTab({
     return tickersParaBuscar
   }, [vendas, carteira])
 
-  // Buscar detalhes dos ativos com tipo desconhecido
+
   const tiposAtivos = useQuery({
     queryKey: ['tipos-ativos-impostos', tickersDesconhecidos],
     queryFn: async () => {
@@ -292,15 +304,14 @@ export default function CarteiraImpostosTab({
       const ativo = carteira?.find(a => a.ticker === venda.ticker)
       let tipoAtivo = ativo?.tipo || 'Desconhecido'
       
-      // IMPORTANTE: Verificar se é renda fixa ANTES de buscar na API
-      // Renda fixa pode estar como "Desconhecido" mas ter indexador
+
       if (tipoAtivo === 'Desconhecido' && ativo?.indexador) {
         if (isRendaFixa('', ativo.indexador)) {
           tipoAtivo = 'Renda Fixa'
         }
       }
       
-      // Se ainda é "Desconhecido", verificar se o tipo contém palavras-chave de renda fixa
+      
       if (tipoAtivo === 'Desconhecido' && ativo?.tipo) {
         if (isRendaFixa(ativo.tipo, ativo.indexador)) {
           tipoAtivo = 'Renda Fixa'

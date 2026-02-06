@@ -3547,8 +3547,10 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                 (preco_medio_atual * quantidade_existente) + (float(preco_compra_definitivo or 0) * quantidade_val)
                             ) / (nova_quantidade or 1)
                             novo_valor_total = float(info["preco_atual"] or 0) * nova_quantidade
+                            # Atualizar apenas preco_medio (média ponderada). preco_compra deve permanecer
+                            # o preço da primeira compra e não ser sobrescrito.
                             cursor.execute(
-                                'UPDATE carteira SET quantidade = %s, valor_total = %s, preco_atual = %s, dy = %s, pl = %s, pvp = %s, roe = %s, preco_medio = %s, preco_compra = %s WHERE id = %s',
+                                'UPDATE carteira SET quantidade = %s, valor_total = %s, preco_atual = %s, dy = %s, pl = %s, pvp = %s, roe = %s, preco_medio = %s WHERE id = %s',
                                 (
                                     nova_quantidade,
                                     novo_valor_total,
@@ -3557,7 +3559,6 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                     info.get("pl"),
                                     info.get("pvp"),
                                     info.get("roe"),
-                                    preco_medio_novo,
                                     preco_medio_novo,
                                     id_existente,
                                 )
@@ -3678,10 +3679,11 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                         (preco_medio_atual * quantidade_existente) + (float(preco_compra_definitivo or 0) * quantidade_val)
                     ) / (nova_quantidade or 1)
                     novo_valor_total = float(info["preco_atual"] or 0) * nova_quantidade
+                    # Atualizar apenas preco_medio (média ponderada). preco_compra permanece o preço da primeira compra.
                     cursor.execute('''
-                        UPDATE carteira SET quantidade = ?, valor_total = ?, preco_atual = ?, dy = ?, pl = ?, pvp = ?, roe = ?, preco_medio = ?, preco_compra = ?
+                        UPDATE carteira SET quantidade = ?, valor_total = ?, preco_atual = ?, dy = ?, pl = ?, pvp = ?, roe = ?, preco_medio = ?
                         WHERE id = ?
-                    ''', (nova_quantidade, novo_valor_total, info["preco_atual"], info.get("dy"), info.get("pl"), info.get("pvp"), info.get("roe"), preco_medio_novo, preco_medio_novo, id_existente))
+                    ''', (nova_quantidade, novo_valor_total, info["preco_atual"], info.get("dy"), info.get("pl"), info.get("pvp"), info.get("roe"), preco_medio_novo, id_existente))
                     mensagem = f"Quantidade do ativo {info['ticker']} atualizada: {quantidade_existente} + {quantidade} = {nova_quantidade}"
             else:
                
@@ -4933,7 +4935,7 @@ def obter_carteira():
                 with conn.cursor() as cursor:
                     cursor.execute('''
                         SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria
+                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
                         FROM carteira
                         ORDER BY valor_total DESC
                     ''')
@@ -4951,6 +4953,7 @@ def obter_carteira():
                 if tipo and "renda fixa" in tipo.lower() and vencimento:
                     status_vencimento = _calcular_status_vencimento(vencimento)
                 
+                preco_medio = float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None)
                 ativo = {
                     "id": row[0],
                     "ticker": row[1],
@@ -4958,6 +4961,7 @@ def obter_carteira():
                     "quantidade": float(row[3]) if row[3] is not None else 0,
                     "preco_atual": float(row[4]) if row[4] is not None else 0,
                     "preco_compra": preco_compra,
+                    "preco_medio": preco_medio,
                     "valor_total": float(row[6]) if row[6] is not None else 0,
                     "data_adicao": row[7],
                     "tipo": tipo,
@@ -4978,7 +4982,7 @@ def obter_carteira():
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria
+                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
             FROM carteira
             ORDER BY valor_total DESC
         ''')
@@ -4989,6 +4993,7 @@ def obter_carteira():
             preco_compra = row[5] if row_len > 5 else None
             vencimento = row[16] if row_len > 16 else None
             tipo = row[8] if row_len > 8 else "Desconhecido"
+            preco_medio = (float(row[19]) if (row_len > 19 and row[19] is not None) else None) or (float(preco_compra) if preco_compra is not None else None)
             
             # Calcular status de vencimento para renda fixa
             status_vencimento = None
@@ -5002,6 +5007,7 @@ def obter_carteira():
                 "quantidade": row[3],
                 "preco_atual": row[4],
                 "preco_compra": preco_compra,
+                "preco_medio": preco_medio,
                 "valor_total": row[6] if row_len > 6 else row[5],
                 "data_adicao": row[7] if row_len > 7 else row[6],
                 "tipo": tipo,

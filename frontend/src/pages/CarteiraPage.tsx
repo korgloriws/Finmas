@@ -49,7 +49,7 @@ import RendaFixaFormModal from '../components/carteira/RendaFixaFormModal'
 
 export default function CarteiraPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [inputTicker, setInputTicker] = useState('')
   const [inputQuantidade, setInputQuantidade] = useState('')
   const [inputTipo, setInputTipo] = useState('')
@@ -601,7 +601,10 @@ export default function CarteiraPage() {
 
   const TabButton = ({ id, label, icon: Icon, isActive }: { id: string; label: string; icon: any; isActive: boolean }) => (
     <button
-      onClick={() => setActiveTab(id)}
+      onClick={() => {
+        setActiveTab(id)
+        setSearchParams({ tab: id }, { replace: true })
+      }}
       className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all duration-200 text-sm ${
         isActive 
           ? 'bg-primary text-primary-foreground shadow-md' 
