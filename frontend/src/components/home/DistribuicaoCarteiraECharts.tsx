@@ -1,8 +1,10 @@
-import { useMemo, useRef, useEffect } from 'react'
+import { useMemo, useRef, useEffect, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
-import * as echarts from 'echarts'
+import 'echarts'
 import 'echarts-gl'
 import { useTheme } from '../../contexts/ThemeContext'
+
+const MOBILE_BREAKPOINT = 640
 
 export type DadoPizza = { name: string; value: number; fill: string; percentage?: string }
 
@@ -15,6 +17,18 @@ interface DistribuicaoCarteiraEChartsProps {
   formatCurrency: (value: number) => string
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  return isMobile
+}
+
 export default function DistribuicaoCarteiraECharts({
   dados,
   totalInvestido,
@@ -24,6 +38,7 @@ export default function DistribuicaoCarteiraECharts({
 }: DistribuicaoCarteiraEChartsProps) {
   const { isDark } = useTheme()
   const chartRef = useRef<ReactECharts>(null)
+  const isMobile = useIsMobile()
 
   const option = useMemo(() => {
     if (!dados.length) return null
@@ -32,7 +47,6 @@ export default function DistribuicaoCarteiraECharts({
     const bgColor = 'transparent'
 
     if (variant === '3d') {
-      // Barras 3D: um eixo = tipo de ativo, altura = valor
       const xCategories = dados.map(d => d.name)
       const barData = dados.map((d, i) => [i, 0, d.value])
       return {
@@ -41,7 +55,7 @@ export default function DistribuicaoCarteiraECharts({
           trigger: 'item',
           backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.95)',
           borderColor: isDark ? '#475569' : '#e2e8f0',
-          textStyle: { color: textColor },
+          textStyle: { color: textColor, fontSize: isMobile ? 12 : 13 },
           formatter: (params: any) => {
             const p = params.data
             const idx = Array.isArray(p) ? p[0] : 0
@@ -52,21 +66,21 @@ export default function DistribuicaoCarteiraECharts({
           }
         },
         grid3D: {
-          boxWidth: 120,
-          boxHeight: 80,
-          boxDepth: 60,
+          boxWidth: isMobile ? 80 : 120,
+          boxHeight: isMobile ? 50 : 80,
+          boxDepth: isMobile ? 40 : 60,
           viewControl: {
-            autoRotate: true,
+            autoRotate: !isMobile,
             autoRotateSpeed: 8,
-            distance: 220,
-            minDistance: 150,
-            maxDistance: 350,
+            distance: isMobile ? 180 : 220,
+            minDistance: isMobile ? 100 : 150,
+            maxDistance: isMobile ? 280 : 350,
             alpha: 35,
             beta: 50
           },
           light: {
-            main: { intensity: 1.2, shadow: true },
-            ambient: { intensity: 0.4 }
+            main: { intensity: 1.2, shadow: !isMobile },
+            ambient: { intensity: isMobile ? 0.5 : 0.4 }
           },
           environment: 'auto',
           axisPointer: { show: false }
@@ -76,20 +90,20 @@ export default function DistribuicaoCarteiraECharts({
           data: xCategories,
           axisLabel: {
             color: textColor,
-            rotate: 45,
-            fontSize: 10
+            rotate: isMobile ? 35 : 45,
+            fontSize: isMobile ? 8 : 10
           },
           axisLine: { lineStyle: { color: isDark ? '#475569' : '#cbd5e1' } }
         },
         yAxis3D: {
           type: 'category',
           data: [''],
-          axisLabel: { color: textColor },
+          axisLabel: { color: textColor, fontSize: isMobile ? 8 : 10 },
           axisLine: { lineStyle: { color: isDark ? '#475569' : '#cbd5e1' } }
         },
         zAxis3D: {
           type: 'value',
-          axisLabel: { color: textColor },
+          axisLabel: { color: textColor, fontSize: isMobile ? 8 : 10 },
           axisLine: { lineStyle: { color: isDark ? '#475569' : '#cbd5e1' } },
           splitLine: { lineStyle: { color: isDark ? '#334155' : '#e2e8f0' } }
         },
@@ -105,30 +119,26 @@ export default function DistribuicaoCarteiraECharts({
               }
             })),
             shading: 'lambert',
-            label: {
-              show: false
-            },
-            emphasis: {
-              label: { show: true, color: textColor }
-            },
-            bevelSize: 0.3,
+            label: { show: false },
+            emphasis: { label: { show: true, color: textColor, fontSize: isMobile ? 9 : 11 } },
+            bevelSize: isMobile ? 0.2 : 0.3,
             bevelSmoothness: 2,
             animation: true,
-            animationDuration: 1500,
+            animationDuration: isMobile ? 1000 : 1500,
             animationEasing: 'cubicOut'
           }
         ]
       }
     }
 
-    // Pizza 2D com animação forte
+    // Pizza 2D: responsivo (radius em %)
     return {
       backgroundColor: bgColor,
       tooltip: {
         trigger: 'item',
         backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.95)',
         borderColor: isDark ? '#475569' : '#e2e8f0',
-        textStyle: { color: textColor },
+        textStyle: { color: textColor, fontSize: isMobile ? 12 : 13 },
         formatter: (params: any) => {
           const item = params.data
           const pct = item.percentage ?? (totalInvestido > 0 ? ((item.value / totalInvestido) * 100).toFixed(1) : '0')
@@ -137,15 +147,15 @@ export default function DistribuicaoCarteiraECharts({
       },
       legend: {
         orient: 'horizontal',
-        bottom: 8,
+        bottom: isMobile ? 0 : 8,
         left: 'center',
-        textStyle: { color: textColor, fontSize: 11 }
+        textStyle: { color: textColor, fontSize: isMobile ? 10 : 11 }
       },
       series: [
         {
           type: 'pie',
-          radius: ['35%', '70%'],
-          center: ['50%', '48%'],
+          radius: isMobile ? ['28%', '58%'] : ['35%', '70%'],
+          center: ['50%', isMobile ? '42%' : '48%'],
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
@@ -155,7 +165,7 @@ export default function DistribuicaoCarteiraECharts({
           label: {
             show: true,
             color: textColor,
-            fontSize: 10,
+            fontSize: isMobile ? 9 : 10,
             formatter: (params: any) => (params.percent > 8 ? `${params.percent.toFixed(1)}%` : '')
           },
           emphasis: {
@@ -180,7 +190,7 @@ export default function DistribuicaoCarteiraECharts({
         }
       ]
     }
-  }, [dados, totalInvestido, variant, formatCurrency, isDark])
+  }, [dados, totalInvestido, variant, formatCurrency, isDark, isMobile])
 
   useEffect(() => {
     const chart = chartRef.current?.getEchartsInstance()
@@ -191,18 +201,22 @@ export default function DistribuicaoCarteiraECharts({
       }
     }
     chart.on('click', handler)
-    return () => chart.off('click', handler)
+    return () => {
+      chart.off('click', handler)
+    }
   }, [onSegmentClick])
 
   if (!option) return null
 
   return (
-    <ReactECharts
-      ref={chartRef}
-      option={option}
-      style={{ width: '100%', height: '100%', minHeight: 280 }}
-      opts={{ renderer: 'canvas' }}
-      notMerge
-    />
+    <div className="w-full h-full min-h-[280px] sm:min-h-[256px] md:min-h-[320px] overflow-visible">
+      <ReactECharts
+        ref={chartRef}
+        option={option}
+        style={{ width: '100%', height: '100%', minHeight: 280 }}
+        opts={{ renderer: 'canvas' }}
+        notMerge
+      />
+    </div>
   )
 }

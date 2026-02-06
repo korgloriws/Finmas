@@ -1722,22 +1722,25 @@ export default function HomePage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.6 }}
-            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl"
+            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl overflow-visible"
           >
             <div className="flex items-center gap-2 mb-2 sm:mb-4">
-              <div className="p-1.5 rounded-md bg-primary/10">
+              <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
                 <PieChartIcon className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               </div>
-              <div>
-                <h2 className="text-sm sm:text-lg font-semibold text-foreground">Distribuição da Carteira</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">3D • Arraste para girar • Clique na barra para ver ativos</p>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm sm:text-lg font-semibold text-foreground truncate">Distribuição da Carteira</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  <span className="sm:hidden">Toque na barra para ver ativos • Arraste para girar</span>
+                  <span className="hidden sm:inline">3D • Arraste para girar • Clique na barra para ver ativos</span>
+                </p>
               </div>
             </div>
             
             {loadingCarteira ? (
-              <div className="animate-pulse h-56 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
+              <div className="animate-pulse min-h-[300px] h-[300px] sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : dadosPizza.length > 0 ? (
-              <div className="w-full h-56 sm:h-64 md:h-80 lg:h-96 min-h-[280px]">
+              <div className="w-full min-h-[300px] h-[300px] sm:h-64 md:h-80 lg:h-96 overflow-visible">
                 <Suspense fallback={<div className="h-full flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>}>
                   <DistribuicaoCarteiraECharts
                     dados={dadosPizza}
