@@ -10,6 +10,7 @@ interface CarteiraProventosTabProps {
   proventosError: any
   proventos: any[]
   loadingProventosRecebidos: boolean
+  proventosRecebidosError?: any
   proventosRecebidos: any[]
   dadosGraficoProventos: any[]
 }
@@ -22,6 +23,7 @@ export default function CarteiraProventosTab({
   proventosError,
   proventos,
   loadingProventosRecebidos,
+  proventosRecebidosError,
   proventosRecebidos,
   dadosGraficoProventos
 }: CarteiraProventosTabProps) {
@@ -50,27 +52,23 @@ export default function CarteiraProventosTab({
         <div className="text-center text-muted-foreground py-8">
           Adicione ativos à sua carteira para ver os proventos.
         </div>
-      ) : loadingProventosRecebidos ? (
-        <div className="text-center text-muted-foreground py-8">
-          Carregando proventos...
-        </div>
-      ) : proventosError ? (
-        <div className="text-center text-red-500 py-8">
-          Erro ao carregar proventos: {proventosError.message}
-        </div>
       ) : (
         <div className="space-y-6">
-          {/* Seção 1: Proventos Pagos (Histórico) */}
+          {/* Seção 1: Proventos Pagos (Histórico) — fonte: yfinance (histórico do ativo) */}
           <div className="bg-muted/30 rounded-lg p-4 md:p-6">
             <h3 className="text-lg font-semibold mb-4">Proventos Pagos (Histórico)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Histórico de dividendos do ativo no período (fonte: dados de mercado). Não considera data de compra.
+            </p>
             
             {loadingProventos ? (
               <div className="text-center text-muted-foreground py-8">
                 Carregando histórico de proventos...
               </div>
             ) : proventosError ? (
-              <div className="text-center text-red-500 py-8">
-                Erro ao carregar histórico de proventos
+              <div className="text-center py-8 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="font-medium text-destructive">Não foi possível carregar o histórico de proventos.</p>
+                <p className="text-sm text-muted-foreground mt-1">{proventosError?.message || 'Verifique sua conexão ou tente mais tarde.'}</p>
               </div>
             ) : proventos && proventos.length > 0 ? (
               <div className="space-y-4">
@@ -190,13 +188,21 @@ export default function CarteiraProventosTab({
             )}
           </div>
 
-          {/* Seção 2: Proventos Recebidos */}
+          {/* Seção 2: Proventos Recebidos — considera data de compra (só após ser dono do ativo) */}
           <div className="bg-muted/30 rounded-lg p-4 md:p-6">
             <h3 className="text-lg font-semibold mb-4">Proventos Recebidos (Baseado na Carteira)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Proventos que você efetivamente recebeu: apenas dividendos com data de pagamento após a data da primeira compra do ativo.
+            </p>
             
             {loadingProventosRecebidos ? (
               <div className="text-center text-muted-foreground py-8">
                 Carregando proventos recebidos...
+              </div>
+            ) : proventosRecebidosError ? (
+              <div className="text-center py-8 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="font-medium text-destructive">Não foi possível carregar os proventos recebidos.</p>
+                <p className="text-sm text-muted-foreground mt-1">{proventosRecebidosError?.message || 'Verifique sua conexão ou tente mais tarde.'}</p>
               </div>
             ) : proventosRecebidos && proventosRecebidos.length > 0 ? (
               <div className="space-y-6">

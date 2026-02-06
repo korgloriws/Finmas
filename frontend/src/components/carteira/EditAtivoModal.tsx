@@ -396,7 +396,7 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
               {/* Preço manual */}
               {tipoPreco === 'manual' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium">Preço por ação</label>
+                  <label className="block text-sm font-medium">Preço por ação (em R$)</label>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -406,6 +406,9 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
                     aria-label="Preço por ação"
                     className="w-full px-3 py-2 bg-background border border-border rounded"
                   />
+                  {ativo?.ticker && /\-USD$/i.test(ativo.ticker) && (
+                    <p className="text-xs text-muted-foreground">Para criptomoedas, informe o valor em R$ (reais). O preço atual e histórico já vêm convertidos.</p>
+                  )}
                 </div>
               )}
 

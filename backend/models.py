@@ -1444,9 +1444,19 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
                 if data_historico <= data_obj:
                     preco_encontrado = to_float_or_none(row.get('Close') or row.get('Adj Close'))
                     if preco_encontrado:
-                        print(f"[OK] Preco encontrado: R$ {preco_encontrado:.2f} em {data_historico}")
+                        preco_final = preco_encontrado
+                        # Criptomoedas no yfinance vêm em USD; converter para BRL para consistência com a carteira
+                        if is_crypto_ticker(ticker):
+                            try:
+                                taxa_brl = obter_taxa_usd_brl()
+                                preco_final = converter_crypto_usd_para_brl(preco_encontrado, taxa_brl)
+                                print(f"[OK] Preco historico (cripto convertido USD→BRL): R$ {preco_final:.2f} em {data_historico}")
+                            except Exception as e:
+                                print(f"[AVISO] Conversão USD→BRL para {ticker} falhou: {e}, usando preço em USD")
+                        else:
+                            print(f"[OK] Preco encontrado: R$ {preco_final:.2f} em {data_historico}")
                         return {
-                            "preco": preco_encontrado,
+                            "preco": preco_final,
                             "data_historico": data_historico.isoformat(),
                             "data_solicitada": data_obj.isoformat(),
                             "ticker": ticker
@@ -1488,9 +1498,19 @@ def obter_preco_atual(ticker, max_retentativas=3):
                 preco_atual = info.get("regularMarketPrice")
             
             if preco_atual and preco_atual > 0:
-                print(f"[OK] Preco atual encontrado: R$ {preco_atual:.2f}")
+                preco_final = float(preco_atual)
+                # Criptomoedas no yfinance vêm em USD; converter para BRL para consistência com a carteira
+                if is_crypto_ticker(ticker):
+                    try:
+                        taxa_brl = obter_taxa_usd_brl()
+                        preco_final = converter_crypto_usd_para_brl(preco_final, taxa_brl)
+                        print(f"[OK] Preco atual (cripto convertido USD→BRL): R$ {preco_final:.2f}")
+                    except Exception as e:
+                        print(f"[AVISO] Conversão USD→BRL para {ticker} falhou: {e}, usando preço em USD")
+                else:
+                    print(f"[OK] Preco atual encontrado: R$ {preco_final:.2f}")
                 return {
-                    "preco": float(preco_atual),
+                    "preco": preco_final,
                     "data": datetime.now().strftime('%Y-%m-%d'),
                     "ticker": ticker
                 }
@@ -4954,6 +4974,7 @@ def obter_carteira():
                     status_vencimento = _calcular_status_vencimento(vencimento)
                 
                 preco_medio = float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None)
+                isento_ir = bool(row[17]) if (len(row) > 17 and row[17] is not None) else False
                 ativo = {
                     "id": row[0],
                     "ticker": row[1],
@@ -4971,8 +4992,10 @@ def obter_carteira():
                     "roe": float(row[12]) if row[12] is not None else None,
                     "indexador": row[13],
                     "indexador_pct": float(row[14]) if (len(row) > 14 and row[14] is not None) else None,
+                    "data_aplicacao": row[15] if (len(row) > 15 and row[15] is not None) else None,
                     "vencimento": vencimento,
                     "status_vencimento": status_vencimento,
+                    "isento_ir": isento_ir,
                 }
                 
                 ativos.append(ativo)
@@ -4994,6 +5017,7 @@ def obter_carteira():
             vencimento = row[16] if row_len > 16 else None
             tipo = row[8] if row_len > 8 else "Desconhecido"
             preco_medio = (float(row[19]) if (row_len > 19 and row[19] is not None) else None) or (float(preco_compra) if preco_compra is not None else None)
+            isento_ir = bool(row[17]) if (row_len > 17 and row[17] is not None) else False
             
             # Calcular status de vencimento para renda fixa
             status_vencimento = None
@@ -5017,8 +5041,10 @@ def obter_carteira():
                 "roe": row[12] if row_len > 12 else row[11],
                 "indexador": row[13] if row_len > 13 else row[12],
                 "indexador_pct": row[14] if row_len > 14 else row[13],
+                "data_aplicacao": row[15] if row_len > 15 else None,
                 "vencimento": vencimento,
                 "status_vencimento": status_vencimento,
+                "isento_ir": isento_ir,
             }
             
             # REMOVIDO: Enriquecimento automático de FIIs (agora é sob demanda no frontend)
@@ -5414,6 +5440,38 @@ def obter_movimentacoes(mes=None, ano=None):
     except Exception as e:
         print(f"Erro ao obter movimentações: {e}")
         return []
+
+
+def obter_data_primeira_compra_por_ticker():
+    """Retorna um dicionário { ticker: data_primeira_compra } com a data da primeira compra de cada ticker (movimentações). Usado para filtrar proventos recebidos (só considerar dividendos após ser dono do ativo)."""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return {}
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT ticker, MIN(data) FROM movimentacoes WHERE LOWER(TRIM(tipo)) = 'compra' GROUP BY ticker"
+                    )
+                    rows = cursor.fetchall()
+                return {row[0]: (row[1].strftime('%Y-%m-%d') if hasattr(row[1], 'strftime') else str(row[1])[:10]) for row in rows} if rows else {}
+            finally:
+                conn.close()
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT ticker, MIN(data) FROM movimentacoes WHERE LOWER(TRIM(tipo)) = 'compra' GROUP BY ticker"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return {row[0]: (str(row[1])[:10] if row[1] else None) for row in rows} if rows else {}
+    except Exception as e:
+        print(f"Erro ao obter data da primeira compra por ticker: {e}")
+        return {}
+
 
 def obter_historico_carteira(periodo='mensal'):
     

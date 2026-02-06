@@ -269,14 +269,6 @@ export default function CarteiraPage() {
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
   })
 
-
-
-  useEffect(() => {
-
-    return () => {}
-  }, [])
-
-
   // OTIMIZAÇÃO: Carregar dados do tesouro apenas quando necessário (aba de ativos para renda fixa)
   const { data: tesouroData } = useQuery({
     queryKey: ['tesouro-titulos'],
@@ -288,7 +280,7 @@ export default function CarteiraPage() {
 
   
   
-  const { data: proventosRecebidos, isLoading: loadingProventosRecebidos } = useQuery({
+  const { data: proventosRecebidos, isLoading: loadingProventosRecebidos, error: proventosRecebidosError } = useQuery({
     queryKey: ['proventos-recebidos', user, filtroProventos],
     queryFn: () => carteiraService.getProventosRecebidos(filtroProventos),
     enabled: !!user && !!carteira && carteira.length > 0 && (activeTab === 'proventos' || activeTab === 'projecao' || activeTab === 'impostos'),
@@ -311,14 +303,6 @@ export default function CarteiraPage() {
     refetchOnMount: false, 
   })
 
-
-  console.log('DEBUG: historicoCarteira recebido:', historicoCarteira)
-  if (historicoCarteira && historicoCarteira.datas && historicoCarteira.datas.length > 0) {
-    console.log('DEBUG: Primeiros 3 datas do histórico:', historicoCarteira.datas.slice(0, 3))
-  }
-
-
-  
   const adicionarMutation = useMutation({
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
       carteiraService.adicionarAtivo(ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir),
@@ -783,7 +767,7 @@ export default function CarteiraPage() {
             adicionarMutation={adicionarMutation}
             carteira={carteira || []}
             loadingCarteira={loadingCarteira}
-            ativosPorTipo={ativosPorTipo as unknown as Record<string, any[]>}
+            ativosPorTipo={ativosPorTipo}
             valorTotal={valorTotal}
             topAtivos={topAtivos}
             editingId={editingId}
@@ -814,7 +798,7 @@ export default function CarteiraPage() {
             historicoCarteira={historicoCarteira as any || null}
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
-            ativosPorTipo={ativosPorTipo as unknown as Record<string, number>}
+            ativosPorTipo={ativosPorTipo}
             topAtivos={topAtivos}
           />
         )}
@@ -835,6 +819,7 @@ export default function CarteiraPage() {
             proventosError={proventosError}
             proventos={proventos || []}
             loadingProventosRecebidos={loadingProventosRecebidos}
+            proventosRecebidosError={proventosRecebidosError}
             proventosRecebidos={proventosRecebidos || []}
             dadosGraficoProventos={dadosGraficoProventos || []}
           />
@@ -897,7 +882,8 @@ export default function CarteiraPage() {
         {activeTab === 'projecao' && (
           <CarteiraProjecaoTab
             carteira={carteira || []}
-            historicoCarteira={historicoCarteira}
+            historicoCarteira={historicoCarteira ?? undefined}
+            loadingHistoricoCarteira={loadingHistorico}
             proventosRecebidos={proventosRecebidos || []}
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}

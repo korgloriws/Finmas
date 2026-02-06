@@ -544,19 +544,25 @@ export default function CarteiraImpostosTab({
           }
         } else if (tipoAtivo === 'Renda Fixa' || tipoAtivo === 'Renda Fixa Pública' || 
                    isRendaFixa(tipoAtivo, ativo?.indexador)) {
-          // Renda Fixa: alíquota progressiva baseada no prazo (data de compra até data de venda)
-          // Buscar data de compra nas movimentações
-          const primeiraCompra = movimentacoes
-            .filter(m => m.ticker === venda.ticker && (m.tipo === 'compra' || m.tipo?.toLowerCase() === 'compra') && m.data <= venda.data)
-            .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0]
-          
-          if (primeiraCompra && primeiraCompra.data) {
-            aliquota = calcularAliquotaRendaFixa(primeiraCompra.data, venda.data)
-            irCalculado = lucro * aliquota
+          // Renda Fixa: isento se marcado no ativo (ex.: LCI/LCA); senão alíquota progressiva pelo prazo
+          if (ativo?.isento_ir) {
+            isento = true
+            motivoIsencao = 'Título isento de IR (ex.: LCI/LCA)'
+            aliquota = 0
+            irCalculado = 0
           } else {
-            // Se não encontrou data de compra, usar alíquota padrão de 15%
-            aliquota = 0.15
-            irCalculado = lucro * aliquota
+            // Alíquota progressiva baseada no prazo (data de compra até data de venda)
+            const primeiraCompra = movimentacoes
+              .filter(m => m.ticker === venda.ticker && (m.tipo === 'compra' || m.tipo?.toLowerCase() === 'compra') && m.data <= venda.data)
+              .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())[0]
+            
+            if (primeiraCompra && primeiraCompra.data) {
+              aliquota = calcularAliquotaRendaFixa(primeiraCompra.data, venda.data)
+              irCalculado = lucro * aliquota
+            } else {
+              aliquota = 0.15
+              irCalculado = lucro * aliquota
+            }
           }
         } else if (tipoAtivo === 'Criptomoeda' || tipoAtivo === 'Criptomoedas') {
           // Cripto: day trade sempre tributado, sem isenção
@@ -667,6 +673,23 @@ export default function CarteiraImpostosTab({
             // BDRs: tributação progressiva (7,5% a 27,5%)
             aliquota = calcularAliquotaBDRDividendos(valorBruto)
             irRetido = valorBruto * aliquota
+          } else if (tipoAtivo === 'Renda Fixa' || tipoAtivo === 'Renda Fixa Pública' || isRendaFixa(tipoAtivo, ativo?.indexador)) {
+            // Renda fixa (juros): isento se marcado no ativo (ex.: LCI/LCA)
+            if (ativo?.isento_ir) {
+              isento = true
+              motivoIsencao = 'Título isento de IR (ex.: LCI/LCA)'
+              irRetido = 0
+              aliquota = 0
+            } else {
+              // Juros de renda fixa tributável: alíquota progressiva (usa 15% se não houver data de aplicação)
+              const dataAplicacao = ativo?.data_aplicacao
+              if (dataAplicacao && p.data) {
+                aliquota = calcularAliquotaRendaFixa(dataAplicacao, p.data)
+              } else {
+                aliquota = 0.15
+              }
+              irRetido = valorBruto * aliquota
+            }
           } else {
             // Desconhecido: tratar como isento por padrão (mais seguro)
             isento = true

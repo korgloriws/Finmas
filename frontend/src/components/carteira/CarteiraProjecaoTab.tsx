@@ -23,7 +23,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 interface CarteiraProjecaoTabProps {
   carteira: any[]
+  /** Histórico da carteira (período definido por filtroPeriodo). Vindo da página para evitar fetch duplicado e respeitar o período selecionado. */
   historicoCarteira?: any
+  loadingHistoricoCarteira?: boolean
   proventosRecebidos?: any[]
   filtroPeriodo?: string
   setFiltroPeriodo?: (value: string) => void
@@ -38,7 +40,8 @@ interface ProjecaoData {
 
 export default function CarteiraProjecaoTab({
   carteira,
-  historicoCarteira: _historicoCarteira,
+  historicoCarteira,
+  loadingHistoricoCarteira = false,
   proventosRecebidos,
   filtroPeriodo,
   setFiltroPeriodo
@@ -65,6 +68,7 @@ export default function CarteiraProjecaoTab({
   // queryClient precisa ser declarado ANTES de ser usado nas mutations
   const queryClient = useQueryClient()
   
+  // Esta aba só é montada quando activeTab === 'projecao' (CarteiraPage), então as queries abaixo só rodam quando o usuário está na aba Projeção — sem requests extras ao abrir a Carteira.
   const { data: metasAportes } = useQuery({
     queryKey: ['metas-aportes', user],
     queryFn: carteiraService.getMetasAportes,
@@ -112,14 +116,7 @@ export default function CarteiraProjecaoTab({
     return carteira?.reduce((total, ativo) => total + (ativo.valor_total || 0), 0) || 0
   }, [carteira])
 
-  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
-  const { data: historicoMensal, isLoading: loadingHistoricoMensal } = useQuery({
-    queryKey: ['carteira-historico-mensal-projecao', user],
-    queryFn: () => carteiraService.getHistorico('mensal'),
-    enabled: !!user,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
+  // Histórico vem da página (historicoCarteira) para respeitar filtroPeriodo e evitar fetch duplicado.
   const { data: goal } = useQuery({
     queryKey: ['goals', user],
     queryFn: carteiraService.getGoals,
@@ -191,12 +188,12 @@ export default function CarteiraProjecaoTab({
   }, [goal, metasAportes, user, queryClient])
 
   const crescimentoMedioAnual = useMemo(() => {
-    const datas: string[] = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
+    const datas: string[] = Array.isArray(historicoCarteira?.datas) ? historicoCarteira!.datas : []
     // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
-    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoCarteira?.carteira_price) ? historicoCarteira!.carteira_price : []
     
     // Se não tiver carteira_price, usar carteira (rebased) como fallback
-    const valoresRebased: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira) ? (historicoMensal as any).carteira : []
+    const valoresRebased: Array<number | null | undefined> = Array.isArray(historicoCarteira?.carteira) ? (historicoCarteira as any).carteira : []
 
     // Priorizar carteira_price, senão usar carteira rebased
     const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
@@ -265,15 +262,15 @@ export default function CarteiraProjecaoTab({
     if (!Number.isFinite(crescimentoAnual)) crescimentoAnual = 0
     crescimentoAnual = Math.max(-0.9, Math.min(2.0, crescimentoAnual))
     return Math.max(0, crescimentoAnual)
-  }, [historicoMensal])
+  }, [historicoCarteira])
 
   // Estatísticas mensais: quantidade de meses, último mês e média mensal
   const monthlyStats = useMemo(() => {
-    const datas: string[] = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
+    const datas: string[] = Array.isArray(historicoCarteira?.datas) ? historicoCarteira!.datas : []
     // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
-    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoCarteira?.carteira_price) ? historicoCarteira!.carteira_price : []
     // Se não tiver carteira_price, usar carteira (rebased) como fallback
-    const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoMensal as any)?.carteira) ? (historicoMensal as any).carteira : []
+    const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoCarteira as any)?.carteira) ? (historicoCarteira as any).carteira : []
     // Priorizar carteira_price, senão usar carteira rebased
     const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
     const records: { label: string; r: number }[] = []
@@ -290,14 +287,14 @@ export default function CarteiraProjecaoTab({
     const avg = count > 0 ? records.reduce((s, it) => s + it.r, 0) / count : 0
     const last = count > 0 ? records[count - 1] : null
     return { count, avg, last }
-  }, [historicoMensal])
+  }, [historicoCarteira])
 
   const historicoIncompleto = useMemo(() => {
-    const datas = Array.isArray(historicoMensal?.datas) ? historicoMensal!.datas : []
+    const datas = Array.isArray(historicoCarteira?.datas) ? historicoCarteira!.datas : []
     // Usar carteira_price (valorização real sem aportes/retiradas) como prioridade
-    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoMensal?.carteira_price) ? historicoMensal!.carteira_price : []
+    const valoresPrice: Array<number | null | undefined> = Array.isArray(historicoCarteira?.carteira_price) ? historicoCarteira!.carteira_price : []
     // Se não tiver carteira_price, usar carteira (rebased) como fallback
-    const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoMensal as any)?.carteira) ? (historicoMensal as any).carteira : []
+    const valoresRebased: Array<number | null | undefined> = Array.isArray((historicoCarteira as any)?.carteira) ? (historicoCarteira as any).carteira : []
     // Priorizar carteira_price, senão usar carteira rebased
     const valores: Array<number | null | undefined> = valoresPrice.length > 0 ? valoresPrice : valoresRebased
     const pontosValidos = datas.reduce((acc: number, _d: string, i: number) => {
@@ -305,7 +302,7 @@ export default function CarteiraProjecaoTab({
       return acc + (Number.isFinite(v) && v > 0 ? 1 : 0)
     }, 0)
     return pontosValidos < 2
-  }, [historicoMensal])
+  }, [historicoCarteira])
 
   
   const dividendosMediosMensais = useMemo(() => {
@@ -407,7 +404,7 @@ export default function CarteiraProjecaoTab({
   const totalDividendos = projecao[projecao.length - 1]?.dividendosAcumulados || 0
   const totalAportes = (anosIntOut * 12) * (parseFloat(aporteMensal) || 0) * (considerarAportes ? 1 : 0)
 
-  if (loadingHistoricoMensal) {
+  if (loadingHistoricoCarteira) {
     return (
       <div className="min-h-[320px] flex items-center justify-center">
         <div className="text-center">

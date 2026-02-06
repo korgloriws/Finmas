@@ -696,7 +696,7 @@ interface CarteiraAtivosTabProps {
 
   carteira: any[]
   loadingCarteira: boolean
-  ativosPorTipo: Record<string, any[]>
+  ativosPorTipo: Record<string, number>
   valorTotal: number
   topAtivos: any[]
   

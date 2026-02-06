@@ -40,10 +40,8 @@ import {
 // Lazy loading de componentes pesados do Recharts
 import { 
   AreaChart, 
-  PieChart as RechartsPieChart, 
   BarChart,
   Area, 
-  Pie, 
   Cell, 
   Bar, 
   XAxis, 
@@ -51,8 +49,7 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Legend,
-  Label
+  Legend
 } from '../components/LazyChart'
 import { carteiraService, homeService } from '../services/api'
 import { formatCurrency } from '../utils/formatters'
@@ -64,6 +61,7 @@ import NoticiasWidget from '../components/home/NoticiasWidget'
 
 const AtivosDetalhesModal = lazy(() => import('../components/carteira/AtivosDetalhesModal'))
 const TopRankingsCarousel = lazy(() => import('../components/home/TopRankingsCarousel'))
+const DistribuicaoCarteiraECharts = lazy(() => import('../components/home/DistribuicaoCarteiraECharts'))
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -1730,95 +1728,25 @@ export default function HomePage() {
               <div className="p-1.5 rounded-md bg-primary/10">
                 <PieChartIcon className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               </div>
-              <h2 className="text-sm sm:text-lg font-semibold text-foreground">Distribuição da Carteira</h2>
+              <div>
+                <h2 className="text-sm sm:text-lg font-semibold text-foreground">Distribuição da Carteira</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">3D • Arraste para girar • Clique na barra para ver ativos</p>
+              </div>
             </div>
             
             {loadingCarteira ? (
               <div className="animate-pulse h-56 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : dadosPizza.length > 0 ? (
-              <div className="w-full h-56 sm:h-64 md:h-80 lg:h-96">
-                <ResponsiveContainer width="100%" height="100%">
-                <RechartsPieChart>
-                  <Pie
-                    data={dadosPizza}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="15%"
-                    outerRadius="70%"
-                    paddingAngle={3}
-                    dataKey="value"
-                    onClick={(data) => {
-                      if (data && data.name) {
-                        abrirModalPorTipo(data.name)
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {dadosPizza.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill}>
-                        <Label
-                          content={({ viewBox, percent }: any) => {
-                            if (percent && percent > 0.08 && viewBox) { 
-                              const { cx, cy, midAngle, innerRadius, outerRadius } = viewBox;
-                              const RADIAN = Math.PI / 180;
-                              const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                              const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                              const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                              
-                              return (
-                                <text
-                                  x={x}
-                                  y={y}
-                                  fill="white"
-                                  textAnchor="middle"
-                                  dominantBaseline="central"
-                                  fontSize="10"
-                                  fontWeight="bold"
-                                  filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))"
-                                >
-                                  {`${(percent * 100).toFixed(1)}%`}
-                                </text>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                      </Cell>
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                       
-                        const percentual = data.percentage || (totalInvestido > 0 ? ((data.value / totalInvestido) * 100) : 0);
-                        return (
-                          <div className="bg-card p-2 rounded-md shadow-lg border border-border text-sm">
-                            <p className="font-semibold text-foreground">{data.name}</p>
-                            <p className="text-foreground">{formatCurrency(data.value)} ({`${Number(percentual).toFixed(1)}%`})</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))', 
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+              <div className="w-full h-56 sm:h-64 md:h-80 lg:h-96 min-h-[280px]">
+                <Suspense fallback={<div className="h-full flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>}>
+                  <DistribuicaoCarteiraECharts
+                    dados={dadosPizza}
+                    totalInvestido={totalInvestido}
+                    onSegmentClick={abrirModalPorTipo}
+                    variant="pie"
+                    formatCurrency={(v) => formatCurrency(v)}
                   />
-                  <Legend 
-                    wrapperStyle={{ 
-                      color: 'hsl(var(--foreground))',
-                      fontSize: '12px',
-                      paddingLeft: '10px'
-                    }}
-                  />
-                </RechartsPieChart>
-                </ResponsiveContainer>
+                </Suspense>
               </div>
             ) : (
                 <div className="h-56 flex items-center justify-center text-muted-foreground">

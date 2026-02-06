@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import (
     global_state, carregar_ativos, obter_carteira, adicionar_ativo_carteira, 
     remover_ativo_carteira, atualizar_ativo_carteira, obter_movimentacoes, obter_historico_carteira,
+    obter_data_primeira_compra_por_ticker,
 
     salvar_receita, carregar_receitas_mes_ano, atualizar_receita, remover_receita,
     adicionar_cartao, atualizar_cartao, remover_cartao, 
@@ -4004,7 +4005,15 @@ def api_get_proventos_recebidos():
         if not carteira:
             return jsonify([])
         
-       
+        # Usar data da primeira compra (movimentações) quando existir, para não contar dividendos antes de ser dono do ativo
+        primeiras_compras = obter_data_primeira_compra_por_ticker()
+        for ativo in carteira:
+            ticker = ativo.get('ticker', '')
+            data_primeira = primeiras_compras.get(ticker)
+            if data_primeira:
+                ativo['data_adicao'] = data_primeira
+            # Se não houver compra em movimentações, mantém data_adicao da carteira (quando adicionou o ativo)
+        
         data_inicio = None
         if periodo != 'total':
             hoje = datetime.now()
