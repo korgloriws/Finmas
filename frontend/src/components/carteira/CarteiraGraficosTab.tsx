@@ -19,8 +19,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  PieChart as RechartsPieChart,
-  Pie,
   Cell,
   BarChart,
   Bar,
@@ -29,6 +27,7 @@ import {
   Line,
 } from 'recharts'
 import AtivosDetalhesModal from './AtivosDetalhesModal'
+import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
 
 interface CarteiraGraficosTabProps {
   carteira: any[]
@@ -917,8 +916,8 @@ export default function CarteiraGraficosTab({
                       ? 'Carteira vs Todos os Benchmarks (simulado em R$)'
                       : `Carteira vs ${indiceRef.toUpperCase()} (simulado em R$)`}
                   </h4>
-                  <div className="h-64 sm:h-80">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] lg:h-96 overflow-visible">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                       <AreaChart data={historicoCarteira.datas.map((d, i) => {
                         const dataPoint: any = { data: d, carteira_valor: carteiraValorPrecoSeries?.[i] ?? null }
                         
@@ -936,17 +935,57 @@ export default function CarteiraGraficosTab({
                         }
                         
                         return dataPoint
-                      })}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      })}
+                        margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
+                      >
+                        <defs>
+                          <linearGradient id="cgEvolCarteiraVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIbovVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIvvbVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIfixVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIpcaVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ec4899" stopOpacity={0.15}/>
+                            <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolCdiVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIndiceVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis 
                           dataKey="data" 
                           stroke="hsl(var(--muted-foreground))"
-                          fontSize={12}
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => {
+                            if (!v || typeof v !== 'string') return v
+                            const [y, m] = v.split('-')
+                            return m && y ? `${m}/${y?.slice?.(2) ?? y}` : v
+                          }}
                         />
                         <YAxis 
                           stroke="hsl(var(--muted-foreground))"
-                          fontSize={12}
+                          tick={{ fontSize: 11 }}
+                          width={56}
                           tickFormatter={(value) => formatCurrency(value, '')}
+                          domain={['auto', 'auto']}
+                          allowDataOverflow={false}
                         />
                         <Tooltip 
                           contentStyle={{ 
@@ -968,20 +1007,20 @@ export default function CarteiraGraficosTab({
                             }
                             return [formatCurrency(value), labelMap[name] || name]
                           }}
-                          labelFormatter={(label) => `Data: ${label}`}
+                          labelFormatter={(label) => (label ? `Data: ${label}` : '')}
                         />
-                        <Legend />
-                        <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="url(#cgEvolCarteiraVal)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
                         {indiceRef === 'todos' ? (
                           <>
-                            <Area type="monotone" dataKey="ibov_valor" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={1.5} name="IBOV" />
-                            <Area type="monotone" dataKey="ivvb11_valor" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.1} strokeWidth={1.5} name="IVVB11" />
-                            <Area type="monotone" dataKey="ifix_valor" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.1} strokeWidth={1.5} name="IFIX" />
-                            <Area type="monotone" dataKey="ipca_valor" stroke="#ec4899" fill="#ec4899" fillOpacity={0.1} strokeWidth={1.5} name="IPCA" />
-                            <Area type="monotone" dataKey="cdi_valor" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={1.5} name="CDI" />
+                            <Area type="monotone" dataKey="ibov_valor" stroke="#ef4444" fill="url(#cgEvolIbovVal)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="ivvb11_valor" stroke="#f59e0b" fill="url(#cgEvolIvvbVal)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="ifix_valor" stroke="#8b5cf6" fill="url(#cgEvolIfixVal)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="ipca_valor" stroke="#ec4899" fill="url(#cgEvolIpcaVal)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="cdi_valor" stroke="#10b981" fill="url(#cgEvolCdiVal)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
                           </>
                         ) : (
-                          <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} simulado`} />
+                          <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="url(#cgEvolIndiceVal)" strokeWidth={2.5} name={`${indiceRef.toUpperCase()} simulado`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
                         )}
                       </AreaChart>
                     </ResponsiveContainer>
@@ -991,8 +1030,8 @@ export default function CarteiraGraficosTab({
               {/* Gráfico de Retorno (%) sem aportes */}
               <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
                 <div className="text-xs md:text-sm text-muted-foreground mb-2">Retorno (%) — preço (exclui aportes/retiradas)</div>
-                <div className="h-56 sm:h-64">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
+                  <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                     <AreaChart data={historicoCarteira.datas.map((d, i) => {
                       const dataPoint: any = {
                         data: d,
@@ -1012,10 +1051,46 @@ export default function CarteiraGraficosTab({
                       }
                       
                       return dataPoint
-                    })}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v: any) => (typeof v === 'number' ? `${(v - 100).toFixed(0)}%` : '')} />
+                    })}
+                      margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
+                    >
+                      <defs>
+                        <linearGradient id="cgEvolCarteiraIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolIbovIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolIvvbIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolIfixIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolIpcaIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ec4899" stopOpacity={0.15}/>
+                          <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolCdiIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="cgEvolIndiceIdx" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                      <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} tickFormatter={(v: any) => {
+                        if (!v || typeof v !== 'string') return v
+                        const [y, m] = String(v).split('-')
+                        return m && y ? `${m}/${y?.slice?.(2) ?? y}` : String(v)
+                      }} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} width={52} tickFormatter={(v: any) => (typeof v === 'number' ? `${(v - 100).toFixed(0)}%` : '')} domain={['auto', 'auto']} allowDataOverflow={false} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: 'hsl(var(--card))',
@@ -1036,22 +1111,22 @@ export default function CarteiraGraficosTab({
                           }
                           return [`${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`, labelMap[name] || name]
                         }}
-                        labelFormatter={(label) => `Data: ${label}`}
+                        labelFormatter={(label) => (label ? `Data: ${label}` : '')}
                       />
-                      <Legend />
-                      <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Carteira (preço)" />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="url(#cgEvolCarteiraIdx)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
                       {indiceRef === 'todos' ? (
                         <>
-                          <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={1.5} name="IBOV" />
-                          <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.1} strokeWidth={1.5} name="IVVB11" />
-                          <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.1} strokeWidth={1.5} name="IFIX" />
-                          <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="#ec4899" fillOpacity={0.1} strokeWidth={1.5} name="IPCA" />
-                          <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={1.5} name="CDI" />
+                          <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="url(#cgEvolIbovIdx)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="url(#cgEvolIvvbIdx)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="url(#cgEvolIfixIdx)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="url(#cgEvolIpcaIdx)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="url(#cgEvolCdiIdx)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
                         </>
                       ) : (
-                        <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} name={`${indiceRef.toUpperCase()} (índice)`} />
+                        <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="url(#cgEvolIndiceIdx)" strokeWidth={2.5} name={`${indiceRef.toUpperCase()} (índice)`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
                       )}
-                      </AreaChart>
+                    </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -1082,34 +1157,20 @@ export default function CarteiraGraficosTab({
                 <h3 className="text-base md:text-lg font-semibold text-foreground">Distribuição por Tipo de Ativo</h3>
               </div>
               {Object.keys(ativosPorTipo).length > 0 ? (
-                <div className="h-64 sm:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Pie
-                      data={Object.entries(ativosPorTipo)
-                        .filter(([_, valor]) => valor > 0)
-                        .map(([tipo, valor]) => ({ name: tipo, value: valor }))}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      onClick={(data) => {
-                        if (data && data.name) {
-                          abrirModalPorTipo(data.name)
-                        }
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {Object.entries(ativosPorTipo)
-                        .filter(([_, valor]) => valor > 0)
-                        .map((_, index) => (
-                          <Cell key={index} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'][index % 5]} />
-                        ))}
-                    </Pie>
-                    <Tooltip formatter={(value: any) => [formatCurrency(value), 'Valor']} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
+                <div className="w-full min-h-[260px] sm:min-h-[280px] md:min-h-[320px] h-64 sm:h-80 overflow-visible">
+                  <DistribuicaoCarteiraECharts
+                    variant="pie"
+                    dados={Object.entries(ativosPorTipo)
+                      .filter(([_, valor]) => valor > 0)
+                      .map(([tipo, valor], index) => ({
+                        name: tipo,
+                        value: valor,
+                        fill: ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'][index % 5]
+                      }))}
+                    totalInvestido={Object.values(ativosPorTipo).reduce((a, b) => a + b, 0)}
+                    onSegmentClick={(tipo) => abrirModalPorTipo(tipo)}
+                    formatCurrency={(v) => formatCurrency(v)}
+                  />
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center text-muted-foreground">
@@ -1127,35 +1188,21 @@ export default function CarteiraGraficosTab({
                 <h3 className="text-base md:text-lg font-semibold text-foreground">Distribuição por Ativo</h3>
               </div>
               {carteira.length > 0 ? (
-                <div className="h-64 sm:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Pie
-                      data={carteira
-                        .filter(ativo => ativo?.valor_total && ativo.valor_total > 0)
-                        .slice(0, 8)
-                        .map(ativo => ({
-                          name: getDisplayTicker(ativo?.ticker || ''),
-                          value: ativo?.valor_total || 0
-                        }))}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      onClick={() => abrirModalTodosAtivos()}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {carteira
-                        .filter(ativo => ativo?.valor_total && ativo.valor_total > 0)
-                        .slice(0, 8)
-                        .map((_, index) => (
-                          <Cell key={index} fill={['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'][index % 8]} />
-                        ))}
-                    </Pie>
-                    <Tooltip formatter={(value: any) => [formatCurrency(value), 'Valor']} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
+                <div className="w-full min-h-[260px] sm:min-h-[280px] md:min-h-[320px] h-64 sm:h-80 overflow-visible">
+                  <DistribuicaoCarteiraECharts
+                    variant="pie"
+                    dados={carteira
+                      .filter(ativo => ativo?.valor_total && ativo.valor_total > 0)
+                      .slice(0, 8)
+                      .map((ativo, index) => ({
+                        name: getDisplayTicker(ativo?.ticker || ''),
+                        value: ativo?.valor_total || 0,
+                        fill: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'][index % 8]
+                      }))}
+                    totalInvestido={carteira.reduce((a, at) => a + (at?.valor_total || 0), 0)}
+                    onSegmentClick={() => abrirModalTodosAtivos()}
+                    formatCurrency={(v) => formatCurrency(v)}
+                  />
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center text-muted-foreground">
@@ -1359,11 +1406,11 @@ export default function CarteiraGraficosTab({
                       ? 'Comparativo de Performance: Carteira vs Todos os Benchmarks'
                       : `Comparativo de Performance: Carteira vs ${indiceRef.toUpperCase()}`}
                   </h4>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="w-full min-h-[300px] h-72 sm:h-80 md:h-96 overflow-visible">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                       <ComposedChart
                         data={performancePorPeriodo.slice().reverse()} // Reverter para mostrar mais antigo primeiro
-                        margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                        margin={{ top: 12, right: 20, left: 12, bottom: 72 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                         <XAxis
@@ -1372,7 +1419,7 @@ export default function CarteiraGraficosTab({
                           fontSize={11}
                           angle={-45}
                           textAnchor="end"
-                          height={80}
+                          height={72}
                           tickFormatter={(value) => {
                             if (periodoPerformance === 'mensal') {
                               const [ano, mes] = value.split('-')
@@ -1641,8 +1688,8 @@ export default function CarteiraGraficosTab({
                     {analiseContribuicao.ganhos.length > 0 ? (
                       <>
                         {/* Gráfico de Barras Horizontal */}
-                        <div className="h-48 mb-4">
-                          <ResponsiveContainer width="100%" height="100%">
+                        <div className="w-full min-h-[200px] h-48 sm:h-56 md:h-64 mb-4 overflow-visible">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                             <BarChart
                               data={analiseContribuicao.ganhos.map(item => ({
                                 ticker: getDisplayTicker(item.ticker),
@@ -1650,7 +1697,7 @@ export default function CarteiraGraficosTab({
                                 ganhoPct: item.ganhoPerdaPct
                               }))}
                               layout="vertical"
-                              margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                              margin={{ top: 8, right: 24, left: 72, bottom: 8 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                               <XAxis
@@ -1748,8 +1795,8 @@ export default function CarteiraGraficosTab({
                     {analiseContribuicao.perdas.length > 0 ? (
                       <>
                         {/* Gráfico de Barras Horizontal */}
-                        <div className="h-48 mb-4">
-                          <ResponsiveContainer width="100%" height="100%">
+                        <div className="w-full min-h-[200px] h-48 sm:h-56 md:h-64 mb-4 overflow-visible">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
                             <BarChart
                               data={analiseContribuicao.perdas.map(item => ({
                                 ticker: getDisplayTicker(item.ticker),
@@ -1757,7 +1804,7 @@ export default function CarteiraGraficosTab({
                                 perdaPct: Math.abs(item.ganhoPerdaPct)
                               }))}
                               layout="vertical"
-                              margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                              margin={{ top: 8, right: 24, left: 72, bottom: 8 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                               <XAxis
@@ -1867,9 +1914,9 @@ export default function CarteiraGraficosTab({
                 <h3 className="text-base md:text-lg font-semibold text-foreground">Top 5 Maiores Posições</h3>
               </div>
               {topAtivos.length > 0 ? (
-                <div className="h-64 sm:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topAtivos}>
+                <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
+                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <BarChart data={topAtivos} margin={{ top: 8, right: 20, left: 12, bottom: 64 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       dataKey="ticker" 
@@ -1877,7 +1924,7 @@ export default function CarteiraGraficosTab({
                         fontSize={10}
                         angle={-45}
                         textAnchor="end"
-                        height={60}
+                        height={56}
                     />
                     <YAxis 
                       stroke="hsl(var(--muted-foreground))"
@@ -1919,9 +1966,9 @@ export default function CarteiraGraficosTab({
                 <h3 className="text-base md:text-lg font-semibold text-foreground">Top 10 Ativos por Valor</h3>
               </div>
               {carteira.length > 0 ? (
-                <div className="h-64 sm:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={carteira.slice(0, 10)}>
+                <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
+                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <BarChart data={carteira.slice(0, 10)} margin={{ top: 8, right: 20, left: 12, bottom: 64 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       dataKey="ticker" 
@@ -1929,7 +1976,7 @@ export default function CarteiraGraficosTab({
                         fontSize={10}
                       angle={-45}
                       textAnchor="end"
-                        height={60}
+                        height={56}
                     />
                     <YAxis 
                       stroke="hsl(var(--muted-foreground))"

@@ -147,15 +147,17 @@ export default function DistribuicaoCarteiraECharts({
       },
       legend: {
         orient: 'horizontal',
-        bottom: isMobile ? 0 : 8,
+        bottom: isMobile ? 4 : 8,
         left: 'center',
+        top: undefined,
+        itemGap: isMobile ? 6 : 8,
         textStyle: { color: textColor, fontSize: isMobile ? 10 : 11 }
       },
       series: [
         {
           type: 'pie',
-          radius: isMobile ? ['28%', '58%'] : ['35%', '70%'],
-          center: ['50%', isMobile ? '42%' : '48%'],
+          radius: isMobile ? ['25%', '52%'] : ['35%', '68%'],
+          center: ['50%', isMobile ? '40%' : '45%'],
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
@@ -209,11 +211,11 @@ export default function DistribuicaoCarteiraECharts({
   if (!option) return null
 
   return (
-    <div className="w-full h-full min-h-[280px] sm:min-h-[256px] md:min-h-[320px] overflow-visible">
+    <div className="w-full h-full min-h-[260px] sm:min-h-[300px] md:min-h-[320px] overflow-visible">
       <ReactECharts
         ref={chartRef}
         option={option}
-        style={{ width: '100%', height: '100%', minHeight: 280 }}
+        style={{ width: '100%', height: '100%', minHeight: 260 }}
         opts={{ renderer: 'canvas' }}
         notMerge
       />

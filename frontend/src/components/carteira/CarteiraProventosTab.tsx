@@ -1,6 +1,6 @@
 import { formatCurrency } from '../../utils/formatters'
 import TickerWithLogo from '../TickerWithLogo'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 interface CarteiraProventosTabProps {
   carteira: any[]
@@ -341,30 +341,37 @@ export default function CarteiraProventosTab({
           <div className="bg-muted/30 rounded-lg p-4 md:p-6">
             <h3 className="text-base md:text-lg font-semibold mb-4">Proventos por Mês</h3>
             {dadosGraficoProventos.length > 0 ? (
-              <div className="h-64 sm:h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dadosGraficoProventos}>
-                    <CartesianGrid strokeDasharray="3 3" />
+              <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
+                <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <BarChart data={dadosGraficoProventos} margin={{ top: 12, right: 20, left: 12, bottom: 64 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       dataKey="mes" 
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fontSize: 11 }}
                       tickFormatter={(value) => {
+                        if (!value || typeof value !== 'string') return String(value ?? '')
                         const [ano, mes] = value.split('-')
-                        return `${mes}/${ano.slice(2)}`
+                        return mes && ano ? `${mes}/${ano.slice(2)}` : value
                       }}
-                      fontSize={10}
                       angle={-45}
                       textAnchor="end"
-                      height={60}
+                      height={56}
                     />
                     <YAxis 
-                      tickFormatter={(value) => formatCurrency(value)}
-                      fontSize={10}
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fontSize: 11 }}
+                      width={56}
+                      tickFormatter={(value) => formatCurrency(value, '')}
+                      domain={['auto', 'auto']}
+                      allowDataOverflow={false}
                     />
                     <Tooltip 
                       formatter={(value: number) => [formatCurrency(value), 'Valor Recebido']}
                       labelFormatter={(label) => {
+                        if (!label || typeof label !== 'string') return String(label ?? '')
                         const [ano, mes] = label.split('-')
-                        return `${mes}/${ano}`
+                        return mes && ano ? `${mes}/${ano}` : label
                       }}
                       contentStyle={{ 
                         backgroundColor: 'hsl(var(--card))', 
@@ -373,7 +380,16 @@ export default function CarteiraProventosTab({
                         color: 'hsl(var(--foreground))'
                       }}
                     />
-                    <Bar dataKey="valor" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar 
+                      dataKey="valor" 
+                      name="Valor Recebido"
+                      fill="#10b981" 
+                      radius={[4, 4, 0, 0]}
+                      isAnimationActive
+                      animationDuration={800}
+                      animationEasing="ease-out"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

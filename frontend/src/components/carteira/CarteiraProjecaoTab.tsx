@@ -19,7 +19,7 @@ import {
   Info
 } from 'lucide-react'
 import { formatCurrency, formatPercentage } from '../../utils/formatters'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 interface CarteiraProjecaoTabProps {
   carteira: any[]
@@ -1320,18 +1320,23 @@ export default function CarteiraProjecaoTab({
         </div>
 
         {/* Gráfico */}
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={projecao}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
+          <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+            <LineChart data={projecao} margin={{ top: 12, right: 20, left: 12, bottom: 28 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis 
                 dataKey="mes" 
                 stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 11 }}
                 tickFormatter={(value) => `${Math.floor(value / 12)}a`}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 11 }}
+                width={56}
                 tickFormatter={(value) => formatCurrency(value, '')}
+                domain={['auto', 'auto']}
+                allowDataOverflow={false}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -1344,22 +1349,31 @@ export default function CarteiraProjecaoTab({
                   formatCurrency(value), 
                   name === 'valor' ? 'Sem Dividendos' : 'Com Dividendos'
                 ]}
-                labelFormatter={(value) => `Mês ${value} (${Math.floor(Number(value) / 12)} anos)`}
+                labelFormatter={(value) => (value != null ? `Mês ${value} (${Math.floor(Number(value) / 12)} anos)` : '')}
               />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line 
                 type="monotone" 
                 dataKey="valor" 
+                name="Sem Dividendos"
                 stroke="#3b82f6" 
-                strokeWidth={2}
+                strokeWidth={2.5}
                 dot={false}
+                isAnimationActive
+                animationDuration={800}
+                animationEasing="ease-out"
               />
               {considerarDividendos && (
                 <Line 
                   type="monotone" 
                   dataKey="valorComDividendos" 
+                  name="Com Dividendos"
                   stroke="#10b981" 
                   strokeWidth={2}
                   dot={false}
+                  isAnimationActive
+                  animationDuration={1000}
+                  animationEasing="ease-out"
                 />
               )}
             </LineChart>

@@ -1654,38 +1654,81 @@ export default function HomePage() {
             {loadingResumo ? (
               <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
             ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
-              <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96">
+              <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96 min-h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={(historicoCarteira?.datas || []).map((d: string, i: number) => {
-                  // Converter índices para R$ usando initialWealth
-                  const indiceSeries = (historicoCarteira?.ibov || []) as Array<number | null>
-                  const ibovValor = indiceSeries[i] != null && initialWealth > 0 
-                    ? initialWealth * (Number(indiceSeries[i]) / 100) 
-                    : null
-                  
-                  return {
-                    data: d,
-                    carteira: carteiraValorPrecoSeries?.[i] ?? null, 
-                    ibov: ibovValor,
-                    ivvb11: historicoCarteira?.ivvb11?.[i] != null && initialWealth > 0 
-                      ? initialWealth * (Number(historicoCarteira.ivvb11[i]) / 100) 
-                      : null,
-                    ifix: historicoCarteira?.ifix?.[i] != null && initialWealth > 0 
-                      ? initialWealth * (Number(historicoCarteira.ifix[i]) / 100) 
-                      : null,
-                    ipca: historicoCarteira?.ipca?.[i] != null && initialWealth > 0 
-                      ? initialWealth * (Number(historicoCarteira.ipca[i]) / 100) 
-                      : null,
-                    cdi: historicoCarteira?.cdi?.[i] != null && initialWealth > 0 
-                      ? initialWealth * (Number(historicoCarteira.cdi[i]) / 100) 
-                      : null,
-                  }
-                })}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" />
+                <AreaChart
+                  data={(historicoCarteira?.datas || []).map((d: string, i: number) => {
+                    const indiceSeries = (historicoCarteira?.ibov || []) as Array<number | null>
+                    const ibovValor = indiceSeries[i] != null && initialWealth > 0 
+                      ? initialWealth * (Number(indiceSeries[i]) / 100) 
+                      : null
+                    return {
+                      data: d,
+                      carteira: carteiraValorPrecoSeries?.[i] ?? null, 
+                      ibov: ibovValor,
+                      ivvb11: historicoCarteira?.ivvb11?.[i] != null && initialWealth > 0 
+                        ? initialWealth * (Number(historicoCarteira.ivvb11[i]) / 100) 
+                        : null,
+                      ifix: historicoCarteira?.ifix?.[i] != null && initialWealth > 0 
+                        ? initialWealth * (Number(historicoCarteira.ifix[i]) / 100) 
+                        : null,
+                      ipca: historicoCarteira?.ipca?.[i] != null && initialWealth > 0 
+                        ? initialWealth * (Number(historicoCarteira.ipca[i]) / 100) 
+                        : null,
+                      cdi: historicoCarteira?.cdi?.[i] != null && initialWealth > 0 
+                        ? initialWealth * (Number(historicoCarteira.cdi[i]) / 100) 
+                        : null,
+                    }
+                  })}
+                  margin={{ top: 12, right: 16, left: 8, bottom: 8 }}
+                  isAnimationActive={true}
+                  animationDuration={1200}
+                  animationEasing="ease-out"
+                >
+                  <defs>
+                    <linearGradient id="evolCarteira" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="evolIbov" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="evolIvvb" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="evolIfix" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#a855f7" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="evolIpca" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="evolCdi" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis 
+                    dataKey="data" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => {
+                      if (!v || typeof v !== 'string') return v
+                      const [y, m] = v.split('-')
+                      return m && y ? `${m}/${y?.slice?.(2) ?? y}` : v
+                    }}
+                  />
                   <YAxis 
                     stroke="hsl(var(--muted-foreground))" 
+                    tick={{ fontSize: 11 }}
+                    width={52}
                     tickFormatter={(value) => formatCurrency(value, '')}
+                    domain={['auto', 'auto']}
+                    allowDataOverflow={false}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -1698,15 +1741,15 @@ export default function HomePage() {
                       const label = name === 'carteira' ? 'Carteira (preço)' : name
                       return [formatCurrency(value), label]
                     }}
-                    labelFormatter={(label) => `Data: ${label}`}
+                    labelFormatter={(label) => (label ? `Data: ${label}` : '')}
                   />
-                  <Legend />
-                  <Area type="monotone" dataKey="carteira" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.12} strokeWidth={2} name="Carteira (preço)" />
-                  <Area type="monotone" dataKey="ibov" stroke="#22c55e" fill="#22c55e" fillOpacity={0.08} strokeWidth={1.5} name="Ibovespa" />
-                  <Area type="monotone" dataKey="ivvb11" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.08} strokeWidth={1.5} name="IVVB11" />
-                  <Area type="monotone" dataKey="ifix" stroke="#a855f7" fill="#a855f7" fillOpacity={0.08} strokeWidth={1.5} name="IFIX" />
-                  <Area type="monotone" dataKey="ipca" stroke="#ef4444" fill="#ef4444" fillOpacity={0.05} strokeWidth={1.2} name="IPCA" />
-                  <Area type="monotone" dataKey="cdi" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.06} strokeWidth={1.2} name="CDI" />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="carteira" stroke="#3b82f6" fill="url(#evolCarteira)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="ibov" stroke="#22c55e" fill="url(#evolIbov)" strokeWidth={2} name="Ibovespa" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="ivvb11" stroke="#f59e0b" fill="url(#evolIvvb)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="ifix" stroke="#a855f7" fill="url(#evolIfix)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="ipca" stroke="#ef4444" fill="url(#evolIpca)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="cdi" stroke="#06b6d4" fill="url(#evolCdi)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
                 </AreaChart>
                 </ResponsiveContainer>
               </div>
