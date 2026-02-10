@@ -24,7 +24,6 @@ import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
 // Lazy loading de gráficos pesados
 import { 
   ComposedChart,
-  PieChart as RechartsPieChart,
   BarChart,
   XAxis, 
   YAxis, 
@@ -32,11 +31,12 @@ import {
   Tooltip, 
   ResponsiveContainer, 
   Line, 
-  Pie, 
   Cell, 
   Area, 
-  Bar 
+  Bar,
+  Legend
 } from '../components/LazyChart'
+import DistribuicaoCarteiraECharts from '../components/home/DistribuicaoCarteiraECharts'
 
 // Categorias de despesas com ícones (copiado da ControleDespesaTab)
 const CATEGORIAS_DESPESAS = [
@@ -710,57 +710,102 @@ export default function ControlePage() {
           </div>
                 )}
 
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={dadosGraficoEvolucao || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="data" 
-                      tickFormatter={(value) => {
-                        const date = new Date(value)
-                        return `${date.getDate()}/${date.getMonth() + 1}`
-                      }}
-                    />
-                    <YAxis />
-                    <Tooltip 
-                      formatter={(value, name) => [
-                        ocultarValores ? '••••••' : formatCurrency(Number(value)), 
-                        name === 'receitas' ? 'Receitas' : 
-                        name === 'despesas' ? 'Despesas' : 
-                        name === 'saldo_acumulado' ? 'Saldo Acumulado' : name
-                      ]}
-                      labelFormatter={(value) => {
-                        const date = new Date(value)
-                        return date.toLocaleDateString('pt-BR')
-                      }}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="receitas" 
-                      stackId="1" 
-                      stroke="hsl(var(--positive))" 
-                      fill="hsl(var(--positive))" 
-                      fillOpacity={0.3} 
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="despesas" 
-                      stackId="1" 
-                      stroke="hsl(var(--destructive))" 
-                      fill="hsl(var(--destructive))" 
-                      fillOpacity={0.3} 
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="saldo_acumulado" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={3} 
-                      dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <div className="w-full min-h-[280px] sm:min-h-[300px] overflow-visible">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ComposedChart
+                      data={dadosGraficoEvolucao || []}
+                      margin={{ top: 12, right: 16, left: 8, bottom: 8 }}
+                      isAnimationActive
+                      animationDuration={1000}
+                      animationEasing="ease-out"
+                    >
+                      <defs>
+                        <linearGradient id="ctrlEvolReceitas" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="ctrlEvolDespesas" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="ctrlEvolSaldo" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                      <XAxis
+                        dataKey="data"
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value)
+                          return `${date.getDate()}/${date.getMonth() + 1}`
+                        }}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(v) => (ocultarValores ? '••••' : typeof v === 'number' && v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: 'hsl(var(--foreground))',
+                        }}
+                        formatter={(value, name) => [
+                          ocultarValores ? '••••••' : formatCurrency(Number(value)),
+                          name === 'receitas' ? 'Receitas' : name === 'despesas' ? 'Despesas' : name === 'saldo_acumulado' ? 'Saldo Acumulado' : name,
+                        ]}
+                        labelFormatter={(value) => {
+                          const date = new Date(value)
+                          return date.toLocaleDateString('pt-BR')
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} formatter={(value) => (value === 'receitas' ? 'Receitas' : value === 'despesas' ? 'Despesas' : value === 'saldo_acumulado' ? 'Saldo Acumulado' : value)} />
+                      <Area
+                        type="monotone"
+                        dataKey="receitas"
+                        stackId="1"
+                        name="receitas"
+                        stroke="#10b981"
+                        fill="url(#ctrlEvolReceitas)"
+                        strokeWidth={2}
+                        isAnimationActive
+                        animationDuration={800}
+                        animationEasing="ease-out"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="despesas"
+                        stackId="1"
+                        name="despesas"
+                        stroke="#ef4444"
+                        fill="url(#ctrlEvolDespesas)"
+                        strokeWidth={2}
+                        isAnimationActive
+                        animationDuration={900}
+                        animationEasing="ease-out"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="saldo_acumulado"
+                        name="saldo_acumulado"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2.5}
+                        dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                        isAnimationActive
+                        animationDuration={1000}
+                        animationEasing="ease-out"
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
           </motion.div>
 
-              {/* Gráfico de Pizza */}
+              {/* Gráfico de Pizza - Receitas vs Despesas */}
           <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -768,23 +813,20 @@ export default function ControlePage() {
                 className="bg-card border border-border rounded-2xl p-6 shadow-xl"
               >
                 <h3 className="text-lg font-semibold text-foreground mb-4">Receitas vs Despesas</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <RechartsPieChart>
-              <Pie
-                data={dadosGraficoReceitasDespesas}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${ocultarValores ? '••••••' : formatCurrency(value)}`}
-              >
-                {dadosGraficoReceitasDespesas.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => ocultarValores ? '••••••' : formatCurrency(Number(value))} />
-            </RechartsPieChart>
-          </ResponsiveContainer>
+                {(receitasDespesas?.receitas || 0) + (receitasDespesas?.despesas || 0) > 0 ? (
+                  <div className="w-full min-h-[260px] sm:min-h-[280px] h-64 sm:h-80 overflow-visible">
+                    <DistribuicaoCarteiraECharts
+                      variant="pie"
+                      dados={dadosGraficoReceitasDespesas}
+                      totalInvestido={(receitasDespesas?.receitas || 0) + (receitasDespesas?.despesas || 0)}
+                      formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}
+                    />
+                  </div>
+                ) : (
+                  <div className="min-h-[260px] h-64 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border">
+                    <p>Nenhum dado disponível para o período.</p>
+                  </div>
+                )}
           </motion.div>
             </div>
             
@@ -799,30 +841,23 @@ export default function ControlePage() {
               >
                  <h3 className="text-lg font-semibold text-foreground mb-4">Despesas por Categoria</h3>
                  {totaisPorCategoria.length > 0 ? (
-                   <ResponsiveContainer width="100%" height={300}>
-                     <RechartsPieChart>
-                       <Pie
-                         data={totaisPorCategoria}
-                         cx="50%"
-                         cy="50%"
-                         labelLine={false}
-                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                         outerRadius={80}
-                         fill="#8884d8"
-                         dataKey="value"
-                       >
-                         {totaisPorCategoria.map((entry, index) => (
-                           <Cell key={`cell-${index}`} fill={entry.categoria.color} />
-                         ))}
-                       </Pie>
-                       <Tooltip formatter={(value: any) => [ocultarValores ? '••••••' : formatCurrency(value), 'Valor']} />
-                     </RechartsPieChart>
-                   </ResponsiveContainer>
+                   <div className="w-full min-h-[260px] sm:min-h-[280px] h-64 sm:h-80 overflow-visible">
+                     <DistribuicaoCarteiraECharts
+                       variant="pie"
+                       dados={totaisPorCategoria.map(({ value, categoria }) => ({
+                         name: categoria.label,
+                         value,
+                         fill: categoria.color,
+                       }))}
+                       totalInvestido={totaisPorCategoria.reduce((s, d) => s + d.value, 0)}
+                       formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}
+                     />
+                   </div>
                  ) : (
-                   <div className="h-64 flex items-center justify-center text-muted-foreground">
+                   <div className="min-h-[260px] h-64 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border">
                      Nenhum dado disponível para o período selecionado.
-          </div>
-        )}
+                   </div>
+                 )}
             </motion.div>
 
               {/* Despesas Fixas vs Variáveis */}
@@ -834,20 +869,35 @@ export default function ControlePage() {
               >
                  <h3 className="text-lg font-semibold text-foreground mb-4">Despesas Fixas vs Variáveis</h3>
                  {totaisPorTipo.length > 0 ? (
-                   <ResponsiveContainer width="100%" height={200}>
-                     <BarChart data={totaisPorTipo}>
-                <CartesianGrid strokeDasharray="3 3" />
-                       <XAxis dataKey="name" />
-                <YAxis />
-                       <Tooltip formatter={(value: any) => [ocultarValores ? '••••••' : formatCurrency(value), 'Valor']} />
-                       <Bar dataKey="value" fill="#8884d8" />
-                    </BarChart>
-            </ResponsiveContainer>
-          ) : (
-                   <div className="h-32 flex items-center justify-center text-muted-foreground">
+                   <div className="w-full min-h-[180px] overflow-visible">
+                     <ResponsiveContainer width="100%" height={200}>
+                       <BarChart
+                         data={totaisPorTipo}
+                         margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                         isAnimationActive
+                         animationDuration={800}
+                         animationEasing="ease-out"
+                       >
+                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                         <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+                         <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} tickFormatter={(v) => (ocultarValores ? '••••' : typeof v === 'number' && v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
+                         <Tooltip
+                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }}
+                           formatter={(value: any) => [ocultarValores ? '••••••' : formatCurrency(value), 'Valor']}
+                         />
+                         <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={600} animationEasing="ease-out">
+                           {totaisPorTipo.map((entry, index) => (
+                             <Cell key={`cell-${index}`} fill={entry.fill} />
+                           ))}
+                         </Bar>
+                       </BarChart>
+                     </ResponsiveContainer>
+                   </div>
+                 ) : (
+                   <div className="min-h-[160px] h-32 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border">
                      Nenhum dado disponível.
-            </div>
-          )}
+                   </div>
+                 )}
               </motion.div>
       </div>
 

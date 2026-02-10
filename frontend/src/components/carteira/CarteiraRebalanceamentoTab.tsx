@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PieChart, Calculator, CheckCircle, History, Lightbulb, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatters'
-import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip } from 'recharts'
+import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
 
 interface CarteiraRebalanceamentoTabProps {
   carteira: any[]
@@ -286,40 +286,18 @@ function TargetsForm({ defaultTargets, onSave, onChange }: {
   )
 }
 
-// Componente customizado para labels do gráfico de pizza
-const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
-  const RADIAN = Math.PI / 180
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5
-  const x = cx + radius * Math.cos(-midAngle * RADIAN)
-  const y = cy + radius * Math.sin(-midAngle * RADIAN)
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="hsl(var(--foreground))"
-      textAnchor={x > cx ? 'start' : 'end'}
-      dominantBaseline="central"
-      fontSize={12}
-      fontWeight={500}
-      className="fill-foreground"
-    >
-      {`${name}: ${(percent * 100).toFixed(0)}%`}
-    </text>
-  )
-}
-
 // Componente para gráfico da distribuição ideal
 function IdealDistributionChart({ targets }: { targets: Record<string, number> }) {
+  const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F43F5E']
   const chartData = Object.entries(targets)
     .filter(([_, value]) => value > 0)
-    .map(([name, value]) => ({ name, value: Number(value) || 0 }))
-  
-  const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F43F5E']
+    .map(([name, value], i) => ({ name, value: Number(value) || 0, fill: colors[i % colors.length] }))
+
+  const totalPercent = chartData.reduce((s, d) => s + d.value, 0)
 
   if (chartData.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center text-muted-foreground">
+      <div className="min-h-[260px] h-64 sm:h-80 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border dark:border-border/80">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Defina tipos e pesos para visualizar a distribuição ideal</p>
@@ -329,47 +307,24 @@ function IdealDistributionChart({ targets }: { targets: Record<string, number> }
   }
 
   return (
-    <div className="h-80 w-full overflow-visible">
-      <ResponsiveContainer width="100%" height="100%">
-        <RechartsPieChart>
-          <Pie
-            data={chartData}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={70}
-            innerRadius={0}
-            paddingAngle={2}
-            label={CustomLabel}
-            labelLine={false}
-          >
-            {chartData.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-            ))}
-          </Pie>
-          <Tooltip 
-            formatter={(v: number, n: string) => [`${v.toFixed(2)}%`, n]}
-            contentStyle={{ 
-              backgroundColor: 'hsl(var(--card))', 
-              border: '1px solid hsl(var(--border))', 
-              borderRadius: '8px',
-              color: 'hsl(var(--foreground))'
-            }}
-            itemStyle={{ color: 'hsl(var(--foreground))' }}
-            labelStyle={{ color: 'hsl(var(--foreground))' }}
-          />
-        </RechartsPieChart>
-      </ResponsiveContainer>
+    <div className="w-full min-h-[260px] sm:min-h-[280px] md:min-h-[320px] h-64 sm:h-80 overflow-visible">
+      <DistribuicaoCarteiraECharts
+        variant="pie"
+        dados={chartData}
+        totalInvestido={totalPercent || 100}
+        formatCurrency={(v) => `${Number(v).toFixed(1)}%`}
+      />
     </div>
   )
 }
 
 // Componente para gráfico da distribuição atual
 function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
+  const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F43F5E']
+
   if (!carteira || carteira.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center text-muted-foreground">
+      <div className="min-h-[260px] h-64 sm:h-80 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border dark:border-border/80">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Nenhum ativo na carteira</p>
@@ -386,11 +341,13 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
 
   const chartData = Object.entries(ativosPorTipo)
     .filter(([_, valor]) => (valor as number) > 0)
-    .map(([tipo, valor]) => ({ name: tipo, value: valor as number }))
+    .map(([tipo, valor], i) => ({ name: tipo, value: valor as number, fill: colors[i % colors.length] }))
+
+  const totalInvestido = chartData.reduce((s, d) => s + d.value, 0)
 
   if (chartData.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center text-muted-foreground">
+      <div className="min-h-[260px] h-64 sm:h-80 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border dark:border-border/80">
         <div className="text-center">
           <PieChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>Nenhum valor encontrado</p>
@@ -399,41 +356,14 @@ function CurrentDistributionChart({ carteira }: { carteira: any[] }) {
     )
   }
 
-  const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F43F5E']
-
   return (
-    <div className="h-80 w-full overflow-visible">
-      <ResponsiveContainer width="100%" height="100%">
-        <RechartsPieChart>
-          <Pie
-            data={chartData}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={70}
-            innerRadius={0}
-            paddingAngle={2}
-            label={CustomLabel}
-            labelLine={false}
-          >
-            {chartData.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-            ))}
-          </Pie>
-          <Tooltip 
-            formatter={(value: any, name: string) => [formatCurrency(value), name]}
-            contentStyle={{ 
-              backgroundColor: 'hsl(var(--card))', 
-              border: '1px solid hsl(var(--border))', 
-              borderRadius: '8px',
-              color: 'hsl(var(--foreground))'
-            }}
-            itemStyle={{ color: 'hsl(var(--foreground))' }}
-            labelStyle={{ color: 'hsl(var(--foreground))' }}
-          />
-        </RechartsPieChart>
-      </ResponsiveContainer>
+    <div className="w-full min-h-[260px] sm:min-h-[280px] md:min-h-[320px] h-64 sm:h-80 overflow-visible">
+      <DistribuicaoCarteiraECharts
+        variant="pie"
+        dados={chartData}
+        totalInvestido={totalInvestido}
+        formatCurrency={(v) => formatCurrency(v)}
+      />
     </div>
   )
 }

@@ -22,7 +22,8 @@ const formatDate = (dateString: string) => {
   return dateString
 }
 import { OutroGasto } from '../../types'
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
 
 interface ControleDespesaTabProps {
   filtroMes: string
@@ -713,27 +714,20 @@ export default function ControleDespesaTab({
             </h3>
             
             {totaisPorCategoria.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={totaisPorCategoria}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {totaisPorCategoria.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.categoria.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => [formatCurrency(value), 'Valor']} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="w-full min-h-[260px] sm:min-h-[280px] h-64 sm:h-80 overflow-visible">
+                <DistribuicaoCarteiraECharts
+                  variant="pie"
+                  dados={totaisPorCategoria.map(({ value, categoria }) => ({
+                    name: categoria.label,
+                    value,
+                    fill: categoria.color,
+                  }))}
+                  totalInvestido={totaisPorCategoria.reduce((s, d) => s + d.value, 0)}
+                  formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}
+                />
+              </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
+              <div className="min-h-[260px] h-64 flex items-center justify-center text-muted-foreground rounded-lg border border-dashed border-border">
                 Nenhum dado disponível para o período selecionado.
               </div>
             )}
