@@ -27,6 +27,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5005',
         changeOrigin: true,
+        // Evitar 504 em rotas pesadas (ex.: análise de BDRs que busca todos os ativos)
+        timeout: 300000,      // 5 min - socket
+        proxyTimeout: 300000,  // 5 min - proxy request
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('proxy error', err);

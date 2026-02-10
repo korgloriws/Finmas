@@ -821,7 +821,8 @@ export const controleService = {
 export const analiseService = {
 
   getAtivos: async (tipo: string, filtros: FiltrosAnalise): Promise<AtivoAnalise[]> => {
-    const response = await api.post('/analise/ativos', { tipo, filtros })
+    // Timeout longo: backend processa todos os ativos (ex.: BDRs) sem limite; evita 504
+    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 600000 })
     return response.data
   },
 
