@@ -2108,21 +2108,7 @@ def spa_404_fallback(_e):
 # ==================== HELPER: VALIDAÇÃO DUPLA DE SEGURANÇA ====================
 
 def validar_usuario_autenticado(expected_user=None, validar_token=True):
-    """
-    Função helper para validação dupla de segurança em rotas críticas.
-    
-    Validações realizadas:
-    1. Verifica se o usuário está autenticado
-    2. Verifica se o token ainda é válido (se validar_token=True)
-    3. Verifica se o usuário esperado corresponde ao usuário atual (se fornecido)
-    
-    Args:
-        expected_user: Username esperado (opcional, pode vir do header X-User-Expected)
-        validar_token: Se True, valida que o token ainda é válido no banco
-    
-    Returns:
-        tuple: (usuario_atual, None) se válido, ou (None, resposta_erro) se inválido
-    """
+
     try:
         # Obter usuário esperado do header se não fornecido
         if expected_user is None:
@@ -5279,13 +5265,7 @@ def api_agenda_dividendos():
 
 @server.route("/api/dividendos/ranking", methods=["GET"])
 def api_ranking_dividendos():
-    """
-    API para buscar ranking de dividendos do mercado completo
-    Parâmetros:
-    - tipo: tipo de ativo (acoes, fiis, bdrs), padrão: todos
-    - mes: mês para filtrar por data-com (1-12), padrão: None (ranking geral)
-    - ano: ano para filtrar por data-com, padrão: None (ranking geral)
-    """
+
     try:
         from scraper_ranking_dividendos import buscar_todos_rankings, buscar_ranking_dividendos
         

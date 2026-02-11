@@ -1143,6 +1143,10 @@ def get_usuario_atual():
                             except Exception:
                                 pass
                         return None
+                    try:
+                        atualizar_last_seen(username)
+                    except Exception:
+                        pass
                     if g is not None:
                         try:
                             setattr(g, "_usuario_atual_cached", username)
@@ -1184,6 +1188,10 @@ def get_usuario_atual():
                         except Exception:
                             pass
                     return None
+                try:
+                    atualizar_last_seen(username)
+                except Exception:
+                    pass
                 if g is not None:
                     try:
                         setattr(g, "_usuario_atual_cached", username)
@@ -1777,6 +1785,11 @@ def criar_tabela_usuarios():
                     c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT \'proprietario\'')
                 except Exception:
                     pass
+                # Presença: última vez que o usuário foi visto (para "quem está online")
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP')
+                except Exception:
+                    pass
                 conn.commit()
         finally:
             conn.close()
@@ -1815,7 +1828,13 @@ def criar_tabela_usuarios():
             conn.commit()
         except sqlite3.OperationalError:
             pass  # Coluna já existe
-        
+        # Presença: última vez que o usuário foi visto (para "quem está online")
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN last_seen_at TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Coluna já existe
+
         conn.close()
 
 def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_seguranca=None, email=None, role='usuario'):
@@ -8015,44 +8034,104 @@ def definir_role_usuario(username, novo_role):
         finally:
             conn.close()
 
-def listar_usuarios(admin_only=False):
-    """Lista todos os usuários (apenas para admins)"""
+def atualizar_last_seen(username):
+    """Atualiza o timestamp de última atividade do usuário (presença / quem está online)."""
+    if not username:
+        return
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     if _is_postgres():
         conn = _get_pg_conn()
         try:
             with conn.cursor() as c:
-                if admin_only:
-                    c.execute('SELECT id, nome, username, email, role, data_cadastro FROM public.usuarios WHERE role = %s', ('admin',))
-                else:
-                    c.execute('SELECT id, nome, username, email, role, data_cadastro FROM public.usuarios')
-                rows = c.fetchall()
-                return [{
-                    'id': row[0],
-                    'nome': row[1],
-                    'username': row[2],
-                    'email': row[3],
-                    'role': row[4] if len(row) > 4 else 'usuario',
-                    'data_cadastro': row[5]
-                } for row in rows]
+                c.execute('UPDATE public.usuarios SET last_seen_at = %s WHERE username = %s', (now_str, username))
+            conn.commit()
         finally:
             conn.close()
     else:
         conn = sqlite3.connect(USUARIOS_DB_PATH)
-        c = conn.cursor()
-        if admin_only:
-            c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios WHERE role = ?', ('admin',))
+        try:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET last_seen_at = ? WHERE username = ?', (now_str, username))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def _is_online(last_seen_at, within_minutes=5):
+    """Considera online se last_seen_at está dentro dos últimos within_minutes."""
+    if last_seen_at is None:
+        return False
+    try:
+        if hasattr(last_seen_at, 'timestamp'):
+            ts = last_seen_at.timestamp()
         else:
-            c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios')
-        rows = c.fetchall()
-        conn.close()
-        return [{
+            from datetime import datetime as dt
+            s = str(last_seen_at).strip()
+            if not s:
+                return False
+            dt_val = dt.strptime(s[:19], '%Y-%m-%d %H:%M:%S') if len(s) >= 19 else dt.fromisoformat(s.replace('Z', '+00:00'))
+            ts = dt_val.timestamp()
+        return (time.time() - ts) <= (within_minutes * 60)
+    except Exception:
+        return False
+
+
+def listar_usuarios(admin_only=False):
+    """Lista todos os usuários (apenas para admins). Inclui last_seen_at e online (ativo nos últimos 5 min)."""
+    def _row_to_user(row, has_last_seen):
+        last = row[6] if has_last_seen and len(row) > 6 else None
+        return {
             'id': row[0],
             'nome': row[1],
             'username': row[2],
             'email': row[3],
             'role': row[4] if len(row) > 4 else 'usuario',
-            'data_cadastro': row[5]
-        } for row in rows]
+            'data_cadastro': row[5],
+            'last_seen_at': last,
+            'online': _is_online(last),
+        }
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                for with_last_seen in (True, False):
+                    try:
+                        if admin_only:
+                            c.execute(
+                                'SELECT id, nome, username, email, role, data_cadastro' + (', last_seen_at' if with_last_seen else '') + ' FROM public.usuarios WHERE role = %s',
+                                ('admin',)
+                            )
+                        else:
+                            c.execute(
+                                'SELECT id, nome, username, email, role, data_cadastro' + (', last_seen_at' if with_last_seen else '') + ' FROM public.usuarios'
+                            )
+                        rows = c.fetchall()
+                        return [_row_to_user(row, with_last_seen) for row in rows]
+                    except Exception:
+                        if not with_last_seen:
+                            raise
+                        continue
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        c = conn.cursor()
+        try:
+            if admin_only:
+                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at FROM usuarios WHERE role = ?', ('admin',))
+            else:
+                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at FROM usuarios')
+            rows = c.fetchall()
+            return [_row_to_user(row, True) for row in rows]
+        except sqlite3.OperationalError:
+            if admin_only:
+                c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios WHERE role = ?', ('admin',))
+            else:
+                c.execute('SELECT id, nome, username, email, role, data_cadastro FROM usuarios')
+            rows = c.fetchall()
+            return [_row_to_user(row, False) for row in rows]
+        finally:
+            conn.close()
 
 def excluir_conta_usuario(username):
     """Exclui a conta do usuário (LGPD)"""

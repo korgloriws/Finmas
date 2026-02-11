@@ -1,8 +1,8 @@
 import  { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-// import { useLazyData } from '../hooks/useLazyData' // Para uso futuro
+
 import { Link } from 'react-router-dom'
-// @ts-ignore
+
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { 
@@ -37,7 +37,7 @@ import {
   Settings
 } from 'lucide-react'
 
-// Lazy loading de componentes pesados do Recharts
+
 import { 
   AreaChart, 
   BarChart,
@@ -53,7 +53,7 @@ import {
 } from '../components/LazyChart'
 import { carteiraService, homeService } from '../services/api'
 import { formatCurrency } from '../utils/formatters'
-// Lazy loading de componentes pesados
+
 import { lazy, Suspense } from 'react'
 import CardPrincipal from '../components/home/CardPrincipal'
 import InsightCard from '../components/home/InsightCard'
@@ -115,38 +115,37 @@ export default function HomePage() {
 
 
   
-  // Query 1: Carteira - consulta direta do banco
+  
   const { data: carteira, isLoading: loadingCarteiraRaw, isFetching: isFetchingCarteiraRaw } = useQuery({
     queryKey: ['carteira', user],
     queryFn: async () => await carteiraService.getCarteira(),
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
-    gcTime: 15 * 60 * 1000, // 15 minutos - mantém em cache
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000, 
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível - não recarrega ao montar
+    refetchOnMount: false, 
   })
 
-  // Query 2: Indicadores - consulta direta do banco
-  // Nota: Query mantida para cache, mas dados não são usados diretamente na HomePage
+
   useQuery({
     queryKey: ['indicadores'],
     queryFn: carteiraService.getIndicadores,
-    staleTime: 10 * 60 * 1000, // 10 minutos - indicadores mudam pouco
+    staleTime: 10 * 60 * 1000, 
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+    refetchOnMount: false, 
   })
 
-  // Query 3: Resumo Home - consulta direta do banco
+  
   const { data: resumoHome, isLoading: loadingResumoRaw } = useQuery({
     queryKey: ['home-resumo', user, mesAtual, anoAtual],
     queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
     enabled: !!user,
     retry: 3,
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
-    staleTime: 5 * 60 * 1000, // 5 minutos - dados considerados frescos
-    gcTime: 15 * 60 * 1000, // 15 minutos - mantém em cache
+    refetchOnMount: false, 
+    staleTime: 5 * 60 * 1000, 
+    gcTime: 15 * 60 * 1000,
   })
   
 
@@ -164,7 +163,7 @@ export default function HomePage() {
 
 
 
-  // Monitorar carregamento inicial da carteira
+ 
   useEffect(() => {
     if (carteira && isFirstLoad.current) {
       isFirstLoad.current = false
@@ -183,16 +182,16 @@ export default function HomePage() {
   }, [mesAtual, anoAtual])
 
 
-  // Resumo anterior (cache agressivo - dados históricos não mudam)
+  
   const { data: resumoAnterior } = useQuery({
     queryKey: ['home-resumo', user, prev.mes, prev.ano],
     queryFn: () => homeService.getResumo(prev.mes.toString(), prev.ano.toString()),
     retry: 3,
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // Usar cache se disponível
+    refetchOnMount: false,
     enabled: !!user && !!resumoHome, 
-    staleTime: 60 * 60 * 1000, // 1 hora - dados históricos não mudam
-    gcTime: 2 * 60 * 60 * 1000, // 2 horas - mantém em cache por mais tempo
+    staleTime: 60 * 60 * 1000, 
+    gcTime: 2 * 60 * 60 * 1000, 
   })
 
   
@@ -203,10 +202,10 @@ export default function HomePage() {
     retry: 3,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, // Usar cache se disponível - não recarrega ao montar
+    refetchOnMount: false, 
     enabled: !!user && !!carteira, 
-    staleTime: 30 * 60 * 1000, // 30 minutos - cache mais longo
-    gcTime: 60 * 60 * 1000, // 1 hora - mantém em cache por mais tempo
+    staleTime: 30 * 60 * 1000, 
+    gcTime: 60 * 60 * 1000, 
   })
 
 
@@ -313,7 +312,7 @@ export default function HomePage() {
     return `${prefixo} ${formatCurrency(valor)}`
   }
 
-  // Helpers para tendências
+
   const calcTrend = (atual: number, anterior: number | undefined | null): { value: number; isPositive: boolean } | undefined => {
     if (anterior === undefined || anterior === null) return undefined
     if (anterior === 0) {
@@ -326,7 +325,7 @@ export default function HomePage() {
   }
 
 
-  // Calcular valor inicial da carteira para conversão de carteira_price para R$
+  
   const initialWealth = useMemo(() => {
     const arr = historicoCarteira?.carteira_valor || []
     for (let i = 0; i < arr.length; i++) {
@@ -336,12 +335,12 @@ export default function HomePage() {
     return 0
   }, [historicoCarteira])
 
-  // Série de retorno por preço (exclui aportes/retiradas), rebased (já vem como índice base 100)
+  
   const carteiraRetornoSeries = useMemo(() => {
     return (historicoCarteira?.carteira_price || historicoCarteira?.carteira || []) as Array<number | null>
   }, [historicoCarteira])
 
-  // Série de valor (R$) construída a partir do retorno por preço (sem aportes)
+
   const carteiraValorPrecoSeries = useMemo(() => {
     if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
     const baseSeries = carteiraRetornoSeries || []
@@ -352,7 +351,7 @@ export default function HomePage() {
   }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
 
   const carteiraTrend = useMemo(() => {
-    // Usar carteiraValorPrecoSeries (sem aportes) em vez de carteira_valor (com aportes)
+   
     const arr = carteiraValorPrecoSeries as Array<number | null> | undefined
     if (!arr || arr.length < 2) return undefined
  
@@ -434,11 +433,11 @@ export default function HomePage() {
   const getConcentracaoAtivos = () => {
     if (!carteira || carteira.length === 0) return { maxAtivo: 0, maxSetor: 0 }
     
-    // Maior ativo individual
+
     const maxAtivo = Math.max(...carteira.map((a: any) => a.valor_total || 0))
     const maxAtivoPercent = totalInvestido > 0 ? (maxAtivo / totalInvestido) * 100 : 0
     
-    // Maior setor (simplificado por tipo)
+
     const setores = carteira.reduce((acc: Record<string, number>, ativo: any) => {
       const tipo = ativo.tipo || 'Outros'
       acc[tipo] = (acc[tipo] || 0) + (ativo.valor_total || 0)
@@ -454,7 +453,7 @@ export default function HomePage() {
   const getInsightsBrasileiros = () => {
     const insights = []
     
-    // Sazonalidade
+
     const mesAtual = new Date().getMonth() + 1
     if (mesAtual === 5 || mesAtual === 11) {
       insights.push({
@@ -513,12 +512,12 @@ export default function HomePage() {
 
 
 
-  // Componente para status do sistema - focado no essencial
+  
   const SystemStatusCard = ({ delay = 0 }: { delay?: number }) => {
-    // 1. Ativos desatualizados (quantos precisam de refresh)
+
     const ativosDesatualizados = carteira?.filter((a: any) => {
       if (!a.preco_atual || a.preco_atual <= 0) return true
-      // Verificar se o preço foi atualizado nos últimos 7 dias
+     
       if (a.ultima_atualizacao) {
         const ultimaAtualizacao = new Date(a.ultima_atualizacao)
         const diasAtras = (Date.now() - ultimaAtualizacao.getTime()) / (1000 * 60 * 60 * 24)
@@ -527,28 +526,26 @@ export default function HomePage() {
       return true
     }).length || 0
 
-    // 2. Proventos pendentes (baseado em histórico para estimativa)
-    // SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
+
     const proventosRecebidos = useQuery({
       queryKey: ['proventos-recebidos-status', user],
-      queryFn: () => carteiraService.getProventosRecebidos('3m'), // Últimos 3 meses
-      staleTime: 10 * 60 * 1000, // 10 minutos
-      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      queryFn: () => carteiraService.getProventosRecebidos('3m'), 
+      staleTime: 10 * 60 * 1000, 
+      refetchOnMount: false, 
       refetchOnWindowFocus: false,
       enabled: !!user
     }).data
 
     const proventosEstimados = proventosRecebidos?.reduce((total: number, p: any) => 
       total + (p.total_recebido || 0), 0) || 0
-    const proventosMensais = proventosEstimados / 3 // Média mensal
-
-    // 3. Alertas de risco (concentração, liquidez)
+    const proventosMensais = proventosEstimados / 3 
+   
     const concentracao = getConcentracaoAtivos()
     
-    // Calcular liquidez (ativos com volume baixo)
+
     const ativosBaixaLiquidez = carteira?.filter((a: any) => {
       const liquidez = a.liquidez_diaria || 0
-      return liquidez < 1000000 // Menos de 1M de liquidez
+      return liquidez < 1000000 
     }).length || 0
 
     const statusItems = [
@@ -593,7 +590,7 @@ export default function HomePage() {
       }
     ]
 
-    // Ordenar por prioridade
+
     const sortedItems = statusItems.sort((a, b) => {
       const priorityOrder = { high: 3, medium: 2, low: 1 }
       return priorityOrder[b.priority as keyof typeof priorityOrder] - priorityOrder[a.priority as keyof typeof priorityOrder]
@@ -679,30 +676,30 @@ export default function HomePage() {
     )
   }
 
-  // Componente para próximos eventos e vencimentos
+  
   const UpcomingEventsCard = ({ delay = 0 }: { delay?: number }) => {
 
     const { data: proventosRecebidos } = useQuery({
       queryKey: ['proventos-recebidos', user],
-      queryFn: () => carteiraService.getProventosRecebidos('6m'), // Últimos 6 meses
-      staleTime: 10 * 60 * 1000, // 10 minutos
-      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
+      queryFn: () => carteiraService.getProventosRecebidos('6m'), 
+      staleTime: 10 * 60 * 1000, 
+      refetchOnMount: false, 
       refetchOnWindowFocus: false,
       enabled: !!user
     })
 
-    // Calcular total de proventos recebidos
+   
     const totalProventos = proventosRecebidos?.reduce((total: number, p: any) => 
       total + (p.total_recebido || 0), 0) || 0
 
-    // Identificar ativos que pagam dividendos (baseado na carteira real)
+    
     const ativosComDividendos = carteira?.filter((ativo: any) => {
-      // Ativos que normalmente pagam dividendos
+
       const ticker = ativo.ticker?.toUpperCase() || ''
       return ticker.endsWith('.SA') && !ticker.includes('11') && !ticker.includes('FIX')
     }) || []
 
-    // Calcular valor médio de dividendos por ativo (estimativa baseada em dados históricos)
+    
     const dividendosEstimados = ativosComDividendos.map((ativo: any) => {
       const proventosAtivo = proventosRecebidos?.find(p => p.ticker === ativo.ticker)
       const mediaMensal = proventosAtivo ? (proventosAtivo.total_recebido / 6) : 0
@@ -834,9 +831,9 @@ export default function HomePage() {
     )
   }
 
-  // Componente Performance vs Meta
+
   const PerformanceVsMetaCard = ({ delay = 0 }: { delay?: number }) => {
-    // Calcular performance da carteira vs IBOV usando carteira_price (sem aportes)
+    
     const performanceCarteira = useMemo(() => {
       const s = carteiraRetornoSeries || []
       if (s.length < 2) return null
@@ -860,7 +857,7 @@ export default function HomePage() {
       return ((ultimo - primeiro) / primeiro) * 100
     }, [historicoCarteira])
 
-    // Meta anual configurável pelo usuário
+
     const mesesPassados = new Date().getMonth() + 1
     const metaMensal = metaAnual / 12
     const metaAcumulada = metaMensal * mesesPassados
@@ -963,16 +960,16 @@ export default function HomePage() {
     )
   }
 
-  // Componente Oportunidades de Rebalanceamento
+ 
   const OportunidadesRebalanceamentoCard = ({ delay = 0 }: { delay?: number }) => {
-    // Buscar configuração de rebalanceamento real
+
     const { data: rbConfig } = useQuery({
       queryKey: ['rebalance-config', user],
       queryFn: carteiraService.getRebalanceConfig,
       enabled: !!user,
       refetchOnWindowFocus: false,
-      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
-      staleTime: 10 * 60 * 1000, // 10 minutos
+      refetchOnMount: false, 
+      staleTime: 10 * 60 * 1000, 
     })
 
     const { data: rbStatus } = useQuery({
@@ -980,11 +977,11 @@ export default function HomePage() {
       queryFn: carteiraService.getRebalanceStatus,
       enabled: !!user,
       refetchOnWindowFocus: false,
-      refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
-      staleTime: 5 * 60 * 1000, // 5 minutos
+      refetchOnMount: false, 
+      staleTime: 5 * 60 * 1000, 
     })
 
-    // Calcular alocação atual vs ideal
+ 
     const alocacaoAtual = useMemo(() => {
       if (!carteira || carteira.length === 0) return {}
       
@@ -995,7 +992,7 @@ export default function HomePage() {
       }, {})
     }, [carteira])
 
-    // Usar configuração real do usuário ou padrão
+
     const alocacaoIdeal = useMemo(() => {
       const configTargets = (rbConfig as any)?.targets || {}
       if (Object.keys(configTargets).length > 0) {
@@ -1011,7 +1008,7 @@ export default function HomePage() {
       }
     }, [rbConfig])
 
-    // Identificar oportunidades de rebalanceamento
+
     const oportunidades = useMemo(() => {
       return Object.entries(alocacaoAtual).map(([tipo, valor]) => {
         const percentualAtual = totalInvestido > 0 ? (valor / totalInvestido) * 100 : 0
@@ -1027,10 +1024,10 @@ export default function HomePage() {
           valorAtual: valor,
           valorIdeal: totalInvestido * (percentualIdeal / 100)
         }
-      }).filter(op => Math.abs(op.diferenca) > 5) // Só mostrar diferenças significativas
+      }).filter(op => Math.abs(op.diferenca) > 5) 
     }, [alocacaoAtual, alocacaoIdeal, totalInvestido])
 
-    // Status do rebalanceamento
+
     const statusInfo = useMemo(() => {
       if (!rbStatus) return null
       
@@ -1326,14 +1323,12 @@ export default function HomePage() {
     )
   }
 
-  // TopRankingsCarousel foi extraído para componente separado com lazy loading
 
-  // Componente para atalhos inteligentes baseados no contexto
   const SmartQuickActions = ({ delay = 0 }: { delay?: number }) => {
     const getContextualActions = () => {
       const actions = []
       
-      // Baseado no estado da carteira
+
       if (!carteira || carteira.length === 0) {
         actions.push({
           to: "/carteira",
@@ -1392,11 +1387,11 @@ export default function HomePage() {
         priority: "low"
       })
       
-      // Ordenar por prioridade
+     
       return actions.sort((a, b) => {
         const priorityOrder = { high: 3, medium: 2, low: 1 }
         return priorityOrder[b.priority as keyof typeof priorityOrder] - priorityOrder[a.priority as keyof typeof priorityOrder]
-      }).slice(0, 6) // Máximo 6 ações
+      }).slice(0, 6) 
     }
 
     const contextualActions = getContextualActions()
@@ -1473,7 +1468,7 @@ export default function HomePage() {
     )
   }
 
-  // Renderizar estrutura imediatamente - dados carregam em background
+  
   return (
     <div className="min-h-screen bg-background scroll-smooth">
       <div className="container mx-auto px-2 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-8 safe-area-inset">

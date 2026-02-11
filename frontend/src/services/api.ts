@@ -8,7 +8,7 @@ const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as Impo
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 300 segundos (5 minutos) - necessário para processamento pesado de análise de ativos
+  timeout: 300000, 
   withCredentials: true,
 })
 
@@ -23,7 +23,7 @@ api.interceptors.request.use(
         config.headers = config.headers || {}
         config.headers['X-User-Expected'] = expectedUser
       }
-      // Log para debug de exclusão de usuário
+
       if (config.url?.includes('/admin/usuarios') && config.method === 'delete') {
         console.log('[API Interceptor] DELETE Request:', {
           url: config.url,

@@ -17,6 +17,29 @@ import { perfilService, adminService } from '../services/api'
 import { toast } from 'react-hot-toast'
 import HelpTips from '../components/HelpTips'
 
+function formatLastSeen(lastSeenAt: string | null | undefined): string {
+  if (!lastSeenAt) return ''
+  const d = new Date(lastSeenAt)
+  if (Number.isNaN(d.getTime())) return String(lastSeenAt)
+  return `Última vez: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+function formatLastSeenShort(lastSeenAt: string | null | undefined): string {
+  if (!lastSeenAt) return ''
+  const d = new Date(lastSeenAt)
+  if (Number.isNaN(d.getTime())) return ''
+  const diffMs = Date.now() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffH = Math.floor(diffMin / 60)
+  const diffD = Math.floor(diffH / 24)
+  if (diffMin < 1) return 'agora'
+  if (diffMin < 60) return `há ${diffMin} min`
+  if (diffH < 24) return `há ${diffH} h`
+  if (diffD === 1) return 'ontem'
+  if (diffD < 7) return `há ${diffD} dias`
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
 export default function ConfiguracoesPage() {
   const { user, isAdmin } = useAuth()
   const queryClient = useQueryClient()
@@ -52,11 +75,12 @@ export default function ConfiguracoesPage() {
     enabled: !!user,
   })
 
-  // Carregar lista de usuários (apenas admin)
+  // Carregar lista de usuários (apenas admin); atualiza a cada 30s na aba Admin para ver quem está online
   const { data: usuariosData, isLoading: loadingUsuarios } = useQuery({
     queryKey: ['admin-usuarios'],
     queryFn: adminService.listarUsuarios,
     enabled: !!user && isAdmin,
+    refetchInterval: activeTab === 'admin' ? 30_000 : false,
   })
 
   useEffect(() => {
@@ -642,6 +666,17 @@ export default function ConfiguracoesPage() {
                         <span className="text-xs text-muted-foreground">
                           Cadastrado em: {new Date(usuario.data_cadastro).toLocaleDateString('pt-BR')}
                         </span>
+                        {usuario.online ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400" title="Usuário online">
+                            <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 shrink-0" />
+                            Online
+                          </span>
+                        ) : usuario.last_seen_at ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={formatLastSeen(usuario.last_seen_at)}>
+                            <span className="w-2 h-2 rounded-full bg-muted-foreground/50 shrink-0" />
+                            Visto {formatLastSeenShort(usuario.last_seen_at)}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
