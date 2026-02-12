@@ -6,7 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 const GoogleCallbackPage = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { setUserFromToken } = useAuth()
+  const { setUserFromToken, checkCurrentUser } = useAuth()
 
   useEffect(() => {
     const token = searchParams.get('token')
@@ -21,16 +21,13 @@ const GoogleCallbackPage = () => {
     }
 
     if (token && username) {
-      // Definir usuário a partir do token
       setUserFromToken(username, role || 'usuario')
-      
-      // Redirecionar para home
-      navigate('/', { replace: true })
+      checkCurrentUser().then(() => navigate('/', { replace: true }))
     } else {
       // Se não houver token, redirecionar para login
       navigate('/login?error=invalid_callback')
     }
-  }, [searchParams, navigate, setUserFromToken])
+  }, [searchParams, navigate, setUserFromToken, checkCurrentUser])
 
   return (
     <div className="min-h-screen flex items-center justify-center">

@@ -28,6 +28,7 @@ import {
   Shield,
   Globe,
   RefreshCw,
+  Loader2,
   Star,
   Activity,
   BarChart as BarChartIcon,
@@ -196,7 +197,7 @@ export default function HomePage() {
 
   
   
-  const { data: historicoCarteira } = useQuery({
+  const { data: historicoCarteira, isLoading: loadingHistoricoCarteira } = useQuery({
     queryKey: ['carteira-historico', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     retry: 3,
@@ -1646,8 +1647,29 @@ export default function HomePage() {
               </div>
             </div>
             
-            {loadingResumo ? (
-              <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
+            {(loadingResumo || loadingHistoricoCarteira) ? (
+              <div className="flex flex-col h-48 sm:h-64 md:h-80 lg:h-96 min-h-[260px]">
+                <div className="flex items-center gap-3 mb-4 animate-pulse">
+                  <div className="w-8 h-8 rounded-md bg-muted" />
+                  <div className="h-5 w-32 bg-muted rounded" />
+                  <div className="ml-auto h-9 w-24 bg-muted rounded-lg" />
+                </div>
+                <div className="flex-1 relative rounded-lg bg-muted/50 overflow-hidden">
+                  <div className="absolute inset-0 flex flex-col justify-end gap-2 p-4">
+                    {[85, 70, 55, 65, 45, 60, 75].map((w, i) => (
+                      <div
+                        key={i}
+                        className="h-2 sm:h-3 bg-muted rounded animate-pulse"
+                        style={{ width: `${w}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-8 h-8 animate-spin" aria-hidden />
+                    <span className="text-sm font-medium">Carregando evolução da carteira...</span>
+                  </div>
+                </div>
+              </div>
             ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
               <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96 min-h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">

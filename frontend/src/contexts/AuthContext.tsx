@@ -1,12 +1,16 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import api from '../services/api'
+import api, { TELAS_APP } from '../services/api'
 
 interface AuthContextType {
   user: string | null
   userRole: 'usuario' | 'admin' | null
   isAdmin: boolean
+  /** Telas permitidas para o usuário (null = todas). Apenas para não-admin. */
+  allowedScreens: string[] | null
+  /** Verifica se o usuário pode acessar a rota (path ou id da tela). Admin sempre true. */
+  canAccessScreen: (pathOrId: string) => boolean
   login: (username: string, password: string) => Promise<void>
   register: (nome: string, username: string, password: string, pergunta_seguranca?: string, resposta_seguranca?: string) => Promise<void>
   logout: () => Promise<void>
@@ -16,6 +20,10 @@ interface AuthContextType {
   atualizarPergunta: (username: string, pergunta: string, resposta: string) => Promise<void>
   verificarPergunta: (username: string) => Promise<{tem_pergunta: boolean, pergunta?: string}>
   setUserFromToken: (username: string, role: string) => void
+  /** Atualiza allowedScreens no estado (ex.: após admin alterar telas do usuário atual) */
+  refreshAllowedScreens: () => Promise<void>
+  /** Recarrega user, role e allowed_screens do backend (útil após login com Google) */
+  checkCurrentUser: () => Promise<void>
   loading: boolean
 }
 
@@ -36,11 +44,21 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<'usuario' | 'admin' | null>(null)
+  const [allowedScreens, setAllowedScreens] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   
   const isAdmin = userRole === 'admin'
+
+  const canAccessScreen = useCallback((pathOrId: string) => {
+    if (isAdmin) return true
+    if (allowedScreens === null || allowedScreens === undefined) return true
+    if (Array.isArray(allowedScreens) && allowedScreens.length === 0) return false
+    const normalized = pathOrId === '/' ? 'home' : pathOrId.replace(/^\//, '')
+    const id = TELAS_APP.find(t => t.path === pathOrId || t.path === `/${normalized}` || t.id === pathOrId || t.id === normalized)?.id ?? normalized
+    return allowedScreens.includes(id)
+  }, [isAdmin, allowedScreens])
 
   
   useEffect(() => {
@@ -87,17 +105,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (response.data.username) {
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
+        setAllowedScreens(response.data.allowed_screens ?? null)
       } else {
         setUser(null)
         setUserRole(null)
+        setAllowedScreens(null)
       }
     } catch (error) {
       setUser(null)
       setUserRole(null)
+      setAllowedScreens(null)
     } finally {
       setLoading(false)
     }
   }
+
+  const refreshAllowedScreens = useCallback(async () => {
+    if (!user) return
+    try {
+      const response = await api.get('/auth/usuario-atual')
+      setAllowedScreens(response.data.allowed_screens ?? null)
+    } catch {
+      setAllowedScreens(null)
+    }
+  }, [user])
 
   // Sincronizar usuário esperado no localStorage para ser enviado ao backend
   useEffect(() => {
@@ -122,6 +153,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (response.data.username) {
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
+        await checkCurrentUser()
       } else {
         throw new Error('Erro no login')
       }
@@ -285,6 +317,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       //  SEGURANÇA: Limpar estado do usuário
       setUser(null)
       setUserRole(null)
+      setAllowedScreens(null)
       
       //  SEGURANÇA: Limpar TODO o cache (segurança extra)
       // Isso garante que mesmo queries sem username sejam limpas
@@ -329,6 +362,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       setUser(null)
       setUserRole(null)
+      setAllowedScreens(null)
       queryClient.clear()
       
       try {
@@ -350,9 +384,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       /* ignore */
     }
     
-    // Definir novo usuário
+    // Definir novo usuário (allowed_screens será carregado no próximo checkCurrentUser)
     setUser(username)
     setUserRole(role as 'usuario' | 'admin')
+    setAllowedScreens(null)
     setLoading(false)
     
     // Limpar localStorage e definir novo usuário
@@ -369,6 +404,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     userRole,
     isAdmin,
+    allowedScreens,
+    canAccessScreen,
     login,
     register,
     logout,
@@ -378,6 +415,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     atualizarPergunta,
     verificarPergunta,
     setUserFromToken,
+    refreshAllowedScreens,
+    checkCurrentUser,
     loading
   }
 

@@ -1143,6 +1143,18 @@ def get_usuario_atual():
                             except Exception:
                                 pass
                         return None
+                    if usuario_bloqueado(username):
+                        try:
+                            c.execute('DELETE FROM public.sessoes WHERE token = %s', (token,))
+                            conn.commit()
+                        except Exception:
+                            pass
+                        if g is not None:
+                            try:
+                                setattr(g, "_usuario_atual_cached", None)
+                            except Exception:
+                                pass
+                        return None
                     try:
                         atualizar_last_seen(username)
                     except Exception:
@@ -1177,6 +1189,18 @@ def get_usuario_atual():
                 print(f"DEBUG: get_usuario_atual: Token encontrado para usuário {username}, expira em {expira_em}")
                 if expira_em < int(time.time()):
                     print("DEBUG: get_usuario_atual: Token expirado")
+                    try:
+                        c.execute('DELETE FROM sessoes WHERE token = ?', (token,))
+                        conn.commit()
+                    except Exception:
+                        pass
+                    if g is not None:
+                        try:
+                            setattr(g, "_usuario_atual_cached", None)
+                        except Exception:
+                            pass
+                    return None
+                if usuario_bloqueado(username):
                     try:
                         c.execute('DELETE FROM sessoes WHERE token = ?', (token,))
                         conn.commit()
@@ -1790,6 +1814,15 @@ def criar_tabela_usuarios():
                     c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP')
                 except Exception:
                     pass
+                # Gestão admin: bloqueio e telas permitidas
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT FALSE')
+                except Exception:
+                    pass
+                try:
+                    c.execute('ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS allowed_screens TEXT')
+                except Exception:
+                    pass
                 conn.commit()
         finally:
             conn.close()
@@ -1834,13 +1867,32 @@ def criar_tabela_usuarios():
             conn.commit()
         except sqlite3.OperationalError:
             pass  # Coluna já existe
+        # Gestão admin: bloqueio e telas permitidas
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN blocked INTEGER DEFAULT 0')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute('ALTER TABLE usuarios ADD COLUMN allowed_screens TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
         conn.close()
 
+# Telas permitidas por padrão para novos usuários (exclui analise, agenda-dividendos, rankings)
+DEFAULT_ALLOWED_SCREENS = ['home', 'detalhes', 'carteira', 'noticias', 'juros-compostos', 'guia', 'conversor', 'controle', 'configuracoes']
+
+def _default_allowed_screens_json():
+    import json
+    return json.dumps(DEFAULT_ALLOWED_SCREENS)
+
 def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_seguranca=None, email=None, role='usuario'):
-    """Cadastra um novo usuário. Por padrão, role é 'usuario'. Admins devem ser criados manualmente."""
+    """Cadastra um novo usuário. Por padrão, role é 'usuario'. Novos usuários não têm acesso a Análise, Agenda de Dividendos e Rankings."""
     senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     data_cadastro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    allowed_screens_val = _default_allowed_screens_json()
 
     resposta_hash = None
     if pergunta_seguranca and resposta_seguranca:
@@ -1852,9 +1904,9 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
             with conn.cursor() as c:
                 try:
                     c.execute('''
-                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario'))
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario', allowed_screens_val))
                     conn.commit()
                     return True
                 except Exception:
@@ -1865,8 +1917,8 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario'))
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, pergunta_seguranca, resposta_hash, data_cadastro, email, role, 'proprietario', allowed_screens_val))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -1998,6 +2050,7 @@ def criar_usuario_google(nome, email, google_id=None):
     # Usar um hash aleatório para evitar problemas com NULL
     senha_hash = bcrypt.hashpw(b"google_oauth_no_password", bcrypt.gensalt()).decode('utf-8')
     data_cadastro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    allowed_screens_val = _default_allowed_screens_json()
     
     if _is_postgres():
         conn = _get_pg_conn()
@@ -2005,9 +2058,9 @@ def criar_usuario_google(nome, email, google_id=None):
             with conn.cursor() as c:
                 try:
                     c.execute('''
-                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google'))
+                        INSERT INTO public.usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google', allowed_screens_val))
                     conn.commit()
                     return username
                 except Exception as e:
@@ -2019,8 +2072,8 @@ def criar_usuario_google(nome, email, google_id=None):
         conn = sqlite3.connect(USUARIOS_DB_PATH)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google'))
+            c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (nome, username, senha_hash, None, None, data_cadastro, email, 'usuario', 'google', allowed_screens_val))
             conn.commit()
             return username
         except sqlite3.IntegrityError as e:
@@ -8034,6 +8087,121 @@ def definir_role_usuario(username, novo_role):
         finally:
             conn.close()
 
+def usuario_bloqueado(username):
+    """Retorna True se o usuário está bloqueado (admin bloqueou)."""
+    if not username:
+        return False
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                try:
+                    c.execute('SELECT COALESCE(blocked, FALSE) FROM public.usuarios WHERE username = %s', (username,))
+                    row = c.fetchone()
+                    return bool(row and row[0])
+                except Exception:
+                    return False
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        try:
+            c = conn.cursor()
+            try:
+                c.execute('SELECT COALESCE(blocked, 0) FROM usuarios WHERE username = ?', (username,))
+                row = c.fetchone()
+                return bool(row and row[0])
+            except sqlite3.OperationalError:
+                return False
+        finally:
+            conn.close()
+
+
+def bloquear_usuario(username, blocked=True):
+    """Bloqueia ou desbloqueia um usuário (apenas admin)."""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute('UPDATE public.usuarios SET blocked = %s WHERE username = %s', (bool(blocked), username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        try:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET blocked = ? WHERE username = ?', (1 if blocked else 0, username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
+def definir_senha_usuario(username, nova_senha):
+    """Define a senha de um usuário (usado pelo admin para alterar senha de outro usuário)."""
+    return alterar_senha_direta(username, nova_senha)
+
+
+def obter_allowed_screens(username):
+    """Retorna a lista de telas permitidas para o usuário. None ou [] significa todas (comportamento padrão)."""
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                try:
+                    c.execute('SELECT allowed_screens FROM public.usuarios WHERE username = %s', (username,))
+                    row = c.fetchone()
+                    if not row or not row[0]:
+                        return None
+                    import json
+                    return json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                except Exception:
+                    return None
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        try:
+            c = conn.cursor()
+            try:
+                c.execute('SELECT allowed_screens FROM usuarios WHERE username = ?', (username,))
+                row = c.fetchone()
+                if not row or not row[0]:
+                    return None
+                import json
+                return json.loads(row[0])
+            except (sqlite3.OperationalError, ValueError):
+                return None
+        finally:
+            conn.close()
+
+
+def atualizar_allowed_screens(username, screens):
+    """Atualiza as telas permitidas para o usuário. screens: lista de strings (ids das telas) ou None para todas. [] = nenhuma tela."""
+    import json
+    val = json.dumps(screens) if screens is not None else None
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute('UPDATE public.usuarios SET allowed_screens = %s WHERE username = %s', (val, username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        try:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET allowed_screens = ? WHERE username = ?', (val, username))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
 def atualizar_last_seen(username):
     """Atualiza o timestamp de última atividade do usuário (presença / quem está online)."""
     if not username:
@@ -8077,9 +8245,19 @@ def _is_online(last_seen_at, within_minutes=5):
 
 
 def listar_usuarios(admin_only=False):
-    """Lista todos os usuários (apenas para admins). Inclui last_seen_at e online (ativo nos últimos 5 min)."""
-    def _row_to_user(row, has_last_seen):
-        last = row[6] if has_last_seen and len(row) > 6 else None
+    """Lista todos os usuários (apenas para admins). Inclui last_seen_at, online, blocked, allowed_screens."""
+    import json as _json
+    def _row_to_user(row, has_extra):
+        last = row[6] if has_extra and len(row) > 6 else None
+        blocked = False
+        allowed_screens = None
+        if has_extra and len(row) > 7:
+            blocked = bool(row[7])
+        if has_extra and len(row) > 8 and row[8]:
+            try:
+                allowed_screens = _json.loads(row[8]) if isinstance(row[8], str) else row[8]
+            except Exception:
+                allowed_screens = None
         return {
             'id': row[0],
             'nome': row[1],
@@ -8089,26 +8267,26 @@ def listar_usuarios(admin_only=False):
             'data_cadastro': row[5],
             'last_seen_at': last,
             'online': _is_online(last),
+            'blocked': blocked,
+            'allowed_screens': allowed_screens,
         }
+    extra_cols = ', last_seen_at, blocked, allowed_screens'
     if _is_postgres():
         conn = _get_pg_conn()
         try:
             with conn.cursor() as c:
-                for with_last_seen in (True, False):
+                for with_extra in (True, False):
                     try:
+                        sel = 'SELECT id, nome, username, email, role, data_cadastro' + (extra_cols if with_extra else '') + ' FROM public.usuarios'
                         if admin_only:
-                            c.execute(
-                                'SELECT id, nome, username, email, role, data_cadastro' + (', last_seen_at' if with_last_seen else '') + ' FROM public.usuarios WHERE role = %s',
-                                ('admin',)
-                            )
+                            sel += ' WHERE role = %s'
+                            c.execute(sel, ('admin',))
                         else:
-                            c.execute(
-                                'SELECT id, nome, username, email, role, data_cadastro' + (', last_seen_at' if with_last_seen else '') + ' FROM public.usuarios'
-                            )
+                            c.execute(sel)
                         rows = c.fetchall()
-                        return [_row_to_user(row, with_last_seen) for row in rows]
+                        return [_row_to_user(row, with_extra) for row in rows]
                     except Exception:
-                        if not with_last_seen:
+                        if not with_extra:
                             raise
                         continue
         finally:
@@ -8118,9 +8296,9 @@ def listar_usuarios(admin_only=False):
         c = conn.cursor()
         try:
             if admin_only:
-                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at FROM usuarios WHERE role = ?', ('admin',))
+                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at, blocked, allowed_screens FROM usuarios WHERE role = ?', ('admin',))
             else:
-                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at FROM usuarios')
+                c.execute('SELECT id, nome, username, email, role, data_cadastro, last_seen_at, blocked, allowed_screens FROM usuarios')
             rows = c.fetchall()
             return [_row_to_user(row, True) for row in rows]
         except sqlite3.OperationalError:

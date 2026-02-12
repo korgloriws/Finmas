@@ -39,6 +39,7 @@ from models import (
     
     obter_perfil_usuario, atualizar_perfil_usuario, atualizar_senha_usuario,
     verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
+    usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
     buscar_usuario_por_email, criar_usuario_google,
     obter_historico_carteira_comparado,
     save_rebalance_config,
@@ -235,6 +236,8 @@ def api_login():
         
       
         if verificar_senha(username, senha):
+            if usuario_bloqueado(username):
+                return jsonify({"error": "Conta bloqueada. Entre em contato com o administrador."}), 403
 
             try:
                 # Verificar e corrigir bancos se necessário
@@ -451,6 +454,11 @@ def api_google_callback():
             print(f"Erro ao verificar bancos para {username}: {e}")
             pass
         
+        if usuario_bloqueado(username):
+            is_production = os.getenv('ENVIRONMENT') == 'production'
+            frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br') if is_production else 'http://localhost:3000'
+            return redirect(f"{frontend_url}/login?error=blocked")
+        
         # Criar sessão
         set_usuario_atual(username)
         session_token = criar_sessao(username, duracao_segundos=3600)
@@ -528,14 +536,15 @@ def api_usuario_atual():
         usuario = get_usuario_atual()
         if usuario:
             perfil = obter_perfil_usuario(usuario)
-            if perfil:
-                return jsonify({
-                    "username": usuario,
-                    "nome": perfil.get('nome'),
-                    "email": perfil.get('email'),
-                    "role": perfil.get('role', 'usuario')
-                }), 200
-            return jsonify({"username": usuario, "role": "usuario"}), 200
+            allowed = obter_allowed_screens(usuario)
+            payload = {
+                "username": usuario,
+                "nome": perfil.get('nome') if perfil else None,
+                "email": perfil.get('email') if perfil else None,
+                "role": perfil.get('role', 'usuario') if perfil else 'usuario',
+                "allowed_screens": allowed,
+            }
+            return jsonify(payload), 200
         else:
             return jsonify({"error": "Nenhum usuário logado"}), 401
     except Exception as e:
@@ -693,6 +702,95 @@ def api_excluir_usuario(username):
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/block", methods=["PUT"])
+def api_bloquear_usuario(username):
+    """Bloqueia ou desbloqueia um usuário (apenas para admins)."""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        if usuario == username:
+            return jsonify({"error": "Você não pode bloquear a si mesmo"}), 400
+        usuario_existente = buscar_usuario_por_username(username)
+        if not usuario_existente:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        data = request.get_json() or {}
+        blocked = data.get('blocked', True)
+        if bloquear_usuario(username, blocked):
+            return jsonify({"message": f"Usuário {username} {'bloqueado' if blocked else 'desbloqueado'} com sucesso"}), 200
+        return jsonify({"error": "Erro ao atualizar bloqueio"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/senha", methods=["PUT"])
+def api_alterar_senha_usuario(username):
+    """Altera a senha de um usuário (apenas para admins)."""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        usuario_existente = buscar_usuario_por_username(username)
+        if not usuario_existente:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        if usuario_existente.get('auth_provider') == 'google':
+            return jsonify({"error": "Não é possível alterar senha de usuário que faz login com Google"}), 400
+        data = request.get_json() or {}
+        nova_senha = data.get('nova_senha') or data.get('senha')
+        if not nova_senha or len(nova_senha) < 4:
+            return jsonify({"error": "Nova senha deve ter pelo menos 4 caracteres"}), 400
+        if definir_senha_usuario(username, nova_senha):
+            return jsonify({"message": f"Senha de {username} alterada com sucesso"}), 200
+        return jsonify({"error": "Erro ao alterar senha"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/telas", methods=["GET"])
+def api_obter_telas_usuario(username):
+    """Obtém as telas permitidas de um usuário (admin ou o próprio usuário)."""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        if usuario != username and not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado"}), 403
+        usuario_existente = buscar_usuario_por_username(username)
+        if not usuario_existente:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        allowed = obter_allowed_screens(username)
+        return jsonify({"allowed_screens": allowed}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/telas", methods=["PUT"])
+def api_atualizar_telas_usuario(username):
+    """Atualiza as telas permitidas de um usuário (apenas para admins)."""
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        if not verificar_role(usuario, 'admin'):
+            return jsonify({"error": "Acesso negado. Apenas administradores"}), 403
+        usuario_existente = buscar_usuario_por_username(username)
+        if not usuario_existente:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        data = request.get_json() or {}
+        telas = data.get('telas')
+        if telas is not None and not isinstance(telas, list):
+            telas = list(telas) if telas else []
+        atualizar_allowed_screens(username, telas)
+        return jsonify({"message": f"Telas de {username} atualizadas", "allowed_screens": obter_allowed_screens(username)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @server.route("/api/admin/usuarios", methods=["GET"])
 def api_listar_usuarios():

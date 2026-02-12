@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 
 import { 
   Minus, 
@@ -23,6 +24,9 @@ import {
   Eye,
   EyeOff,
   Receipt,
+  Check,
+  BookOpen,
+  Sparkles,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { carteiraService } from '../services/api'
@@ -48,7 +52,11 @@ import EditAtivoModal from '../components/carteira/EditAtivoModal'
 import RendaFixaFormModal from '../components/carteira/RendaFixaFormModal'
 
 export default function CarteiraPage() {
-  const { user } = useAuth()
+  const { user, canAccessScreen } = useAuth()
+  const podeVerImpostos = canAccessScreen('carteira-impostos')
+  const podeVerInsights = canAccessScreen('carteira-insights')
+  const podeVerProjecao = canAccessScreen('carteira-projecao')
+  const podeVerSimulador = canAccessScreen('carteira-simulador')
   const [searchParams, setSearchParams] = useSearchParams()
   const [inputTicker, setInputTicker] = useState('')
   const [inputQuantidade, setInputQuantidade] = useState('')
@@ -76,11 +84,11 @@ export default function CarteiraPage() {
   })
   const [manageTipoOpen, setManageTipoOpen] = useState<{open: boolean; tipo?: string}>({open: false})
   const [renameTipoValue, setRenameTipoValue] = useState('')
-  // Carregamento sob demanda - insights (só na aba insights)
+  // Carregamento sob demanda - insights (só na aba insights e se tiver acesso)
   const { data: insights, isLoading: loadingInsights } = useQuery({
     queryKey: ['carteira-insights', user],
     queryFn: carteiraService.getInsights,
-    enabled: !!user && activeTab === 'insights',
+    enabled: !!user && activeTab === 'insights' && podeVerInsights,
     staleTime: 10 * 60 * 1000, // 10 minutos - insights mudam pouco
     refetchOnWindowFocus: false,
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
@@ -825,7 +833,64 @@ export default function CarteiraPage() {
           />
         )}
 
-        {activeTab === 'impostos' && (
+        {activeTab === 'impostos' && !podeVerImpostos && (
+          <motion.div
+            key="impostos-premium"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="py-8 sm:py-12"
+          >
+            <div className="max-w-xl mx-auto text-center space-y-6">
+              <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                <Receipt className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground mb-1">Aba Impostos</h3>
+                <p className="text-sm text-muted-foreground">
+                  Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                </p>
+              </div>
+              <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  O que tem na aba Impostos
+                </p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">IR sobre vendas</strong> — Ganho de capital com preço médio FIFO, day trade, isenção até R$ 20 mil/mês e alíquotas por tipo de ativo (ações, FIIs, BDRs, renda fixa).</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">IR sobre proventos</strong> — Dividendos, JCP e outros proventos com retenção na fonte e imposto devido.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Filtros e exportação</strong> — Por período (mês, trimestre, ano, total) e tipo (vendas/proventos), com exportação para Excel.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/vendas"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Quero ter acesso à aba Impostos
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ativos')}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                >
+                  Ver outra aba
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        {activeTab === 'impostos' && podeVerImpostos && (
           <CarteiraImpostosTab
             carteira={carteira || []}
             movimentacoes={movimentacoesAll || []}
@@ -835,7 +900,64 @@ export default function CarteiraPage() {
           />
         )}
 
-        {activeTab === 'insights' && (
+        {activeTab === 'insights' && !podeVerInsights && (
+          <motion.div
+            key="insights-premium"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="py-8 sm:py-12"
+          >
+            <div className="max-w-xl mx-auto text-center space-y-6">
+              <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                <Brain className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground mb-1">Aba Insights</h3>
+                <p className="text-sm text-muted-foreground">
+                  Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                </p>
+              </div>
+              <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  O que tem na aba Insights
+                </p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Análise de correlação</strong> — Matriz de correlação entre os ativos da carteira para entender diversificação e risco.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Insights automáticos</strong> — Sugestões e alertas com base na composição e performance da sua carteira.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Período configurável</strong> — Correlação em 6 meses, 1 ano ou 2 anos para diferentes horizontes.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/vendas"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Quero ter acesso à aba Insights
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ativos')}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                >
+                  Ver outra aba
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        {activeTab === 'insights' && podeVerInsights && (
           <CarteiraInsightsTab
             carteira={carteira || []}
             loadingInsights={loadingInsights}
@@ -879,7 +1001,64 @@ export default function CarteiraPage() {
           />
         )}
 
-        {activeTab === 'projecao' && (
+        {activeTab === 'projecao' && !podeVerProjecao && (
+          <motion.div
+            key="projecao-premium"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="py-8 sm:py-12"
+          >
+            <div className="max-w-xl mx-auto text-center space-y-6">
+              <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                <Calculator className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground mb-1">Aba Projeção</h3>
+                <p className="text-sm text-muted-foreground">
+                  Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                </p>
+              </div>
+              <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  O que tem na aba Projeção
+                </p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Projeção de valor</strong> — Evolução do patrimônio com ou sem dividendos e com aportes periódicos.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Metas de renda e patrimônio</strong> — Defina um alvo e veja em quanto tempo sua carteira pode alcançar.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Gráficos e metas de aporte</strong> — Histórico, projeção futura e acompanhamento de metas de aporte mensal ou anual.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/vendas"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Quero ter acesso à aba Projeção
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ativos')}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                >
+                  Ver outra aba
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        {activeTab === 'projecao' && podeVerProjecao && (
           <CarteiraProjecaoTab
             carteira={carteira || []}
             historicoCarteira={historicoCarteira ?? undefined}
@@ -890,7 +1069,64 @@ export default function CarteiraPage() {
           />
         )}
 
-        {activeTab === 'simulador' && (
+        {activeTab === 'simulador' && !podeVerSimulador && (
+          <motion.div
+            key="simulador-premium"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="py-8 sm:py-12"
+          >
+            <div className="max-w-xl mx-auto text-center space-y-6">
+              <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                <Zap className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground mb-1">Aba Simulador</h3>
+                <p className="text-sm text-muted-foreground">
+                  Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                </p>
+              </div>
+              <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  O que tem na aba Simulador
+                </p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Choques de indexadores</strong> — Simule impacto de variações em CDI, IPCA e SELIC na sua carteira de renda fixa.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Cenários predefinidos</strong> — Otimista, pessimista, crise e inflação alta para stress test rápido.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span><strong className="text-foreground">Monte Carlo</strong> — Simulações probabilísticas para enxergar faixas de resultado no longo prazo.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/vendas"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Quero ter acesso à aba Simulador
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ativos')}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                >
+                  Ver outra aba
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        {activeTab === 'simulador' && podeVerSimulador && (
           <CarteiraSimuladorTab carteira={carteira || []} />
         )}
       </div>

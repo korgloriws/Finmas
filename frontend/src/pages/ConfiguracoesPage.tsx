@@ -10,10 +10,14 @@ import {
   Shield, 
   ShieldCheck,
   AlertTriangle,
-  Plus
+  Plus,
+  Ban,
+  LockKeyhole,
+  LayoutGrid,
+  Mail
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { perfilService, adminService } from '../services/api'
+import { perfilService, adminService, TELAS_APP } from '../services/api'
 import { toast } from 'react-hot-toast'
 import HelpTips from '../components/HelpTips'
 
@@ -41,7 +45,7 @@ function formatLastSeenShort(lastSeenAt: string | null | undefined): string {
 }
 
 export default function ConfiguracoesPage() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, refreshAllowedScreens } = useAuth()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'perfil' | 'admin'>('perfil')
   
@@ -66,6 +70,11 @@ export default function ConfiguracoesPage() {
   })
   const [usuarioParaExcluir, setUsuarioParaExcluir] = useState<string | null>(null)
   const [confirmacaoExclusaoAdmin, setConfirmacaoExclusaoAdmin] = useState('')
+  const [usuarioParaSenha, setUsuarioParaSenha] = useState<string | null>(null)
+  const [usuarioParaTelas, setUsuarioParaTelas] = useState<any | null>(null)
+  const [novaSenhaAdmin, setNovaSenhaAdmin] = useState('')
+  const [confirmarSenhaAdmin, setConfirmarSenhaAdmin] = useState('')
+  const [telasSelecionadas, setTelasSelecionadas] = useState<string[]>([])
 
   // Carregar perfil
   //  SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
@@ -183,6 +192,48 @@ export default function ConfiguracoesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Erro ao excluir usuário')
+    },
+  })
+
+  const bloquearUsuarioMutation = useMutation({
+    mutationFn: ({ username, blocked }: { username: string; blocked: boolean }) =>
+      adminService.bloquearUsuario(username, blocked),
+    onSuccess: (_, { blocked }) => {
+      toast.success(blocked ? 'Usuário bloqueado.' : 'Usuário desbloqueado.')
+      queryClient.invalidateQueries({ queryKey: ['admin-usuarios'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Erro ao atualizar bloqueio')
+    },
+  })
+
+  const alterarSenhaUsuarioMutation = useMutation({
+    mutationFn: ({ username, novaSenha }: { username: string; novaSenha: string }) =>
+      adminService.alterarSenhaUsuario(username, novaSenha),
+    onSuccess: () => {
+      toast.success('Senha alterada com sucesso!')
+      setUsuarioParaSenha(null)
+      setNovaSenhaAdmin('')
+      setConfirmarSenhaAdmin('')
+      queryClient.invalidateQueries({ queryKey: ['admin-usuarios'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Erro ao alterar senha')
+    },
+  })
+
+  const atualizarTelasUsuarioMutation = useMutation({
+    mutationFn: ({ username, telas }: { username: string; telas: string[] | null }) =>
+      adminService.atualizarTelasUsuario(username, telas),
+    onSuccess: (_, { username }) => {
+      toast.success('Telas atualizadas!')
+      queryClient.invalidateQueries({ queryKey: ['admin-usuarios'] })
+      setUsuarioParaTelas(null)
+      setTelasSelecionadas([])
+      if (user === username) refreshAllowedScreens()
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Erro ao atualizar telas')
     },
   })
 
@@ -495,6 +546,24 @@ export default function ConfiguracoesPage() {
                 </button>
               </div>
             </div>
+
+            {/* Suporte / Contato */}
+            <div className="border-t border-border pt-8">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                Suporte
+              </h2>
+              <p className="text-sm text-muted-foreground mb-2">
+                Dúvidas, problemas ou solicitações? Entre em contato com o administrador pelo e-mail:
+              </p>
+              <a
+                href="mailto:finmasfinanceiro@gmail.com"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-medium transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                finmasfinanceiro@gmail.com
+              </a>
+            </div>
           </motion.div>
         )}
 
@@ -652,6 +721,12 @@ export default function ConfiguracoesPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
+                        {usuario.blocked && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-destructive/10 text-destructive rounded text-xs font-medium">
+                            <Ban className="w-3 h-3" />
+                            Bloqueado
+                          </span>
+                        )}
                         {usuario.role === 'admin' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
                             <ShieldCheck className="w-3 h-3" />
@@ -679,7 +754,42 @@ export default function ConfiguracoesPage() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {usuario.username !== user && (
+                        <>
+                          <button
+                            onClick={() => bloquearUsuarioMutation.mutate({ username: usuario.username, blocked: !usuario.blocked })}
+                            disabled={bloquearUsuarioMutation.isPending}
+                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 ${
+                              usuario.blocked
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-amber-600 text-white hover:bg-amber-700'
+                            }`}
+                            title={usuario.blocked ? 'Desbloquear' : 'Bloquear'}
+                          >
+                            {usuario.blocked ? 'Desbloquear' : 'Bloquear'}
+                          </button>
+                          <button
+                            onClick={() => { setUsuarioParaSenha(usuario.username); setNovaSenhaAdmin(''); setConfirmarSenhaAdmin(''); }}
+                            disabled={alterarSenhaUsuarioMutation.isPending}
+                            className="px-3 py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                            title="Alterar senha"
+                          >
+                            <LockKeyhole className="w-4 h-4 inline" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUsuarioParaTelas(usuario)
+                              setTelasSelecionadas(usuario.allowed_screens ?? TELAS_APP.map((t) => t.id))
+                            }}
+                            disabled={atualizarTelasUsuarioMutation.isPending}
+                            className="px-3 py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                            title="Telas permitidas"
+                          >
+                            <LayoutGrid className="w-4 h-4 inline" />
+                          </button>
+                        </>
+                      )}
                       {usuario.role === 'admin' ? (
                         <button
                           onClick={() => handleDefinirRole(usuario.username, 'usuario')}
@@ -784,6 +894,114 @@ export default function ConfiguracoesPage() {
                     >
                       <Trash2 className="w-4 h-4" />
                       {excluirUsuarioMutation.isPending ? 'Excluindo...' : 'Excluir Usuário'}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            {/* Modal Alterar senha (admin) */}
+            {usuarioParaSenha && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card border border-border rounded-lg p-6 max-w-md w-full space-y-4"
+                >
+                  <h3 className="text-lg font-semibold text-foreground">Alterar senha de @{usuarioParaSenha}</h3>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">Nova senha</label>
+                    <input
+                      type="password"
+                      value={novaSenhaAdmin}
+                      onChange={(e) => setNovaSenhaAdmin(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Mínimo 4 caracteres"
+                      autoFocus
+                    />
+                    <label className="block text-sm font-medium text-foreground">Confirmar senha</label>
+                    <input
+                      type="password"
+                      value={confirmarSenhaAdmin}
+                      onChange={(e) => setConfirmarSenhaAdmin(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Repita a senha"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => { setUsuarioParaSenha(null); setNovaSenhaAdmin(''); setConfirmarSenhaAdmin(''); }}
+                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!novaSenhaAdmin || novaSenhaAdmin.length < 4) {
+                          toast.error('Senha deve ter pelo menos 4 caracteres')
+                          return
+                        }
+                        if (novaSenhaAdmin !== confirmarSenhaAdmin) {
+                          toast.error('As senhas não coincidem')
+                          return
+                        }
+                        alterarSenhaUsuarioMutation.mutate({ username: usuarioParaSenha, novaSenha: novaSenhaAdmin })
+                      }}
+                      disabled={alterarSenhaUsuarioMutation.isPending || !novaSenhaAdmin || novaSenhaAdmin !== confirmarSenhaAdmin}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {alterarSenhaUsuarioMutation.isPending ? 'Salvando...' : 'Alterar senha'}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            {/* Modal Telas permitidas (admin) */}
+            {usuarioParaTelas && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card border border-border rounded-lg p-6 max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col"
+                >
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Telas permitidas para @{usuarioParaTelas.username}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Marque as telas que o usuário pode acessar. Deixe todas desmarcadas para negar acesso a tudo (exceto a página de acesso negado).</p>
+                  <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                    {TELAS_APP.map((tela) => (
+                      <label key={tela.id} className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-muted/50">
+                        <input
+                          type="checkbox"
+                          checked={telasSelecionadas.includes(tela.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setTelasSelecionadas((prev) => [...prev, tela.id])
+                            } else {
+                              setTelasSelecionadas((prev) => prev.filter((id) => id !== tela.id))
+                            }
+                          }}
+                          className="rounded border-border"
+                        />
+                        <span className="text-sm text-foreground">{tela.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                    <button
+                      onClick={() => { setUsuarioParaTelas(null); setTelasSelecionadas([]); }}
+                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const telas = telasSelecionadas.length === TELAS_APP.length ? null : telasSelecionadas
+                        atualizarTelasUsuarioMutation.mutate({ username: usuarioParaTelas.username, telas })
+                      }}
+                      disabled={atualizarTelasUsuarioMutation.isPending}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {atualizarTelasUsuarioMutation.isPending ? 'Salvando...' : 'Salvar telas'}
                     </button>
                   </div>
                 </motion.div>

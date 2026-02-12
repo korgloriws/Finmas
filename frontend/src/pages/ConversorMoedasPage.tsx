@@ -1,23 +1,18 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { 
-
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
   Calculator,
   RefreshCw,
   ArrowRight,
   Globe,
-  BarChart3,
-
+  Loader2,
+  Lightbulb,
 } from 'lucide-react'
-import { ativoService, carteiraService } from '../services/api'
-import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, formatPercentage } from '../utils/formatters'
+import { ativoService } from '../services/api'
+import { formatCurrency } from '../utils/formatters'
 import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
-import TickerWithLogo from '../components/TickerWithLogo'
-
 
 const CURRENCY_PAIRS = [
   { from: 'BRL', to: 'USD', name: 'Real → Dólar', symbol: 'BRLUSD=X' },
@@ -75,13 +70,12 @@ const SUPPORTED_CODES = Array.from(new Set(CURRENCY_PAIRS.flatMap(p => [p.from, 
 const SUPPORTED_CURRENCIES = CURRENCIES.filter(c => SUPPORTED_CODES.includes(c.code))
 
 export default function ConversorMoedasPage() {
-  const { user } = useAuth()
   const [amount, setAmount] = useState<string>('1')
   const [fromCurrency, setFromCurrency] = useState('BRL')
   const [toCurrency, setToCurrency] = useState('USD')
   const [searchTicker, setSearchTicker] = useState('')
   const [selectedTicker, setSelectedTicker] = useState('')
-  const [activeTab, setActiveTab] = useState<'conversor' | 'ativos' | 'carteira'>('conversor')
+  const [activeTab, setActiveTab] = useState<'conversor' | 'ativos'>('conversor')
 
 
   const getExchangeRate = useCallback(async (from: string, to: string) => {
@@ -148,43 +142,6 @@ export default function ConversorMoedasPage() {
     return numAmount * rate
   }, [amount, exchangeRateQuery.data, fromCurrency, toCurrency])
 
-  // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
-  // Carteira real do sistema – declarado antes do uso em carteiraRatesQuery
-  const carteiraQuery = useQuery({
-    queryKey: ['carteira', user],
-    queryFn: async () => {
-      const data = await carteiraService.getCarteira()
-      // Mapear para estrutura com moeda inferida
-      return data.map((a: any) => ({
-        ticker: a.ticker,
-        quantidade: a.quantidade ?? 0,
-        preco_atual: a.preco_atual ?? 0,
-        valor_total: a.valor_total ?? ((a.preco_atual || 0) * (a.quantidade || 0)),
-        moeda: typeof a.ticker === 'string' && a.ticker.endsWith('.SA') ? 'BRL' : 'USD',
-      }))
-    },
-    enabled: !!user,
-    staleTime: 60_000,
-  })
-
-
-  const carteiraRatesQuery = useQuery({
-    queryKey: ['carteira-rates', toCurrency, (carteiraQuery.data || []).map(a => `${a.ticker}:${a.moeda}`)],
-    queryFn: async () => {
-      if (!carteiraQuery.data) return {} as Record<string, number>
-      const entries = await Promise.all(
-        carteiraQuery.data.map(async (a) => {
-          const rate = a.moeda === toCurrency ? 1 : await getExchangeRate(a.moeda, toCurrency)
-          return [a.ticker, rate] as const
-        })
-      )
-      return Object.fromEntries(entries) as Record<string, number>
-    },
-    enabled: !!carteiraQuery.data && carteiraQuery.data.length > 0,
-    staleTime: 60_000,
-  })
-
-
   const searchResults = useMemo(() => {
     if (!searchTicker.trim()) return []
     
@@ -234,86 +191,6 @@ export default function ConversorMoedasPage() {
     return `${symbol}${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
-  // Componente para linha da carteira
-  const CarteiraRow = ({ 
-    ativo, 
-    toCurrency, 
-    getExchangeRate, 
-    index 
-  }: { 
-    ativo: { ticker: string; quantidade: number; preco_atual: number; valor_total: number; moeda: string }
-    toCurrency: string
-    getExchangeRate: (from: string, to: string) => Promise<number>
-    index: number
-  }) => {
-    const [rate, setRate] = useState<number | null>(null)
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-      const fetchRate = async () => {
-        setLoading(true)
-        try {
-          if (ativo.moeda === toCurrency) {
-            setRate(1)
-          } else {
-            const exchangeRate = await getExchangeRate(ativo.moeda, toCurrency)
-            setRate(exchangeRate)
-          }
-        } catch (error) {
-          console.error('Erro ao buscar taxa:', error)
-          setRate(0)
-        } finally {
-          setLoading(false)
-        }
-      }
-
-      fetchRate()
-    }, [ativo.moeda, toCurrency, getExchangeRate])
-
-    const valorConvertido = ativo.valor_total * (rate || 0)
-    const variacao = ((valorConvertido - ativo.valor_total) / ativo.valor_total) * 100
-
-    return (
-      <motion.tr 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.1 }}
-        className="border-b border-border hover:bg-muted/20 transition-colors"
-      >
-        <td className="px-4 py-3">
-          <TickerWithLogo ticker={ativo.ticker} size="sm" />
-        </td>
-        <td className="px-4 py-3">{ativo.quantidade}</td>
-        <td className="px-4 py-3">
-          {formatCurrencyByCode(ativo.preco_atual, ativo.moeda)}
-        </td>
-        <td className="px-4 py-3">
-          {formatCurrencyByCode(ativo.valor_total, ativo.moeda)}
-        </td>
-        <td className="px-4 py-3 font-semibold">
-          {loading ? (
-            <div className="animate-pulse h-4 bg-muted rounded w-16"></div>
-          ) : (
-            formatCurrencyByCode(valorConvertido, toCurrency)
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {loading ? (
-            <div className="animate-pulse h-4 bg-muted rounded w-12"></div>
-          ) : (
-            <span className={`flex items-center gap-1 ${
-              variacao > 0 ? 'text-green-600' : variacao < 0 ? 'text-red-600' : 'text-muted-foreground'
-            }`}>
-              {variacao > 0 ? <TrendingUp className="w-4 h-4" /> : variacao < 0 ? <TrendingDown className="w-4 h-4" /> : null}
-              {formatPercentage(variacao)}
-            </span>
-          )}
-        </td>
-      </motion.tr>
-    )
-  }
-
- 
   const AssetProjection = ({ 
     fromCurrency, 
     toCurrency, 
@@ -348,14 +225,14 @@ export default function ConversorMoedasPage() {
     const convertedPrice = price * (rate || 0)
 
     return (
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border dark:border-white/20 rounded-xl p-4 shadow-sm hover:border-primary/20 transition-colors">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-medium">{toCurrency}</span>
+          <span className="font-medium text-foreground">{toCurrency}</span>
           <Globe className="w-4 h-4 text-muted-foreground" />
         </div>
         {loading ? (
-          <div className="animate-pulse">
-            <div className="h-6 bg-muted rounded w-20 mb-1"></div>
+          <div className="animate-pulse space-y-2">
+            <div className="h-6 bg-muted rounded w-24"></div>
             <div className="h-3 bg-muted rounded w-32"></div>
           </div>
         ) : (
@@ -363,7 +240,7 @@ export default function ConversorMoedasPage() {
             <p className="text-lg font-bold text-primary">
               {formatCurrencyByCode(convertedPrice, toCurrency)}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               Taxa: 1 {fromCurrency} = {formatCurrencyByCode(rate || 0, toCurrency)}
             </p>
           </>
@@ -373,41 +250,77 @@ export default function ConversorMoedasPage() {
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Conversor de Moedas</h1>
+    <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 p-4 sm:p-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <Globe className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Conversor de Moedas</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Taxas de câmbio e projeção de ativos em outras moedas
+            </p>
+          </div>
+        </div>
         <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() => exchangeRateQuery.refetch()}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          disabled={exchangeRateQuery.isFetching}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-70"
         >
-          <RefreshCw className="w-4 h-4" />
-          <span className="hidden xs:inline">Atualizar</span>
-          <span className="xs:hidden">Atualizar</span>
+          {exchangeRateQuery.isFetching ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+          Atualizar taxas
         </motion.button>
-      </div>
+      </motion.div>
+
+      {/* Dica */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.4 }}
+        className="flex gap-3 p-4 rounded-xl border border-border dark:border-white/20 bg-primary/5 dark:bg-primary/10"
+      >
+        <Lightbulb className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-foreground">
+          <p className="font-medium mb-0.5">Taxas de câmbio</p>
+          <p className="text-muted-foreground">
+            Use o conversor para valores em viagem ou para ver ativos em outra moeda. As taxas são atualizadas periodicamente.
+          </p>
+        </div>
+      </motion.div>
 
       {/* Tabs */}
-      <div className="bg-card border border-border rounded-lg">
-        <div className="border-b border-border">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
+        className="bg-card border border-border dark:border-white/20 rounded-xl sm:rounded-2xl shadow-lg overflow-hidden"
+      >
+        <div className="border-b border-border dark:border-white/20">
           <div className="flex overflow-x-auto scrollbar-hide">
             {[
               { id: 'conversor', label: 'Conversor', icon: Calculator, shortLabel: 'Conversor' },
               { id: 'ativos', label: 'Projeção de Ativos', icon: TrendingUp, shortLabel: 'Ativos' },
-              { id: 'carteira', label: 'Carteira', icon: BarChart3, shortLabel: 'Carteira' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.id
-                    ? 'text-primary border-b-2 border-primary'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'text-primary border-b-2 border-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
                 }`}
               >
                 <tab.icon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
@@ -421,31 +334,29 @@ export default function ConversorMoedasPage() {
         <div className="p-4 sm:p-6">
           {activeTab === 'conversor' && (
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
               className="space-y-6"
             >
               {/* Conversor Principal */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Valor de Entrada */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Valor</label>
                   <input
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-3 border border-border dark:border-white/20 rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     placeholder="0.00"
                   />
                 </div>
-
-                {/* Moeda de Origem */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">De</label>
                   <select
                     value={fromCurrency}
                     onChange={(e) => setFromCurrency(e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-3 border border-border dark:border-white/20 rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     aria-label="Selecionar moeda de origem"
                   >
                     {SUPPORTED_CURRENCIES.map(currency => (
@@ -455,14 +366,12 @@ export default function ConversorMoedasPage() {
                     ))}
                   </select>
                 </div>
-
-                {/* Moeda de Destino */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Para</label>
                   <select
                     value={toCurrency}
                     onChange={(e) => setToCurrency(e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-3 border border-border dark:border-white/20 rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     aria-label="Selecionar moeda de destino"
                   >
                     {SUPPORTED_CURRENCIES.map(currency => (
@@ -474,25 +383,30 @@ export default function ConversorMoedasPage() {
                 </div>
               </div>
 
-              {/* Resultado */}
-              <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 rounded-lg p-6">
-                <div className="flex items-center justify-between">
+              {/* Resultado em destaque */}
+              <div className="rounded-xl border-2 border-primary/40 dark:border-primary/50 bg-primary/5 dark:bg-primary/10 p-5 sm:p-6 shadow-lg shadow-primary/5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Taxa de Câmbio</p>
-                    <p className="text-2xl font-bold text-foreground">
+                    <p className="text-sm text-muted-foreground">Taxa de câmbio</p>
+                    <p className="text-lg sm:text-xl font-bold text-foreground">
                       {exchangeRateQuery.isLoading ? (
-                        <div className="animate-pulse">Carregando...</div>
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Carregando...
+                        </span>
                       ) : (
                         `1 ${fromCurrency} = ${formatCurrencyByCode((fromCurrency === toCurrency ? 1 : (exchangeRateQuery.data || 0)), toCurrency)}`
                       )}
                     </p>
                   </div>
-                  <ArrowRight className="w-8 h-8 text-primary" />
-                  <div className="space-y-1">
+                  <ArrowRight className="w-8 h-8 text-primary flex-shrink-0 hidden sm:block" />
+                  <div className="space-y-1 sm:text-right">
                     <p className="text-sm text-muted-foreground">Resultado</p>
-                    <p className="text-2xl font-bold text-primary">
+                    <p className="text-2xl sm:text-3xl font-bold text-primary">
                       {exchangeRateQuery.isLoading ? (
-                        <div className="animate-pulse">Carregando...</div>
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        </span>
                       ) : (
                         formatCurrencyByCode(convertedAmount, toCurrency)
                       )}
@@ -502,9 +416,9 @@ export default function ConversorMoedasPage() {
               </div>
 
               {/* Pares Populares */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Pares Populares</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-3">
+                <h3 className="text-base font-semibold text-foreground">Pares populares</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {CURRENCY_PAIRS.slice(0, 6).map((pair) => (
                     <motion.button
                       key={pair.symbol}
@@ -514,14 +428,14 @@ export default function ConversorMoedasPage() {
                         setFromCurrency(pair.from)
                         setToCurrency(pair.to)
                       }}
-                      className={`p-4 border rounded-lg transition-colors ${
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
                         fromCurrency === pair.from && toCurrency === pair.to
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
+                          ? 'border-primary bg-primary/10 dark:bg-primary/20'
+                          : 'border-border dark:border-white/20 hover:border-primary/40 bg-card'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{pair.name}</span>
+                        <span className="font-medium text-foreground">{pair.name}</span>
                         <ArrowRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </motion.button>
@@ -533,11 +447,11 @@ export default function ConversorMoedasPage() {
 
           {activeTab === 'ativos' && (
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              {/* Busca de Ativo */}
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <div className="flex-1">
@@ -547,20 +461,19 @@ export default function ConversorMoedasPage() {
                       onChange={(e) => setSearchTicker(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Digite o ticker (ex: PETR4, AAPL, MSFT)..."
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-4 py-3 border border-border dark:border-white/20 rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={handleSearch}
-                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap"
+                    className="px-5 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
                   >
                     Buscar
                   </motion.button>
                 </div>
 
-                {/* Sugestões */}
                 {searchResults.length > 0 && !selectedTicker && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {searchResults.map((ticker) => (
@@ -569,7 +482,7 @@ export default function ConversorMoedasPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => setSelectedTicker(ticker)}
-                        className="p-2 text-sm border border-border rounded hover:border-primary/50 transition-colors"
+                        className="p-3 text-sm border border-border dark:border-white/20 rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
                       >
                         {ticker}
                       </motion.button>
@@ -578,9 +491,8 @@ export default function ConversorMoedasPage() {
                 )}
               </div>
 
-              {/* Informações do Ativo */}
               {selectedTicker && ativoQuery.data && (
-                <div className="bg-card border border-border rounded-lg p-6 space-y-6">
+                <div className="bg-card border border-border dark:border-white/20 rounded-xl p-6 space-y-6 shadow-sm">
                   {/* Header do Ativo */}
                   <div className="flex items-center gap-4">
                     {logoQuery.data ? (
@@ -601,23 +513,22 @@ export default function ConversorMoedasPage() {
                     </div>
                   </div>
 
-                  {/* Métricas Principais */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-muted/30 rounded-lg p-4">
-                      <p className="text-sm text-muted-foreground">Preço Atual</p>
-                      <p className="text-xl font-bold">
+                    <div className="bg-muted/30 dark:bg-white/[0.04] rounded-xl p-4 border border-border dark:border-white/10">
+                      <p className="text-sm text-muted-foreground">Preço atual</p>
+                      <p className="text-xl font-bold text-foreground">
                         {formatCurrency(ativoQuery.data.info?.currentPrice)}
                       </p>
                     </div>
-                    <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="bg-muted/30 dark:bg-white/[0.04] rounded-xl p-4 border border-border dark:border-white/10">
                       <p className="text-sm text-muted-foreground">Moeda</p>
-                      <p className="text-xl font-bold">
+                      <p className="text-xl font-bold text-foreground">
                         {ativoQuery.data.info?.currency || 'N/A'}
                       </p>
                     </div>
-                    <div className="bg-muted/30 rounded-lg p-4">
-                      <p className="text-sm text-muted-foreground">Market Cap</p>
-                      <p className="text-xl font-bold">
+                    <div className="bg-muted/30 dark:bg-white/[0.04] rounded-xl p-4 border border-border dark:border-white/10">
+                      <p className="text-sm text-muted-foreground">Market cap</p>
+                      <p className="text-xl font-bold text-foreground">
                         {formatCurrency(ativoQuery.data.info?.marketCap)}
                       </p>
                     </div>
@@ -648,14 +559,14 @@ export default function ConversorMoedasPage() {
               {selectedTicker && ativoQuery.isLoading && (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">Carregando dados do ativo...</p>
                   </div>
                 </div>
               )}
 
               {selectedTicker && ativoQuery.error && (
-                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4">
                   <p className="text-destructive font-medium">Erro ao carregar dados do ativo.</p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Verifique se o ticker está correto e tente novamente.
@@ -665,122 +576,8 @@ export default function ConversorMoedasPage() {
             </motion.div>
           )}
 
-          {activeTab === 'carteira' && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              {/* Seletor de Moeda de Referência */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                <label className="text-sm font-medium whitespace-nowrap">Moeda de Referência:</label>
-                <select
-                  value={toCurrency}
-                  onChange={(e) => setToCurrency(e.target.value)}
-                  className="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm sm:text-base border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  aria-label="Selecionar moeda de referência"
-                >
-                  {SUPPORTED_CURRENCIES.map(currency => (
-                    <option key={currency.code} value={currency.code}>
-                      {currency.code} - {currency.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tabela da Carteira */}
-              {carteiraQuery.data && (
-                <div className="space-y-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted/30">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-medium">Ativo</th>
-                          <th className="px-4 py-3 text-left font-medium">Quantidade</th>
-                          <th className="px-4 py-3 text-left font-medium">Preço Original</th>
-                          <th className="px-4 py-3 text-left font-medium">Valor Original</th>
-                          <th className="px-4 py-3 text-left font-medium">Valor em {toCurrency}</th>
-                          <th className="px-4 py-3 text-left font-medium">Variação</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {carteiraQuery.data.map((ativo, index) => (
-                          <CarteiraRow 
-                            key={ativo.ticker}
-                            ativo={ativo}
-                            toCurrency={toCurrency}
-                            getExchangeRate={getExchangeRate}
-                            index={index}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Resumo */}
-                  <div className="bg-card border border-border rounded-lg p-6">
-                    <h4 className="text-lg font-semibold mb-4">Resumo da Carteira</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Valor Total Original</p>
-                        <p className="text-xl font-bold">
-                          {formatCurrencyByCode(
-                            carteiraQuery.data.reduce((sum, ativo) => sum + ativo.valor_total, 0),
-                            'BRL'
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Valor Total em {toCurrency}</p>
-                        {carteiraRatesQuery.isLoading ? (
-                          <div className="animate-pulse h-6 bg-muted rounded w-32" />
-                        ) : (
-                          <p className="text-xl font-bold text-primary">
-                            {formatCurrencyByCode(
-                              carteiraQuery.data.reduce((sum, ativo) => {
-                                const taxa = carteiraRatesQuery.data?.[ativo.ticker] ?? 0
-                                return sum + (ativo.valor_total * taxa)
-                              }, 0),
-                              toCurrency
-                            )}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Variação Total</p>
-                        {carteiraRatesQuery.isLoading ? (
-                          <div className="animate-pulse h-6 bg-muted rounded w-24" />
-                        ) : (
-                          <p className="text-xl font-bold text-green-600">
-                            {(() => {
-                              const originalTotal = carteiraQuery.data.reduce((sum, a) => sum + a.valor_total, 0)
-                              const convertidoTotal = carteiraQuery.data.reduce((sum, a) => {
-                                const taxa = carteiraRatesQuery.data?.[a.ticker] ?? 0
-                                return sum + (a.valor_total * taxa)
-                              }, 0)
-                              const variacao = originalTotal > 0 ? ((convertidoTotal - originalTotal) / originalTotal) * 100 : 0
-                              return formatPercentage(variacao)
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {carteiraQuery.isLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                    <p className="text-sm text-muted-foreground">Carregando carteira...</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   )
 }

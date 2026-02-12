@@ -222,7 +222,53 @@ export const adminService = {
     const response = await api.delete(url)
     return response.data
   },
+
+  bloquearUsuario: async (username: string, blocked: boolean) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.put(`/admin/usuarios/${encoded}/block`, { blocked })
+    return response.data
+  },
+
+  alterarSenhaUsuario: async (username: string, novaSenha: string) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.put(`/admin/usuarios/${encoded}/senha`, { nova_senha: novaSenha })
+    return response.data
+  },
+
+  obterTelasUsuario: async (username: string) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.get(`/admin/usuarios/${encoded}/telas`)
+    return response.data
+  },
+
+  atualizarTelasUsuario: async (username: string, telas: string[] | null) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.put(`/admin/usuarios/${encoded}/telas`, { telas: telas ?? [] })
+    return response.data
+  },
 }
+
+/** Lista de telas do app para controle de acesso (id = path ou chave da rota) */
+export const TELAS_APP = [
+  { id: 'home', path: '/', label: 'Home' },
+  { id: 'analise', path: '/analise', label: 'Análise de oportunidades' },
+  { id: 'detalhes', path: '/detalhes', label: 'Detalhes dos ativos' },
+  { id: 'carteira', path: '/carteira', label: 'Carteira' },
+  { id: 'noticias', path: '/noticias', label: 'Notícias' },
+  { id: 'agenda-dividendos', path: '/agenda-dividendos', label: 'Agenda de Dividendos' },
+  { id: 'juros-compostos', path: '/juros-compostos', label: 'Calculadora de Juros Compostos' },
+  { id: 'guia', path: '/guia', label: 'Guia do Mercado' },
+  { id: 'conversor', path: '/conversor', label: 'Conversor de Moedas' },
+  { id: 'controle', path: '/controle', label: 'Controle Financeiro' },
+  { id: 'rankings', path: '/rankings', label: 'Rankings' },
+  { id: 'conceitos', path: '/detalhes/conceitos', label: 'Conceitos (Detalhes)' },
+  { id: 'radar-dividendos', path: '/detalhes/radar-dividendos', label: 'Radar de Dividendos (Detalhes)' },
+  { id: 'carteira-impostos', path: '/carteira?tab=impostos', label: 'Impostos (Carteira)' },
+  { id: 'carteira-insights', path: '/carteira?tab=insights', label: 'Insights (Carteira)' },
+  { id: 'carteira-projecao', path: '/carteira?tab=projecao', label: 'Projeção (Carteira)' },
+  { id: 'carteira-simulador', path: '/carteira?tab=simulador', label: 'Simulador (Carteira)' },
+  { id: 'configuracoes', path: '/configuracoes', label: 'Configurações' },
+] as const
 
 export const carteiraService = {
 

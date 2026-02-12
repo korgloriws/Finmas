@@ -24,6 +24,8 @@ import ConfiguracoesPage from './pages/ConfiguracoesPage'
 import GoogleCallbackPage from './pages/GoogleCallbackPage'
 import HomePage from './pages/HomePage'
 import NoticiasPage from './pages/NoticiasPage'
+import AcessoNegadoPage from './pages/AcessoNegadoPage'
+import VendasPage from './pages/VendasPage'
 
 function App() {
   return (
@@ -37,6 +39,7 @@ function App() {
           <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
           <Route path="/recuperar-senha" element={<RecuperacaoSenhaPage />} />
           <Route path="/configurar-seguranca" element={<ConfigurarSegurancaPage />} />
+          <Route path="/vendas" element={<VendasPage />} />
           
           {/* Rotas protegidas - PERFORMANCE: Sem Suspense para navegação instantânea */}
           <Route path="/" element={
@@ -154,6 +157,16 @@ function App() {
               <SecurityCheck>
                 <Layout>
                   <ConfiguracoesPage />
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/acesso-negado" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <AcessoNegadoPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>

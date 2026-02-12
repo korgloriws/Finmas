@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -12,6 +12,9 @@ import {
   LineChart,
   RefreshCw,
   ScanLine,
+  Sparkles,
+  Check,
+  BookOpen,
 } from 'lucide-react'
 import { ativoService, carteiraService } from '../services/api'
 import { AtivoDetalhes, AtivoInfo, AtivoCarteira } from '../types'
@@ -44,7 +47,9 @@ export default function DetalhesPage() {
   const { filtrosAcoes, filtrosBdrs, filtrosFiis } = useAnalise()
 
   const ticker = searchParams.get('ticker') || ''
-  const { user } = useAuth()
+  const { user, canAccessScreen } = useAuth()
+  const podeVerConceitos = canAccessScreen('conceitos')
+  const podeVerRadarDividendos = canAccessScreen('radar-dividendos')
 
   // Verificar se o ativo está na carteira
   const { data: carteira } = useQuery<AtivoCarteira[]>({
@@ -1057,7 +1062,64 @@ export default function DetalhesPage() {
               />
             )}
 
-            {activeTab === 'radar-dividendos' && (
+            {activeTab === 'radar-dividendos' && !podeVerRadarDividendos && (
+              <motion.div
+                key="radar-premium"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="py-8 sm:py-12"
+              >
+                <div className="max-w-xl mx-auto text-center space-y-6">
+                  <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                    <ScanLine className="w-12 h-12" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground mb-1">Aba Radar de Dividendos</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                    </p>
+                  </div>
+                  <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                      O que tem na aba Radar de Dividendos
+                    </p>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Total histórico e próximos</strong> — Quantidade de dividendos pagos, soma total e lista dos próximos proventos com datas.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Média por dividendo</strong> — Média histórica e média dos futuros para planejar receita.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Padrão de meses</strong> — Em quais meses o ativo costuma pagar dividendos (últimos 5 anos) e timeline consolidada.</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Link
+                      to="/vendas"
+                      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Quero ter acesso ao Radar de Dividendos
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('overview')}
+                      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                    >
+                      Ver outra aba
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            {activeTab === 'radar-dividendos' && podeVerRadarDividendos && (
               <DetalhesRadarDividendosTab
                 ticker={ticker}
                 historicoDividendos={detalhes?.dividends || null}
@@ -1082,7 +1144,64 @@ export default function DetalhesPage() {
               />
             )}
 
-            {activeTab === 'concepts' && (
+            {activeTab === 'concepts' && !podeVerConceitos && (
+              <motion.div
+                key="concepts-premium"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="py-8 sm:py-12"
+              >
+                <div className="max-w-xl mx-auto text-center space-y-6">
+                  <div className="inline-flex p-4 rounded-2xl bg-primary/10 dark:bg-primary/20 text-primary">
+                    <Target className="w-12 h-12" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground mb-1">Aba Conceitos</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Conteúdo exclusivo para assinantes premium. Veja o que você ganha com acesso.
+                    </p>
+                  </div>
+                  <div className="text-left rounded-xl border border-border dark:border-white/20 bg-muted/30 dark:bg-white/[0.04] p-5 space-y-3">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                      O que tem na aba Conceitos
+                    </p>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Preço justo de Graham</strong> — Fórmula clássica com LPA, crescimento e taxa de juros; preço justo estimado e margem de segurança.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Método Bazin</strong> — Teto por dividendos: dividendos dos últimos 12 meses e taxa DY desejada para um preço teto.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span><strong className="text-foreground">Indicador Fear & Greed</strong> — Score baseado em momentum e distância do topo para contexto de mercado.</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Link
+                      to="/vendas"
+                      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Quero ter acesso aos Conceitos
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('overview')}
+                      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-border hover:bg-muted text-sm font-medium"
+                    >
+                      Ver outra aba
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            {activeTab === 'concepts' && podeVerConceitos && (
               <DetalhesConceptsTab
                 info={info}
                 grahamBadge={grahamBadge}
