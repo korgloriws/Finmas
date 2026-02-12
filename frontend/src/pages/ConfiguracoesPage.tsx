@@ -14,7 +14,8 @@ import {
   Ban,
   LockKeyhole,
   LayoutGrid,
-  Mail
+  Mail,
+  Eye
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { perfilService, adminService, TELAS_APP } from '../services/api'
@@ -75,6 +76,10 @@ export default function ConfiguracoesPage() {
   const [novaSenhaAdmin, setNovaSenhaAdmin] = useState('')
   const [confirmarSenhaAdmin, setConfirmarSenhaAdmin] = useState('')
   const [telasSelecionadas, setTelasSelecionadas] = useState<string[]>([])
+  const [usuarioVerDados, setUsuarioVerDados] = useState<string | null>(null)
+  const [verDadosTab, setVerDadosTab] = useState<'dados' | 'carteira' | 'movimentacoes' | 'controle' | 'marmitas'>('dados')
+  const [verDadosFiltroMes, setVerDadosFiltroMes] = useState<string>('')
+  const [verDadosFiltroAno, setVerDadosFiltroAno] = useState<string>('')
 
   // Carregar perfil
   //  SEGURANÇA: Incluir user na queryKey para isolamento entre usuários
@@ -90,6 +95,41 @@ export default function ConfiguracoesPage() {
     queryFn: adminService.listarUsuarios,
     enabled: !!user && isAdmin,
     refetchInterval: activeTab === 'admin' ? 30_000 : false,
+  })
+
+  // Dados read-only do usuário (modal Ver dados)
+  const { data: verDadosUsuario, isLoading: loadingVerDados } = useQuery({
+    queryKey: ['admin-dados-usuario', usuarioVerDados],
+    queryFn: () => adminService.getDadosUsuario(usuarioVerDados!),
+    enabled: !!usuarioVerDados && verDadosTab === 'dados',
+  })
+  const { data: verCarteiraUsuario, isLoading: loadingVerCarteira } = useQuery({
+    queryKey: ['admin-carteira-usuario', usuarioVerDados],
+    queryFn: () => adminService.getCarteiraUsuario(usuarioVerDados!),
+    enabled: !!usuarioVerDados && verDadosTab === 'carteira',
+  })
+  const { data: verMovimentacoesUsuario, isLoading: loadingVerMovimentacoes } = useQuery({
+    queryKey: ['admin-movimentacoes-usuario', usuarioVerDados, verDadosFiltroMes, verDadosFiltroAno],
+    queryFn: () => adminService.getMovimentacoesUsuario(
+      usuarioVerDados!,
+      verDadosFiltroMes || undefined,
+      verDadosFiltroAno || undefined
+    ),
+    enabled: !!usuarioVerDados && verDadosTab === 'movimentacoes',
+  })
+  const { data: verControleUsuario, isLoading: loadingVerControle } = useQuery({
+    queryKey: ['admin-controle-usuario', usuarioVerDados],
+    queryFn: () => adminService.getControleUsuario(usuarioVerDados!),
+    enabled: !!usuarioVerDados && verDadosTab === 'controle',
+  })
+  const { data: verMarmitasUsuario, isLoading: loadingVerMarmitas } = useQuery({
+    queryKey: ['admin-marmitas-usuario', usuarioVerDados, verDadosFiltroMes, verDadosFiltroAno],
+    queryFn: () => adminService.getMarmitasUsuario(
+      usuarioVerDados!,
+      verDadosFiltroMes || undefined,
+      verDadosFiltroAno || undefined
+    ),
+    enabled: !!usuarioVerDados && verDadosTab === 'marmitas',
   })
 
   useEffect(() => {
@@ -325,10 +365,10 @@ export default function ConfiguracoesPage() {
   // }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-6 p-4 sm:p-6 overflow-x-hidden">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold">Configurações</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold truncate">Configurações</h1>
           <HelpTips
             title="Configurações"
             tips={[
@@ -341,39 +381,39 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-border">
+      <div className="flex gap-2 border-b border-border overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
         <button
           onClick={() => setActiveTab('perfil')}
-          className={`px-4 py-2 font-medium transition-colors ${
+          className={`px-3 sm:px-4 py-2.5 font-medium transition-colors shrink-0 ${
             activeTab === 'perfil'
               ? 'border-b-2 border-primary text-primary'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           <div className="flex items-center gap-2">
-            <User className="w-4 h-4" />
-            Perfil
+            <User className="w-4 h-4 shrink-0" />
+            <span>Perfil</span>
           </div>
         </button>
         {isAdmin && (
           <button
             onClick={() => setActiveTab('admin')}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-2.5 font-medium transition-colors shrink-0 ${
               activeTab === 'admin'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4" />
-              Gerenciar Usuários
+              <Shield className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Gerenciar Usuários</span>
             </div>
           </button>
         )}
       </div>
 
       {/* Conteúdo das Tabs */}
-      <div className="bg-card border border-border rounded-lg p-6 shadow-lg">
+      <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-lg">
         {activeTab === 'perfil' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -547,21 +587,23 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
 
-            {/* Suporte / Contato */}
+            {/* Suporte / Contato — sistema web: abrir Gmail (compose) como ação padrão */}
             <div className="border-t border-border pt-8">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                 <Mail className="w-5 h-5" />
                 Suporte
               </h2>
-              <p className="text-sm text-muted-foreground mb-2">
-                Dúvidas, problemas ou solicitações? Entre em contato com o administrador pelo e-mail:
+              <p className="text-sm text-muted-foreground mb-4">
+                Dúvidas, problemas ou solicitações? Entre em contato com o administrador pelo e-mail.
               </p>
               <a
-                href="mailto:finmasfinanceiro@gmail.com"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-medium transition-colors"
+                href="https://mail.google.com/mail/?view=cm&to=finmasfinanceiro@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors shadow-sm"
               >
                 <Mail className="w-4 h-4" />
-                finmasfinanceiro@gmail.com
+                Enviar e-mail para o suporte
               </a>
             </div>
           </motion.div>
@@ -573,27 +615,27 @@ export default function ConfiguracoesPage() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Users className="w-5 h-5" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 shrink-0">
+                <Users className="w-5 h-5 shrink-0" />
                 Gerenciar Usuários
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-0">
                 <label htmlFor="filtro-usuario-input" className="sr-only">Buscar usuário</label>
                 <input
                   id="filtro-usuario-input"
                   type="text"
                   value={filtroUsuario}
                   onChange={(e) => setFiltroUsuario(e.target.value)}
-                  className="px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  className="min-w-0 flex-1 px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm sm:text-base"
                   placeholder="Buscar usuário..."
                   aria-label="Buscar usuário"
                 />
                 <button
                   onClick={() => setMostrarFormCriar(!mostrarFormCriar)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm sm:text-base shrink-0"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 shrink-0" />
                   {mostrarFormCriar ? 'Cancelar' : 'Criar Usuário'}
                 </button>
               </div>
@@ -679,22 +721,22 @@ export default function ConfiguracoesPage() {
                     </select>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
                   <button
                     onClick={() => {
                       setMostrarFormCriar(false)
                       setNovoUsuario({ nome: '', username: '', senha: '', email: '', role: 'usuario' })
                     }}
-                    className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                    className="w-full sm:w-auto px-4 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleCriarUsuario}
                     disabled={criarUsuarioMutation.isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4 shrink-0" />
                     {criarUsuarioMutation.isPending ? 'Criando...' : 'Criar Usuário'}
                   </button>
                 </div>
@@ -710,57 +752,71 @@ export default function ConfiguracoesPage() {
                 {usuariosFiltrados.map((usuario) => (
                   <div
                     key={usuario.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{usuario.nome || usuario.username}</span>
-                        <span className="text-sm text-muted-foreground">@{usuario.username}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="font-medium truncate max-w-[180px] sm:max-w-none" title={usuario.nome || usuario.username}>
+                          {usuario.nome || usuario.username}
+                        </span>
+                        <span className="text-sm text-muted-foreground shrink-0">@{usuario.username}</span>
                         {usuario.email && (
-                          <span className="text-sm text-muted-foreground">• {usuario.email}</span>
+                          <span className="text-sm text-muted-foreground truncate max-w-[200px] sm:max-w-none" title={usuario.email}>
+                            • {usuario.email}
+                          </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
                         {usuario.blocked && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-destructive/10 text-destructive rounded text-xs font-medium">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-destructive/10 text-destructive rounded text-xs font-medium shrink-0">
                             <Ban className="w-3 h-3" />
                             Bloqueado
                           </span>
                         )}
                         {usuario.role === 'admin' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium shrink-0">
                             <ShieldCheck className="w-3 h-3" />
                             Administrador
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs shrink-0">
                             <User className="w-3 h-3" />
                             Usuário
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">
-                          Cadastrado em: {new Date(usuario.data_cadastro).toLocaleDateString('pt-BR')}
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          Cadastrado: {new Date(usuario.data_cadastro).toLocaleDateString('pt-BR')}
                         </span>
                         {usuario.online ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400" title="Usuário online">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 shrink-0" title="Usuário online">
                             <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 shrink-0" />
                             Online
                           </span>
                         ) : usuario.last_seen_at ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={formatLastSeen(usuario.last_seen_at)}>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground shrink-0" title={formatLastSeen(usuario.last_seen_at)}>
                             <span className="w-2 h-2 rounded-full bg-muted-foreground/50 shrink-0" />
                             Visto {formatLastSeenShort(usuario.last_seen_at)}
                           </span>
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          setUsuarioVerDados(usuario.username)
+                          setVerDadosTab('dados')
+                        }}
+                        className="p-1.5 sm:px-3 sm:py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors shrink-0"
+                        title="Ver dados (somente leitura)"
+                      >
+                        <Eye className="w-4 h-4 inline" />
+                      </button>
                       {usuario.username !== user && (
                         <>
                           <button
                             onClick={() => bloquearUsuarioMutation.mutate({ username: usuario.username, blocked: !usuario.blocked })}
                             disabled={bloquearUsuarioMutation.isPending}
-                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 ${
+                            className={`px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors disabled:opacity-50 shrink-0 ${
                               usuario.blocked
                                 ? 'bg-green-600 text-white hover:bg-green-700'
                                 : 'bg-amber-600 text-white hover:bg-amber-700'
@@ -772,7 +828,7 @@ export default function ConfiguracoesPage() {
                           <button
                             onClick={() => { setUsuarioParaSenha(usuario.username); setNovaSenhaAdmin(''); setConfirmarSenhaAdmin(''); }}
                             disabled={alterarSenhaUsuarioMutation.isPending}
-                            className="px-3 py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                            className="p-1.5 sm:px-3 sm:py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50 shrink-0"
                             title="Alterar senha"
                           >
                             <LockKeyhole className="w-4 h-4 inline" />
@@ -783,7 +839,7 @@ export default function ConfiguracoesPage() {
                               setTelasSelecionadas(usuario.allowed_screens ?? TELAS_APP.map((t) => t.id))
                             }}
                             disabled={atualizarTelasUsuarioMutation.isPending}
-                            className="px-3 py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                            className="p-1.5 sm:px-3 sm:py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50 shrink-0"
                             title="Telas permitidas"
                           >
                             <LayoutGrid className="w-4 h-4 inline" />
@@ -794,7 +850,7 @@ export default function ConfiguracoesPage() {
                         <button
                           onClick={() => handleDefinirRole(usuario.username, 'usuario')}
                           disabled={definirRoleMutation.isPending}
-                          className="px-3 py-1.5 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                          className="px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50 shrink-0"
                         >
                           Remover Admin
                         </button>
@@ -802,7 +858,7 @@ export default function ConfiguracoesPage() {
                         <button
                           onClick={() => handleDefinirRole(usuario.username, 'admin')}
                           disabled={definirRoleMutation.isPending}
-                          className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                          className="px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
                         >
                           Tornar Admin
                         </button>
@@ -820,7 +876,7 @@ export default function ConfiguracoesPage() {
                             setUsuarioParaExcluir(usuario.username)
                           }}
                           disabled={excluirUsuarioMutation.isPending}
-                          className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                          className="p-1.5 sm:px-3 sm:py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 shrink-0"
                           title="Excluir usuário"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -839,11 +895,11 @@ export default function ConfiguracoesPage() {
 
             {/* Modal de Confirmação de Exclusão */}
             {usuarioParaExcluir && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4 sm:p-4">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="bg-card border border-border rounded-lg p-6 max-w-md w-full space-y-4"
+                  className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4"
                 >
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
@@ -871,13 +927,13 @@ export default function ConfiguracoesPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end gap-2 pt-4">
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4">
                     <button
                       onClick={() => {
                         setUsuarioParaExcluir(null)
                         setConfirmacaoExclusaoAdmin('')
                       }}
-                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                      className="w-full sm:w-auto px-4 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors"
                     >
                       Cancelar
                     </button>
@@ -890,7 +946,7 @@ export default function ConfiguracoesPage() {
                         handleExcluirUsuario(usuarioParaExcluir)
                       }}
                       disabled={excluirUsuarioMutation.isPending || confirmacaoExclusaoAdmin !== 'EXCLUIR' || !usuarioParaExcluir}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="w-4 h-4" />
                       {excluirUsuarioMutation.isPending ? 'Excluindo...' : 'Excluir Usuário'}
@@ -902,11 +958,11 @@ export default function ConfiguracoesPage() {
 
             {/* Modal Alterar senha (admin) */}
             {usuarioParaSenha && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="bg-card border border-border rounded-lg p-6 max-w-md w-full space-y-4"
+                  className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4"
                 >
                   <h3 className="text-lg font-semibold text-foreground">Alterar senha de @{usuarioParaSenha}</h3>
                   <div className="space-y-2">
@@ -928,10 +984,10 @@ export default function ConfiguracoesPage() {
                       placeholder="Repita a senha"
                     />
                   </div>
-                  <div className="flex justify-end gap-2 pt-2">
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
                     <button
                       onClick={() => { setUsuarioParaSenha(null); setNovaSenhaAdmin(''); setConfirmarSenhaAdmin(''); }}
-                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                      className="w-full sm:w-auto px-4 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors"
                     >
                       Cancelar
                     </button>
@@ -948,7 +1004,7 @@ export default function ConfiguracoesPage() {
                         alterarSenhaUsuarioMutation.mutate({ username: usuarioParaSenha, novaSenha: novaSenhaAdmin })
                       }}
                       disabled={alterarSenhaUsuarioMutation.isPending || !novaSenhaAdmin || novaSenhaAdmin !== confirmarSenhaAdmin}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
                     >
                       {alterarSenhaUsuarioMutation.isPending ? 'Salvando...' : 'Alterar senha'}
                     </button>
@@ -959,11 +1015,11 @@ export default function ConfiguracoesPage() {
 
             {/* Modal Telas permitidas (admin) */}
             {usuarioParaTelas && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="bg-card border border-border rounded-lg p-6 max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col"
+                  className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col"
                 >
                   <h3 className="text-lg font-semibold text-foreground mb-2">Telas permitidas para @{usuarioParaTelas.username}</h3>
                   <p className="text-sm text-muted-foreground mb-4">Marque as telas que o usuário pode acessar. Deixe todas desmarcadas para negar acesso a tudo (exceto a página de acesso negado).</p>
@@ -986,10 +1042,10 @@ export default function ConfiguracoesPage() {
                       </label>
                     ))}
                   </div>
-                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-border shrink-0">
                     <button
                       onClick={() => { setUsuarioParaTelas(null); setTelasSelecionadas([]); }}
-                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                      className="w-full sm:w-auto px-4 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors"
                     >
                       Cancelar
                     </button>
@@ -999,10 +1055,215 @@ export default function ConfiguracoesPage() {
                         atualizarTelasUsuarioMutation.mutate({ username: usuarioParaTelas.username, telas })
                       }}
                       disabled={atualizarTelasUsuarioMutation.isPending}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
                     >
                       {atualizarTelasUsuarioMutation.isPending ? 'Salvando...' : 'Salvar telas'}
                     </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            {/* Modal Ver dados do usuário (somente leitura) */}
+            {usuarioVerDados && (
+              <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-4 shrink-0">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-muted-foreground" />
+                      Dados do usuário @{usuarioVerDados} <span className="text-sm font-normal text-muted-foreground">(somente leitura)</span>
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setUsuarioVerDados(null)
+                        setVerDadosFiltroMes('')
+                        setVerDadosFiltroAno('')
+                      }}
+                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                      aria-label="Fechar"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1 border-b border-border pb-2 mb-2 shrink-0">
+                    {(['dados', 'carteira', 'movimentacoes', 'controle', 'marmitas'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setVerDadosTab(tab)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          verDadosTab === tab
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                      >
+                        {tab === 'dados' && 'Dados cadastrais'}
+                        {tab === 'carteira' && 'Carteira'}
+                        {tab === 'movimentacoes' && 'Movimentações'}
+                        {tab === 'controle' && 'Controle'}
+                        {tab === 'marmitas' && 'Marmitas'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3 shrink-0">
+                    Carteira: estado atual. Movimentações e Marmitas: todo o histórico (opcional: filtrar por mês/ano). Controle: últimas 200 linhas por tipo.
+                  </p>
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {verDadosTab === 'dados' && (
+                      <>
+                        {loadingVerDados && <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}
+                        {!loadingVerDados && verDadosUsuario && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            {Object.entries(verDadosUsuario).filter(([k]) => !['senha', 'password'].includes(k.toLowerCase())).map(([key, value]) => (
+                              <div key={key} className="flex gap-2">
+                                <span className="text-muted-foreground shrink-0">{key}:</span>
+                                <span className="break-all">{value != null ? String(value) : '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {verDadosTab === 'carteira' && (
+                      <>
+                        {loadingVerCarteira && <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}
+                        {!loadingVerCarteira && verCarteiraUsuario && (
+                          <div className="space-y-3">
+                            {Array.isArray(verCarteiraUsuario) ? (
+                              <table className="w-full text-sm border-collapse">
+                                <thead><tr className="border-b border-border">{verCarteiraUsuario.length > 0 && Object.keys(verCarteiraUsuario[0]).map((k) => <th key={k} className="text-left py-2 pr-2">{k}</th>)}</tr></thead>
+                                <tbody>{verCarteiraUsuario.map((row: Record<string, unknown>, i: number) => <tr key={i} className="border-b border-border/50">{Object.values(row).map((v, j) => <td key={j} className="py-1.5 pr-2">{String(v ?? '')}</td>)}</tr>)}</tbody>
+                              </table>
+                            ) : verCarteiraUsuario.ativos ? (
+                              <>
+                                <table className="w-full text-sm border-collapse">
+                                  <thead><tr className="border-b border-border"><th className="text-left py-2 pr-2">Ticker</th><th className="text-left py-2 pr-2">Nome</th><th className="text-right py-2">Qtd</th><th className="text-right py-2">Preço</th><th className="text-right py-2">Total</th></tr></thead>
+                                  <tbody>{(verCarteiraUsuario.ativos || []).map((a: any, i: number) => <tr key={i} className="border-b border-border/50"><td className="py-1.5">{a.ticker}</td><td className="py-1.5">{a.nome_completo}</td><td className="text-right py-1.5">{a.quantidade}</td><td className="text-right py-1.5">{a.preco_medio != null ? Number(a.preco_medio).toFixed(2) : '—'}</td><td className="text-right py-1.5">{a.valor_total != null ? Number(a.valor_total).toFixed(2) : '—'}</td></tr>)}</tbody>
+                                </table>
+                                {verCarteiraUsuario.totais && <p className="text-muted-foreground text-sm mt-2">Totais: {JSON.stringify(verCarteiraUsuario.totais)}</p>}
+                              </>
+                            ) : (
+                              <pre className="text-xs overflow-x-auto p-2 bg-muted/50 rounded">{JSON.stringify(verCarteiraUsuario, null, 2)}</pre>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {verDadosTab === 'movimentacoes' && (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <span className="text-sm text-muted-foreground">Filtrar:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={12}
+                            placeholder="Mês"
+                            value={verDadosFiltroMes}
+                            onChange={(e) => setVerDadosFiltroMes(e.target.value.replace(/^0+/, '') || '')}
+                            className="w-16 px-2 py-1.5 border border-border rounded bg-background text-foreground text-sm"
+                          />
+                          <input
+                            type="number"
+                            min={2000}
+                            max={2100}
+                            placeholder="Ano"
+                            value={verDadosFiltroAno}
+                            onChange={(e) => setVerDadosFiltroAno(e.target.value || '')}
+                            className="w-20 px-2 py-1.5 border border-border rounded bg-background text-foreground text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setVerDadosFiltroMes(''); setVerDadosFiltroAno(''); }}
+                            className="text-sm text-muted-foreground hover:text-foreground underline"
+                          >
+                            Todo o período
+                          </button>
+                        </div>
+                        {loadingVerMovimentacoes && <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}
+                        {!loadingVerMovimentacoes && verMovimentacoesUsuario && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm border-collapse">
+                              <thead><tr className="border-b border-border"><th className="text-left py-2 pr-2">Data</th><th className="text-left py-2 pr-2">Ticker</th><th className="text-left py-2 pr-2">Nome</th><th className="text-right py-2">Qtd</th><th className="text-right py-2">Preço</th><th className="text-left py-2">Tipo</th></tr></thead>
+                              <tbody>{(Array.isArray(verMovimentacoesUsuario) ? verMovimentacoesUsuario : []).map((m: any, i: number) => <tr key={m.id ?? i} className="border-b border-border/50"><td className="py-1.5">{m.data}</td><td className="py-1.5">{m.ticker}</td><td className="py-1.5">{m.nome_completo}</td><td className="text-right py-1.5">{m.quantidade}</td><td className="text-right py-1.5">{m.preco != null ? Number(m.preco).toFixed(2) : '—'}</td><td className="py-1.5">{m.tipo}</td></tr>)}</tbody>
+                            </table>
+                            {(Array.isArray(verMovimentacoesUsuario) ? verMovimentacoesUsuario : []).length === 0 && <p className="text-muted-foreground text-sm py-4">Nenhuma movimentação.</p>}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {verDadosTab === 'controle' && (
+                      <>
+                        {loadingVerControle && <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}
+                        {!loadingVerControle && verControleUsuario && (
+                          <div className="space-y-4">
+                            {verControleUsuario.receitas && (
+                              <div>
+                                <h4 className="font-medium text-sm mb-2">Receitas</h4>
+                                <table className="w-full text-sm border-collapse"><thead><tr className="border-b border-border">{verControleUsuario.receitas[0] && Object.keys(verControleUsuario.receitas[0]).map((k) => <th key={k} className="text-left py-2 pr-2">{k}</th>)}</tr></thead><tbody>{verControleUsuario.receitas.map((r: Record<string, unknown>, i: number) => <tr key={i} className="border-b border-border/50">{Object.values(r).map((v, j) => <td key={j} className="py-1.5 pr-2">{String(v ?? '')}</td>)}</tr>)}</tbody></table>
+                              </div>
+                            )}
+                            {verControleUsuario.cartoes && (
+                              <div>
+                                <h4 className="font-medium text-sm mb-2">Cartões</h4>
+                                <table className="w-full text-sm border-collapse"><thead><tr className="border-b border-border">{verControleUsuario.cartoes[0] && Object.keys(verControleUsuario.cartoes[0]).map((k) => <th key={k} className="text-left py-2 pr-2">{k}</th>)}</tr></thead><tbody>{verControleUsuario.cartoes.map((c: Record<string, unknown>, i: number) => <tr key={i} className="border-b border-border/50">{Object.values(c).map((v, j) => <td key={j} className="py-1.5 pr-2">{String(v ?? '')}</td>)}</tr>)}</tbody></table>
+                              </div>
+                            )}
+                            {verControleUsuario.outros_gastos && (
+                              <div>
+                                <h4 className="font-medium text-sm mb-2">Outros gastos</h4>
+                                <table className="w-full text-sm border-collapse"><thead><tr className="border-b border-border">{verControleUsuario.outros_gastos[0] && Object.keys(verControleUsuario.outros_gastos[0]).map((k) => <th key={k} className="text-left py-2 pr-2">{k}</th>)}</tr></thead><tbody>{verControleUsuario.outros_gastos.map((o: Record<string, unknown>, i: number) => <tr key={i} className="border-b border-border/50">{Object.values(o).map((v, j) => <td key={j} className="py-1.5 pr-2">{String(v ?? '')}</td>)}</tr>)}</tbody></table>
+                              </div>
+                            )}
+                            {(!verControleUsuario.receitas?.length && !verControleUsuario.cartoes?.length && !verControleUsuario.outros_gastos?.length) && <p className="text-muted-foreground text-sm">Nenhum dado de controle.</p>}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {verDadosTab === 'marmitas' && (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <span className="text-sm text-muted-foreground">Filtrar:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={12}
+                            placeholder="Mês"
+                            value={verDadosFiltroMes}
+                            onChange={(e) => setVerDadosFiltroMes(e.target.value.replace(/^0+/, '') || '')}
+                            className="w-16 px-2 py-1.5 border border-border rounded bg-background text-foreground text-sm"
+                          />
+                          <input
+                            type="number"
+                            min={2000}
+                            max={2100}
+                            placeholder="Ano"
+                            value={verDadosFiltroAno}
+                            onChange={(e) => setVerDadosFiltroAno(e.target.value || '')}
+                            className="w-20 px-2 py-1.5 border border-border rounded bg-background text-foreground text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setVerDadosFiltroMes(''); setVerDadosFiltroAno(''); }}
+                            className="text-sm text-muted-foreground hover:text-foreground underline"
+                          >
+                            Todo o período
+                          </button>
+                        </div>
+                        {loadingVerMarmitas && <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}
+                        {!loadingVerMarmitas && verMarmitasUsuario && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm border-collapse">
+                              <thead><tr className="border-b border-border"><th className="text-left py-2 pr-2">Data</th><th className="text-right py-2">Valor</th><th className="text-left py-2">Comprou</th></tr></thead>
+                              <tbody>{(Array.isArray(verMarmitasUsuario) ? verMarmitasUsuario : []).map((m: any, i: number) => <tr key={m.id ?? i} className="border-b border-border/50"><td className="py-1.5">{m.data}</td><td className="text-right py-1.5">{m.valor != null ? Number(m.valor).toFixed(2) : '—'}</td><td className="py-1.5">{m.comprou != null ? String(m.comprou) : '—'}</td></tr>)}</tbody>
+                            </table>
+                            {(Array.isArray(verMarmitasUsuario) ? verMarmitasUsuario : []).length === 0 && <p className="text-muted-foreground text-sm py-4">Nenhuma marmita.</p>}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </motion.div>
               </div>

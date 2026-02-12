@@ -39,6 +39,7 @@ from models import (
     
     obter_perfil_usuario, atualizar_perfil_usuario, atualizar_senha_usuario,
     verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
+    obter_carteira_para_admin, obter_movimentacoes_para_admin, consultar_marmitas_para_admin, obter_controle_para_admin,
     usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
     buscar_usuario_por_email, criar_usuario_google,
     obter_historico_carteira_comparado,
@@ -807,6 +808,86 @@ def api_listar_usuarios():
         return jsonify(usuarios), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _admin_requer_admin():
+    """Retorna (usuario, None) se OK, ou (None, (response, status_code)) se erro."""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return None, (jsonify({"error": "Não autenticado"}), 401)
+    if not verificar_role(usuario, 'admin'):
+        return None, (jsonify({"error": "Acesso negado. Apenas administradores"}), 403)
+    return usuario, None
+
+
+@server.route("/api/admin/usuarios/<path:username>/dados", methods=["GET"])
+def api_admin_ver_dados_usuario(username):
+    """Retorna dados cadastrais do usuário (apenas leitura, admin)."""
+    _, err = _admin_requer_admin()
+    if err:
+        return err[0], err[1]
+    usuarios = listar_usuarios()
+    u = next((x for x in usuarios if x.get('username') == username), None)
+    if not u:
+        return jsonify({"error": "Usuário não encontrado"}), 404
+    return jsonify(u), 200
+
+
+@server.route("/api/admin/usuarios/<path:username>/carteira", methods=["GET"])
+def api_admin_ver_carteira_usuario(username):
+    """Retorna a carteira do usuário (apenas leitura, admin)."""
+    _, err = _admin_requer_admin()
+    if err:
+        return err[0], err[1]
+    try:
+        dados = obter_carteira_para_admin(username)
+        return jsonify(dados), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/movimentacoes", methods=["GET"])
+def api_admin_ver_movimentacoes_usuario(username):
+    """Retorna as movimentações do usuário (apenas leitura, admin)."""
+    _, err = _admin_requer_admin()
+    if err:
+        return err[0], err[1]
+    mes = request.args.get('mes')
+    ano = request.args.get('ano')
+    try:
+        dados = obter_movimentacoes_para_admin(username, mes=mes, ano=ano)
+        return jsonify(dados), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/marmitas", methods=["GET"])
+def api_admin_ver_marmitas_usuario(username):
+    """Retorna as marmitas do usuário (apenas leitura, admin)."""
+    _, err = _admin_requer_admin()
+    if err:
+        return err[0], err[1]
+    mes = request.args.get('mes')
+    ano = request.args.get('ano')
+    try:
+        dados = consultar_marmitas_para_admin(username, mes=mes, ano=ano)
+        return jsonify(dados), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/admin/usuarios/<path:username>/controle", methods=["GET"])
+def api_admin_ver_controle_usuario(username):
+    """Retorna dados do controle financeiro do usuário (apenas leitura, admin)."""
+    _, err = _admin_requer_admin()
+    if err:
+        return err[0], err[1]
+    try:
+        dados = obter_controle_para_admin(username)
+        return jsonify(dados), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @server.route("/api/admin/usuarios", methods=["POST"])
 def api_criar_usuario():

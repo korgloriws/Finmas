@@ -8311,6 +8311,220 @@ def listar_usuarios(admin_only=False):
         finally:
             conn.close()
 
+
+def obter_carteira_para_admin(target_username):
+    """Retorna a carteira de um usuário (apenas leitura, para admin)."""
+    if not target_username:
+        return []
+    try:
+        usuario = target_username
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute('''
+                        SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
+                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                        FROM carteira
+                        ORDER BY valor_total DESC
+                    ''')
+                    rows = cursor.fetchall()
+                ativos = []
+                for row in rows:
+                    preco_compra = float(row[5]) if row[5] is not None else None
+                    vencimento = row[16] if len(row) > 16 else None
+                    tipo = row[8] if len(row) > 8 else "Desconhecido"
+                    status_vencimento = None
+                    if tipo and "renda fixa" in tipo.lower() and vencimento:
+                        status_vencimento = _calcular_status_vencimento(vencimento)
+                    preco_medio = float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None)
+                    isento_ir = bool(row[17]) if (len(row) > 17 and row[17] is not None) else False
+                    ativo = {
+                        "id": row[0], "ticker": row[1], "nome_completo": row[2],
+                        "quantidade": float(row[3]) if row[3] is not None else 0,
+                        "preco_atual": float(row[4]) if row[4] is not None else 0,
+                        "preco_compra": preco_compra, "preco_medio": preco_medio,
+                        "valor_total": float(row[6]) if row[6] is not None else 0,
+                        "data_adicao": row[7], "tipo": tipo,
+                        "dy": float(row[9]) if row[9] is not None else None,
+                        "pl": float(row[10]) if row[10] is not None else None,
+                        "pvp": float(row[11]) if row[11] is not None else None,
+                        "roe": float(row[12]) if row[12] is not None else None,
+                        "indexador": row[13], "indexador_pct": float(row[14]) if (len(row) > 14 and row[14] is not None) else None,
+                        "data_aplicacao": row[15] if (len(row) > 15 and row[15] is not None) else None,
+                        "vencimento": vencimento, "status_vencimento": status_vencimento, "isento_ir": isento_ir,
+                    }
+                    ativos.append(ativo)
+                return ativos
+            finally:
+                conn.close()
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
+                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+            FROM carteira
+            ORDER BY valor_total DESC
+        ''')
+        ativos = []
+        for row in cursor.fetchall():
+            row_len = len(row)
+            preco_compra = row[5] if row_len > 5 else None
+            vencimento = row[16] if row_len > 16 else None
+            tipo = row[8] if row_len > 8 else "Desconhecido"
+            preco_medio = (float(row[19]) if (row_len > 19 and row[19] is not None) else None) or (float(preco_compra) if preco_compra is not None else None)
+            isento_ir = bool(row[17]) if (row_len > 17 and row[17] is not None) else False
+            status_vencimento = None
+            if tipo and "renda fixa" in tipo.lower() and vencimento:
+                status_vencimento = _calcular_status_vencimento(vencimento)
+            ativo = {
+                "id": row[0], "ticker": row[1], "nome_completo": row[2],
+                "quantidade": float(row[3]) if row[3] is not None else 0,
+                "preco_atual": float(row[4]) if row[4] is not None else 0,
+                "preco_compra": float(preco_compra) if preco_compra is not None else None,
+                "preco_medio": preco_medio, "valor_total": float(row[6]) if row[6] is not None else 0,
+                "data_adicao": row[7] if row_len > 7 else row[6], "tipo": tipo,
+                "dy": row[9] if row_len > 9 else row[8], "pl": row[10] if row_len > 10 else row[9],
+                "pvp": row[11] if row_len > 11 else row[10], "roe": row[12] if row_len > 12 else row[11],
+                "indexador": row[13] if row_len > 13 else row[12],
+                "indexador_pct": row[14] if row_len > 14 else row[13],
+                "data_aplicacao": row[15] if row_len > 15 else None,
+                "vencimento": vencimento, "status_vencimento": status_vencimento, "isento_ir": isento_ir,
+            }
+            ativos.append(ativo)
+        conn.close()
+        return ativos
+    except Exception as e:
+        print(f"Erro obter_carteira_para_admin({target_username}): {e}")
+        return []
+
+
+def obter_movimentacoes_para_admin(target_username, mes=None, ano=None):
+    """Retorna as movimentações de um usuário (apenas leitura, para admin)."""
+    if not target_username:
+        return []
+    try:
+        usuario = target_username
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as cursor:
+                    if mes and ano:
+                        mes_int, ano_int = int(mes), int(ano)
+                        prox_ano, prox_mes = (ano_int + 1, 1) if mes_int == 12 else (ano_int, mes_int + 1)
+                        inicio, fim = f"{ano_int}-{mes_int:02d}-01", f"{prox_ano}-{prox_mes:02d}-01"
+                        cursor.execute('SELECT * FROM movimentacoes WHERE data >= %s AND data < %s ORDER BY data DESC', (inicio, fim))
+                    elif ano:
+                        ano_int = int(ano)
+                        cursor.execute('SELECT * FROM movimentacoes WHERE data >= %s AND data < %s ORDER BY data DESC', (f"{ano_int}-01-01", f"{ano_int+1}-01-01"))
+                    else:
+                        cursor.execute('SELECT * FROM movimentacoes ORDER BY data DESC')
+                    rows = cursor.fetchall()
+                return [{"id": r[0], "data": r[1], "ticker": r[2], "nome_completo": r[3], "quantidade": r[4], "preco": r[5], "tipo": r[6]} for r in rows]
+            finally:
+                conn.close()
+        db_path = get_db_path(usuario, "carteira")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        cursor = conn.cursor()
+        if mes and ano:
+            mes_int, ano_int = int(mes), int(ano)
+            prox_ano, prox_mes = (ano_int + 1, 1) if mes_int == 12 else (ano_int, mes_int + 1)
+            inicio, fim = f"{ano_int}-{mes_int:02d}-01", f"{prox_ano}-{prox_mes:02d}-01"
+            cursor.execute('SELECT * FROM movimentacoes WHERE data >= ? AND data < ? ORDER BY data DESC', (inicio, fim))
+        elif ano:
+            ano_int = int(ano)
+            cursor.execute('SELECT * FROM movimentacoes WHERE data >= ? AND data < ? ORDER BY data DESC', (f"{ano_int}-01-01", f"{ano_int+1}-01-01"))
+        else:
+            cursor.execute('SELECT * FROM movimentacoes ORDER BY data DESC')
+        rows = cursor.fetchall()
+        movs = [{"id": r[0], "data": r[1], "ticker": r[2], "nome_completo": r[3], "quantidade": r[4], "preco": r[5], "tipo": r[6]} for r in rows]
+        conn.close()
+        return movs
+    except Exception as e:
+        print(f"Erro obter_movimentacoes_para_admin({target_username}): {e}")
+        return []
+
+
+def consultar_marmitas_para_admin(target_username, mes=None, ano=None):
+    """Retorna as marmitas de um usuário (apenas leitura, para admin)."""
+    if not target_username:
+        return []
+    try:
+        usuario = target_username
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as cursor:
+                    if mes and ano:
+                        mes_int, ano_int = int(mes), int(ano)
+                        prox_ano, prox_mes = (ano_int + 1, 1) if mes_int == 12 else (ano_int, mes_int + 1)
+                        inicio, fim = f"{ano_int}-{mes_int:02d}-01", f"{prox_ano}-{prox_mes:02d}-01"
+                        cursor.execute('SELECT * FROM marmitas WHERE data >= %s AND data < %s ORDER BY data DESC', (inicio, fim))
+                    else:
+                        cursor.execute('SELECT * FROM marmitas ORDER BY data DESC')
+                    rows = cursor.fetchall()
+                return [{"id": r[0], "data": r[1], "valor": float(r[2]) if r[2] is not None else 0, "comprou": bool(r[3]) if r[3] is not None else False} for r in rows]
+            finally:
+                conn.close()
+        db_path = get_db_path(usuario, "marmitas")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        cursor = conn.cursor()
+        if mes and ano:
+            mes_int, ano_int = int(mes), int(ano)
+            prox_ano, prox_mes = (ano_int + 1, 1) if mes_int == 12 else (ano_int, mes_int + 1)
+            inicio, fim = f"{ano_int}-{mes_int:02d}-01", f"{prox_ano}-{prox_mes:02d}-01"
+            cursor.execute('SELECT * FROM marmitas WHERE data >= ? AND data < ? ORDER BY data DESC', (inicio, fim))
+        else:
+            cursor.execute('SELECT * FROM marmitas ORDER BY data DESC')
+        rows = cursor.fetchall()
+        marmitas = [{"id": r[0], "data": r[1], "valor": float(r[2]) if r[2] is not None else 0, "comprou": bool(r[3]) if r[3] is not None else False} for r in rows]
+        conn.close()
+        return marmitas
+    except Exception as e:
+        print(f"Erro consultar_marmitas_para_admin({target_username}): {e}")
+        return []
+
+
+def obter_controle_para_admin(target_username, limite=200):
+    """Retorna dados do controle financeiro de um usuário (apenas leitura, para admin). receitas, cartoes, outros_gastos."""
+    if not target_username:
+        return {"receitas": [], "cartoes": [], "outros_gastos": []}
+    try:
+        usuario = target_username
+        out = {"receitas": [], "cartoes": [], "outros_gastos": []}
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as c:
+                    for tabela, chave in [("receitas", "receitas"), ("cartoes", "cartoes"), ("outros_gastos", "outros_gastos")]:
+                        try:
+                            c.execute(f'SELECT * FROM {tabela} ORDER BY id DESC LIMIT %s', (limite,))
+                            cols = [d[0] for d in c.description]
+                            rows = c.fetchall()
+                            out[chave] = [dict(zip(cols, row)) for row in rows]
+                        except Exception:
+                            out[chave] = []
+            finally:
+                conn.close()
+            return out
+        db_path = get_db_path(usuario, "controle")
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        cursor = conn.cursor()
+        for tabela, chave in [("receitas", "receitas"), ("cartoes", "cartoes"), ("outros_gastos", "outros_gastos")]:
+            try:
+                cursor.execute(f'SELECT * FROM {tabela} ORDER BY id DESC LIMIT ?', (limite,))
+                cols = [d[0] for d in cursor.description]
+                out[chave] = [dict(zip(cols, row)) for row in cursor.fetchall()]
+            except Exception:
+                out[chave] = []
+        conn.close()
+        return out
+    except Exception as e:
+        print(f"Erro obter_controle_para_admin({target_username}): {e}")
+        return {"receitas": [], "cartoes": [], "outros_gastos": []}
+
+
 def excluir_conta_usuario(username):
     """Exclui a conta do usuário (LGPD)"""
     if _is_postgres():

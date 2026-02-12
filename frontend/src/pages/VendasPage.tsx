@@ -24,6 +24,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import FinmasLogo from '../components/FinmasLogo'
 
+/** Link para abrir Gmail com destinatário do administrador (contato / vendas). */
+const GMAIL_SUPORTE = 'https://mail.google.com/mail/?view=cm&to=finmasfinanceiro@gmail.com'
+
 /** Fonte única: telas e abas premium. Usado nos cards da página e no admin (Configurações). */
 const telasPremium = [
   {
@@ -139,7 +142,7 @@ const telasPremium = [
   },
 ]
 
-const PRECO_MENSAL = 19.9
+const PRECO_MENSAL = 29.9
 const DESCONTO_ANUAL = 0.1
 const PRECO_ANUAL_TOTAL = PRECO_MENSAL * 12 * (1 - DESCONTO_ANUAL)
 const PRECO_ANUAL_MES = PRECO_ANUAL_TOTAL / 12
@@ -212,74 +215,110 @@ export default function VendasPage() {
       </motion.header>
 
       <main>
-        {/* Hero com parallax */}
-        <section className="relative min-h-[70vh] flex items-center overflow-hidden bg-gradient-to-b from-background via-background to-muted/20 dark:to-white/[0.03]">
-          {/* Camadas parallax de fundo */}
+        {/* Hero – foco em conversão: destaque, animações e copy persuasivo */}
+        <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-gradient-to-b from-background via-background to-muted/20 dark:to-white/[0.03]">
+          {/* Fundo com mais presença */}
           <motion.div
             style={{ y: parallaxBg, opacity: opacityBg }}
             className="absolute inset-0 pointer-events-none"
           >
-            <div className="absolute top-1/4 -left-20 w-72 h-72 rounded-full bg-primary/10 dark:bg-primary/20 blur-3xl" />
-            <div className="absolute bottom-1/4 -right-20 w-96 h-96 rounded-full bg-primary/5 dark:bg-primary/15 blur-3xl" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-primary/[0.03] dark:bg-primary/10 blur-3xl" />
+            <div className="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-primary/15 dark:bg-primary/25 blur-3xl" />
+            <div className="absolute bottom-1/4 -right-32 w-[28rem] h-[28rem] rounded-full bg-primary/10 dark:bg-primary/20 blur-3xl" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-primary/[0.06] dark:bg-primary/15 blur-3xl" />
           </motion.div>
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 dark:from-primary/15 via-transparent to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/10 dark:from-primary/20 via-transparent to-transparent pointer-events-none" />
 
-          <div className="container max-w-5xl mx-auto px-4 pt-12 pb-16 sm:pt-16 sm:pb-20 relative">
+          <div className="container max-w-5xl mx-auto px-4 pt-16 pb-20 sm:pt-20 sm:pb-28 relative">
             <motion.div
               style={{ y: parallaxHero }}
-              className="text-center max-w-2xl mx-auto"
+              className="text-center max-w-3xl mx-auto"
             >
-              <motion.span
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1, duration: 0.4 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium mb-6"
+              {/* Badge – entra primeiro */}
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ delay: 0.15, duration: 0.5 }}
+                className="mb-8"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                Plano Premium
-              </motion.span>
+                <motion.span
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary/15 dark:bg-primary/25 text-primary font-semibold text-sm border border-primary/20 dark:border-primary/30 shadow-lg shadow-primary/10"
+                  whileHover={{ scale: 1.02 }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Plano Premium
+                </motion.span>
+              </motion.div>
+
+              {/* Título principal – grande e impactante */}
               <motion.h1
+                initial={{ opacity: 0, y: 28 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.6 }}
+                className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground mb-6 leading-[1.1]"
+              >
+                Invista com mais
+                <br />
+                <span className="bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                  confiança e controle
+                </span>
+              </motion.h1>
+
+              {/* Subtítulo – benefício + preço */}
+              <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-                className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4"
+                transition={{ delay: 0.5, duration: 0.5 }}
+                className="text-xl sm:text-2xl text-muted-foreground mb-4 max-w-2xl mx-auto font-medium"
               >
-                Tudo que você precisa para investir com mais confiança
-              </motion.h1>
+                Análise, dividendos, rankings, impostos e projeção da carteira em um só lugar.
+              </motion.p>
               <motion.p
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35, duration: 0.5 }}
-                className="text-muted-foreground text-lg mb-8"
+                transition={{ delay: 0.65, duration: 0.5 }}
+                className="text-lg text-primary font-semibold mb-10"
               >
-                Análise, agenda de dividendos, rankings e ferramentas para acompanhar sua carteira. Por menos de um café por mês.
+                A partir de {formatarMoeda(PRECO_ANUAL_MES)}/mês no plano anual
               </motion.p>
+
+              {/* Pills de destaque */}
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.4 }}
-                className="flex flex-wrap justify-center gap-3"
+                transition={{ delay: 0.8, duration: 0.4 }}
+                className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-10"
               >
-                <Link to="/login">
+                {['Análise', 'Dividendos', 'Impostos', 'Projeção'].map((label, i) => (
                   <motion.span
-                    className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-base shadow-xl shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
-                    whileHover={{ scale: 1.05, boxShadow: '0 24px 48px -12px hsl(var(--primary) / 0.45)' }}
-                    whileTap={{ scale: 0.98 }}
+                    key={label}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.9 + i * 0.06, duration: 0.35 }}
+                    className="px-4 py-2 rounded-lg bg-card/80 dark:bg-card/60 border border-border text-sm font-medium text-foreground shadow-sm"
                   >
-                    Começar agora
-                    <ArrowRight className="w-5 h-5" />
+                    {label}
                   </motion.span>
-                </Link>
+                ))}
+              </motion.div>
+
+              {/* CTA principal */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.1, duration: 0.5 }}
+                className="flex flex-col sm:flex-row items-center justify-center gap-4"
+              >
                 <a href="#planos">
                   <motion.span
-                    className="inline-flex items-center gap-2 px-8 py-4 rounded-xl border-2 border-border bg-card font-semibold text-base hover:border-primary/50 hover:bg-muted/50"
-                    whileHover={{ scale: 1.03 }}
+                    className="inline-flex items-center justify-center gap-2 px-10 py-5 rounded-xl bg-primary text-primary-foreground font-bold text-lg shadow-xl shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
+                    whileHover={{ scale: 1.05, boxShadow: '0 24px 48px -12px hsl(var(--primary) / 0.5)' }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    Ver planos
+                    Ver planos e valores
+                    <ArrowRight className="w-5 h-5" />
                   </motion.span>
                 </a>
+                <span className="text-sm text-muted-foreground">Sem compromisso · Cancele quando quiser</span>
               </motion.div>
             </motion.div>
           </div>
@@ -366,20 +405,20 @@ export default function VendasPage() {
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">Cobrança mensal</p>
                 </div>
-                <ul className="space-y-3 mb-8 flex-1">
-                  {['Análise completa', 'Agenda de dividendos', 'Rankings', 'Todas as ferramentas'].map((x) => (
+                <ul className="space-y-3">
+                  {[
+                    'Análise de oportunidades',
+                    'Agenda de dividendos',
+                    'Rankings',
+                    'Conceitos e Radar de Dividendos (Detalhes)',
+                    'Impostos, Insights, Projeção e Simulador (Carteira)',
+                  ].map((x) => (
                     <li key={x} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-primary flex-shrink-0" />
                       {x}
                     </li>
                   ))}
                 </ul>
-                <Link
-                  to="/login"
-                  className="block w-full py-4 rounded-xl border-2 border-primary text-primary font-semibold text-base text-center hover:bg-primary/15 dark:hover:bg-primary/20 ring-2 ring-primary/20 ring-offset-2 ring-offset-background dark:ring-offset-background transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Assinar mensal
-                </Link>
               </motion.div>
 
               {/* Anual - Destaque */}
@@ -407,7 +446,7 @@ export default function VendasPage() {
                     {formatarMoeda(PRECO_ANUAL_TOTAL)}/ano · Economize {formatarMoeda(PRECO_MENSAL * 12 - PRECO_ANUAL_TOTAL)}
                   </p>
                 </div>
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-3">
                   {['Tudo do plano mensal', '12 meses pelo preço de 10,8', 'Melhor custo-benefício'].map((x) => (
                     <li key={x} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-primary flex-shrink-0" />
@@ -415,17 +454,27 @@ export default function VendasPage() {
                     </li>
                   ))}
                 </ul>
-                <Link to="/login">
-                  <motion.span
-                    className="block w-full py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-base text-center shadow-lg shadow-primary/25 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
-                    whileHover={{ scale: 1.03, boxShadow: '0 20px 40px -12px hsl(var(--primary) / 0.4)' }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    Assinar anual
-                  </motion.span>
-                </Link>
               </motion.div>
             </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+              className="mt-10 flex justify-center"
+            >
+              <a href={GMAIL_SUPORTE} target="_blank" rel="noopener noreferrer">
+                <motion.span
+                  className="inline-flex items-center justify-center gap-2 px-10 py-5 rounded-xl bg-primary text-primary-foreground font-semibold text-lg shadow-xl shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
+                  whileHover={{ scale: 1.03, boxShadow: '0 24px 48px -12px hsl(var(--primary) / 0.45)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Contatar agora
+                  <ArrowRight className="w-5 h-5" />
+                </motion.span>
+              </a>
+            </motion.div>
           </div>
         </section>
 
@@ -457,16 +506,16 @@ export default function VendasPage() {
             >
               Crie sua conta ou faça login e fale com o administrador para ativar o plano premium.
             </motion.p>
-            <Link to="/login">
+            <a href={GMAIL_SUPORTE} target="_blank" rel="noopener noreferrer">
               <motion.span
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-base shadow-xl shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
+                className="inline-flex items-center justify-center gap-2 px-10 py-5 rounded-xl bg-primary text-primary-foreground font-semibold text-lg shadow-xl shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background dark:ring-offset-background"
                 whileHover={{ scale: 1.05, boxShadow: '0 24px 48px -12px hsl(var(--primary) / 0.45)' }}
                 whileTap={{ scale: 0.98 }}
               >
-                Acessar Finmas
+                Contatar agora
                 <ArrowRight className="w-5 h-5" />
               </motion.span>
-            </Link>
+            </a>
           </div>
         </section>
       </main>

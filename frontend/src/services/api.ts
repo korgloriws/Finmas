@@ -246,6 +246,52 @@ export const adminService = {
     const response = await api.put(`/admin/usuarios/${encoded}/telas`, { telas: telas ?? [] })
     return response.data
   },
+
+  /** Dados cadastrais do usuário (somente leitura) */
+  getDadosUsuario: async (username: string) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.get(`/admin/usuarios/${encoded}/dados`)
+    return response.data
+  },
+
+  /** Carteira do usuário (somente leitura) */
+  getCarteiraUsuario: async (username: string) => {
+    const encoded = encodeURIComponent(username)
+    const response = await api.get(`/admin/usuarios/${encoded}/carteira`)
+    return response.data
+  },
+
+  /** Movimentações do usuário (somente leitura). mes/ano opcionais. */
+  getMovimentacoesUsuario: async (username: string, mes?: number | string, ano?: number | string) => {
+    const encoded = encodeURIComponent(username)
+    const params = new URLSearchParams()
+    if (mes != null) params.set('mes', String(mes))
+    if (ano != null) params.set('ano', String(ano))
+    const qs = params.toString()
+    const url = qs ? `/admin/usuarios/${encoded}/movimentacoes?${qs}` : `/admin/usuarios/${encoded}/movimentacoes`
+    const response = await api.get(url)
+    return response.data
+  },
+
+  /** Marmitas do usuário (somente leitura). mes/ano opcionais. */
+  getMarmitasUsuario: async (username: string, mes?: number | string, ano?: number | string) => {
+    const encoded = encodeURIComponent(username)
+    const params = new URLSearchParams()
+    if (mes != null) params.set('mes', String(mes))
+    if (ano != null) params.set('ano', String(ano))
+    const qs = params.toString()
+    const url = qs ? `/admin/usuarios/${encoded}/marmitas?${qs}` : `/admin/usuarios/${encoded}/marmitas`
+    const response = await api.get(url)
+    return response.data
+  },
+
+  /** Controle financeiro do usuário (somente leitura). */
+  getControleUsuario: async (username: string, limite?: number) => {
+    const encoded = encodeURIComponent(username)
+    const url = limite != null ? `/admin/usuarios/${encoded}/controle?limite=${limite}` : `/admin/usuarios/${encoded}/controle`
+    const response = await api.get(url)
+    return response.data
+  },
 }
 
 /** Lista de telas do app para controle de acesso (id = path ou chave da rota) */
