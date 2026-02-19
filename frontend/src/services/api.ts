@@ -482,6 +482,7 @@ export const carteiraService = {
     ifix: (number|null)[]
     ipca: (number|null)[]
     cdi: (number|null)[]
+    btc?: (number|null)[]
     carteira_valor: number[]
     carteira_price?: (number|null)[]
   }> => {

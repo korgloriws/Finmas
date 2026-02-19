@@ -2106,10 +2106,9 @@ export default function HomePage() {
             </motion.div>
           </div>
         )}
+        {/* Carrossel de Notícias - mesmo padrão de largura dos outros cards (dentro do container) */}
+        <NoticiasWidget delay={0.8} />
       </div>
-
-      {/* Carrossel de Notícias - No final da página */}
-      <NoticiasWidget delay={0.8} />
 
       {/* Modal de Detalhes dos Ativos */}
       <Suspense fallback={null}>

@@ -171,7 +171,7 @@ export default function CarteiraPage() {
     'Criptomoeda': true,
     'Fixa': true
   })
-  const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual' | 'maximo'>('mensal')
+  const [filtroPeriodo, setFiltroPeriodo] = useState<'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'maximo'>('mensal')
   const [filtroProventos, setFiltroProventos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('mes')
 
   const queryClient = useQueryClient()
@@ -519,9 +519,8 @@ export default function CarteiraPage() {
     return acc
   }, {} as Record<string, number>) || {}
 
-  const topAtivos = carteira?.slice(0, 5) || []
   const ativosPositivos = carteira?.filter(ativo => ativo?.dy && ativo.dy > 0).length || 0
-
+  const topAtivos = carteira?.slice(0, 5) || []
 
   const dadosGraficoProventos = useMemo(() => {
     if (!proventosRecebidos || proventosRecebidos.length === 0) return []
@@ -777,7 +776,6 @@ export default function CarteiraPage() {
             loadingCarteira={loadingCarteira}
             ativosPorTipo={ativosPorTipo}
             valorTotal={valorTotal}
-            topAtivos={topAtivos}
             editingId={editingId}
             editQuantidade={editQuantidade}
             setEditQuantidade={setEditQuantidade}
@@ -796,6 +794,8 @@ export default function CarteiraPage() {
             tiposDisponiveisComputed={tiposDisponiveisComputed}
             tesouroTitulos={tesouroData as any}
             onPickTesouro={handlePickTesouro}
+            topAtivos={topAtivos}
+            onOpenAddAtivo={() => setAddModalOpen(true)}
           />
         )}
 
@@ -807,7 +807,6 @@ export default function CarteiraPage() {
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
             ativosPorTipo={ativosPorTipo}
-            topAtivos={topAtivos}
           />
         )}
 

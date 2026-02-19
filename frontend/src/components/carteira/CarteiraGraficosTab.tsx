@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { 
   TrendingUp, 
   PieChart, 
@@ -29,6 +29,17 @@ import {
 import AtivosDetalhesModal from './AtivosDetalhesModal'
 import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
 
+/** Extrai ano e mês de YYYY-MM ou YYYY-MM-DD sem depender de fuso (evita bug com trimestral/semestral/anual/máximo). */
+function parseAnoMesCalendario(dataStr: string): { ano: number; mes: number; chave: string } | null {
+  if (!dataStr || typeof dataStr !== 'string') return null
+  const parts = dataStr.trim().split('-')
+  if (parts.length < 2) return null
+  const ano = parseInt(parts[0], 10)
+  const mes = parseInt(parts[1], 10)
+  if (isNaN(ano) || isNaN(mes) || mes < 1 || mes > 12) return null
+  return { ano, mes, chave: `${ano}-${String(mes).padStart(2, '0')}` }
+}
+
 interface CarteiraGraficosTabProps {
   carteira: any[]
   loadingHistorico: boolean
@@ -41,12 +52,12 @@ interface CarteiraGraficosTabProps {
     ifix: (number | null)[]
     ipca: (number | null)[]
     cdi?: (number | null)[]
+    btc?: (number | null)[]
     carteira_price?: (number | null)[]
   } | null
   filtroPeriodo: string
   setFiltroPeriodo: (value: string) => void
   ativosPorTipo: Record<string, number>
-  topAtivos: any[]
 }
 
 export default function CarteiraGraficosTab({
@@ -55,11 +66,16 @@ export default function CarteiraGraficosTab({
   historicoCarteira,
   filtroPeriodo,
   setFiltroPeriodo,
-  ativosPorTipo,
-  topAtivos
+  ativosPorTipo
 }: CarteiraGraficosTabProps) {
-  const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi' | 'todos'>('ibov')
-  const [periodoPerformance, setPeriodoPerformance] = useState<'mensal' | 'trimestral' | 'anual'>('mensal')
+  const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi' | 'btc' | 'todos'>('ibov')
+  const [periodoPerformance, setPeriodoPerformance] = useState<'mensal' | 'trimestral' | 'anual'>('anual')
+
+  const indiceDisplayName: Record<string, string> = { ibov: 'IBOV', ivvb11: 'IVVB11', ifix: 'IFIX', ipca: 'IPCA', cdi: 'CDI', btc: 'Bitcoin' }
+  const indiceLabel = indiceRef === 'todos' ? 'Benchmarks' : (indiceDisplayName[indiceRef] || indiceRef.toUpperCase())
+
+  // Toggle do gráfico comparativo: um único gráfico em R$ ou em %
+  const [vistaGraficoComparativo, setVistaGraficoComparativo] = useState<'rs' | 'pct'>('rs')
   
   // Estado para modal de detalhes
   const [modalAberto, setModalAberto] = useState(false)
@@ -93,37 +109,6 @@ export default function CarteiraGraficosTab({
       setModalTitulo(`Ativos - ${tipo}`)
       setModalAtivos(ativosDoTipo)
       setModalTipo('tipo')
-      setModalAberto(true)
-    }
-  }
-
-  const abrirModalTopAtivos = async () => {
-    // Verificar se há FIIs nos top ativos
-    const temFIIs = topAtivos.some(ativo => ativo.tipo && ativo.tipo.toLowerCase().includes('fii'))
-    
-    if (temFIIs) {
-      try {
-        const response = await fetch('/api/carteira/com-metadados-fii')
-        const carteiraComMetadados = await response.json()
-        const topAtivosComMetadados = carteiraComMetadados.filter((ativo: any) => 
-          topAtivos.some(top => top.ticker === ativo.ticker)
-        )
-        setModalTitulo('Top Ativos por Valor')
-        setModalAtivos(topAtivosComMetadados)
-        setModalTipo('top')
-        setModalAberto(true)
-      } catch (error) {
-        console.error('Erro ao buscar metadados de FIIs:', error)
-        // Fallback para dados normais
-        setModalTitulo('Top Ativos por Valor')
-        setModalAtivos(topAtivos)
-        setModalTipo('top')
-        setModalAberto(true)
-      }
-    } else {
-      setModalTitulo('Top Ativos por Valor')
-      setModalAtivos(topAtivos)
-      setModalTipo('top')
       setModalAberto(true)
     }
   }
@@ -181,6 +166,7 @@ export default function CarteiraGraficosTab({
         ifix: (historicoCarteira as any).ifix || [],
         ipca: (historicoCarteira as any).ipca || [],
         cdi: (historicoCarteira as any).cdi || [],
+        btc: (historicoCarteira as any).btc || [],
       }
     }
     const series = (historicoCarteira as any)[indiceRef] as Array<number | null> | undefined
@@ -250,7 +236,7 @@ export default function CarteiraGraficosTab({
     const deltaIndice = (indiceFinal || 0) - (indiceInicial || 0)
     const deltaCarteira = (carteiraFinal || 0) - (carteiraInicial || 0)
     const gapAbsoluto = (carteiraFinal || 0) - (indiceFinal || 0)
-    const nomeMap: Record<string, string> = { ibov: 'IBOV', ivvb11: 'IVVB11', ifix: 'IFIX', ipca: 'IPCA', cdi: 'CDI' }
+    const nomeMap: Record<string, string> = { ibov: 'IBOV', ivvb11: 'IVVB11', ifix: 'IFIX', ipca: 'IPCA', cdi: 'CDI', btc: 'Bitcoin' }
     return {
       indiceNome: nomeMap[indiceRef],
       indiceInicial: indiceInicial || 0,
@@ -447,6 +433,71 @@ export default function CarteiraGraficosTab({
 
     return resultados
   }, [historicoCarteira, carteiraRetornoSeries, indiceSeries, periodoPerformance, initialWealth])
+
+  // Calendário mensal: retorno por mês (sem aportes). Funciona com qualquer filtro (mensal, trimestral, etc.) e com qualquer quantidade de dados (ex.: só Jan e Fev).
+  // Retorno do mês = variação em relação ao valor do mês anterior (não “dentro do mês”), para que 1 ponto por mês mostre o % correto.
+  const calendarioMensal = useMemo(() => {
+    if (!historicoCarteira?.datas?.length) return []
+    const datas = historicoCarteira.datas
+    const carteiraSeries = (historicoCarteira.carteira_price ?? historicoCarteira.carteira ?? []) as (number | null)[]
+    const len = Math.min(datas.length, carteiraSeries.length)
+    if (len === 0) return []
+
+    const periodos: Record<string, { dataFim: string; carteiraFim: number | null }> = {}
+    for (let index = 0; index < len; index++) {
+      const dataStr = datas[index]
+      const parsed = parseAnoMesCalendario(dataStr)
+      if (!parsed) continue
+      const { chave } = parsed
+      const valor = carteiraSeries[index] ?? null
+      if (!periodos[chave]) periodos[chave] = { dataFim: dataStr, carteiraFim: null }
+      periodos[chave].dataFim = dataStr
+      if (valor != null) periodos[chave].carteiraFim = valor
+    }
+
+    const entradasOrdenadas = Object.entries(periodos)
+      .map(([periodo, dados]) => {
+        const [ano, mes] = periodo.split('-')
+        return {
+          ano: parseInt(ano, 10),
+          mes: parseInt(mes, 10),
+          periodo,
+          carteiraFim: dados.carteiraFim,
+        }
+      })
+      .sort((a, b) => a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)
+
+    const base = 100
+    return entradasOrdenadas.map((ent, i) => {
+      const valorAtual = ent.carteiraFim
+      const valorAnterior = i === 0 ? base : (entradasOrdenadas[i - 1].carteiraFim ?? base)
+      let retornoCarteira = 0
+      let ganhoPerda = 0
+      if (valorAtual != null && valorAnterior != null && valorAnterior > 0) {
+        retornoCarteira = ((valorAtual / valorAnterior) - 1) * 100
+        ganhoPerda = initialWealth * (retornoCarteira / 100)
+      }
+      return {
+        ano: ent.ano,
+        mes: ent.mes,
+        periodo: ent.periodo,
+        retornoCarteira,
+        ganhoPerda,
+      }
+    })
+  }, [historicoCarteira, initialWealth])
+
+  const anosCalendario = useMemo(() => {
+    const anos = Array.from(new Set(calendarioMensal.map(m => m.ano))).sort((a, b) => b - a)
+    return anos.length ? anos : [new Date().getFullYear()]
+  }, [calendarioMensal])
+
+  const [anoCalendario, setAnoCalendario] = useState<number>(() => new Date().getFullYear())
+  useEffect(() => {
+    if (anosCalendario.length > 0 && !anosCalendario.includes(anoCalendario)) {
+      setAnoCalendario(anosCalendario[0])
+    }
+  }, [anosCalendario.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calcular Sharpe Ratio vs CDI e vs SELIC
   const sharpeRatios = useMemo(() => {
@@ -689,24 +740,26 @@ export default function CarteiraGraficosTab({
                 </div>
                 <div className="text-sm text-muted-foreground">
                   Período: {(() => {
-                    const periodos = {
+                    const periodos: Record<string, string> = {
+                      'semanal': 'Semanal',
                       'mensal': 'Mensal',
                       'trimestral': 'Trimestral',
                       'semestral': 'Semestral',
                       'anual': 'Anual',
                       'maximo': 'Máximo'
                     }
-                    return periodos[filtroPeriodo as keyof typeof periodos] || 'Mensal'
+                    return periodos[filtroPeriodo] || 'Mensal'
                   })()}
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <select
                   value={filtroPeriodo}
-                  onChange={(e) => setFiltroPeriodo(e.target.value)}
+                  onChange={(e) => setFiltroPeriodo(e.target.value as any)}
                   className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm min-w-0 w-full sm:w-auto"
                   aria-label="Filtrar por período"
                 >
+                  <option value="semanal">Semanal</option>
                   <option value="mensal">Mensal</option>
                   <option value="trimestral">Trimestral</option>
                   <option value="semestral">Semestral</option>
@@ -724,6 +777,7 @@ export default function CarteiraGraficosTab({
                   <option value="ifix">IFIX</option>
                   <option value="ipca">IPCA</option>
                   <option value="cdi">CDI</option>
+                  <option value="btc">Bitcoin</option>
                   <option value="todos">Todos os Benchmarks</option>
                 </select>
               </div>
@@ -826,7 +880,7 @@ export default function CarteiraGraficosTab({
                           <div className="p-2 rounded-lg bg-orange-500/20">
                             <Activity className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                           </div>
-                          <h4 className="text-sm font-semibold text-foreground">Tracking Error vs {indiceRef.toUpperCase()}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">Tracking Error vs {indiceLabel}</h4>
                         </div>
                       </div>
                       {metricasAvancadas.dadosInsuficientes ? (
@@ -870,7 +924,7 @@ export default function CarteiraGraficosTab({
                           <div className="p-2 rounded-lg bg-purple-500/20">
                             <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                           </div>
-                          <h4 className="text-sm font-semibold text-foreground">Beta vs {indiceRef.toUpperCase()}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">Beta vs {indiceLabel}</h4>
                         </div>
                       </div>
                       {metricasAvancadas.dadosInsuficientes ? (
@@ -897,10 +951,10 @@ export default function CarteiraGraficosTab({
                           {metricasAvancadas.beta !== null && (
                             <div className="text-xs text-muted-foreground mt-1">
                               {metricasAvancadas.beta < 0.7
-                                ? ` ${((1 - metricasAvancadas.beta) * 100).toFixed(0)}% menos volátil que o ${indiceRef.toUpperCase()}`
+                                ? ` ${((1 - metricasAvancadas.beta) * 100).toFixed(0)}% menos volátil que o ${indiceLabel}`
                                 : metricasAvancadas.beta <= 1.3
-                                ? ` Sensibilidade similar ao ${indiceRef.toUpperCase()}`
-                                : ` ${((metricasAvancadas.beta - 1) * 100).toFixed(0)}% mais volátil que o ${indiceRef.toUpperCase()}`}
+                                ? ` Sensibilidade similar ao ${indiceLabel}`
+                                : ` ${((metricasAvancadas.beta - 1) * 100).toFixed(0)}% mais volátil que o ${indiceLabel}`}
                             </div>
                           )}
                         </div>
@@ -909,31 +963,61 @@ export default function CarteiraGraficosTab({
                   </div>
                 )}
                 
-                {/* Gráfico: Carteira (R$) vs Índice(s) simulado(s) (R$) */}
-                <div className="mb-2">
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3">
-                    {indiceRef === 'todos' 
-                      ? 'Carteira vs Todos os Benchmarks (simulado em R$)'
-                      : `Carteira vs ${indiceRef.toUpperCase()} (simulado em R$)`}
-                  </h4>
+                {/* Gráfico único: Carteira vs Índice(s) — toggle R$ ou % (sem aportes) */}
+                <div className="mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        {indiceRef === 'todos' ? 'Carteira vs Todos os Benchmarks' : `Carteira vs ${indiceLabel}`}
+                        <span className="text-muted-foreground/80 font-normal"> (sem aportes)</span>
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Evolução ponto a ponto no período. Alterne entre valor em R$ e retorno em %.
+                      </p>
+                    </div>
+                    <div className="flex rounded-lg border border-border p-0.5 bg-muted/30">
+                      <button
+                        type="button"
+                        onClick={() => setVistaGraficoComparativo('rs')}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${vistaGraficoComparativo === 'rs' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        Em R$
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVistaGraficoComparativo('pct')}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${vistaGraficoComparativo === 'pct' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        Em %
+                      </button>
+                    </div>
+                  </div>
                   <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] lg:h-96 overflow-visible">
                     <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                       <AreaChart data={historicoCarteira.datas.map((d, i) => {
-                        const dataPoint: any = { data: d, carteira_valor: carteiraValorPrecoSeries?.[i] ?? null }
-                        
+                        const dataPoint: any = {
+                          data: d,
+                          carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
+                          carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
+                        }
                         if (indiceRef === 'todos' && typeof indiceValorSeries === 'object' && !Array.isArray(indiceValorSeries)) {
-                          // Múltiplos benchmarks
                           const seriesObj = indiceValorSeries as Record<string, Array<number | null>>
                           dataPoint.ibov_valor = seriesObj.ibov?.[i] ?? null
                           dataPoint.ivvb11_valor = seriesObj.ivvb11?.[i] ?? null
                           dataPoint.ifix_valor = seriesObj.ifix?.[i] ?? null
                           dataPoint.ipca_valor = seriesObj.ipca?.[i] ?? null
                           dataPoint.cdi_valor = seriesObj.cdi?.[i] ?? null
+                          dataPoint.btc_valor = seriesObj.btc?.[i] ?? null
+                          dataPoint.ibov_idx = (historicoCarteira?.ibov?.[i] ?? null) as number | null
+                          dataPoint.ivvb11_idx = (historicoCarteira?.ivvb11?.[i] ?? null) as number | null
+                          dataPoint.ifix_idx = (historicoCarteira?.ifix?.[i] ?? null) as number | null
+                          dataPoint.ipca_idx = (historicoCarteira?.ipca?.[i] ?? null) as number | null
+                          dataPoint.cdi_idx = (historicoCarteira?.cdi?.[i] ?? null) as number | null
+                          dataPoint.btc_idx = (historicoCarteira?.btc?.[i] ?? null) as number | null
                         } else {
-                          // Benchmark individual
                           dataPoint.indice_valor = Array.isArray(indiceValorSeries) ? (indiceValorSeries[i] ?? null) : null
+                          dataPoint.indice_idx = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
                         }
-                        
                         return dataPoint
                       })}
                         margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
@@ -963,7 +1047,43 @@ export default function CarteiraGraficosTab({
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
                             <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                           </linearGradient>
+                          <linearGradient id="cgEvolBtcVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f7931a" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#f7931a" stopOpacity={0}/>
+                          </linearGradient>
                           <linearGradient id="cgEvolIndiceVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolCarteiraIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIbovIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIvvbIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIfixIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIpcaIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ec4899" stopOpacity={0.15}/>
+                            <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolCdiIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolBtcIdx" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f7931a" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#f7931a" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="cgEvolIndiceIdx" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
                             <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
                           </linearGradient>
@@ -975,15 +1095,17 @@ export default function CarteiraGraficosTab({
                           tick={{ fontSize: 11 }}
                           tickFormatter={(v) => {
                             if (!v || typeof v !== 'string') return v
-                            const [y, m] = v.split('-')
-                            return m && y ? `${m}/${y?.slice?.(2) ?? y}` : v
+                            const parts = String(v).split('-')
+                            if (parts.length >= 3) return `${parts[2]}/${parts[1]}`
+                            if (parts.length === 2) return `${parts[1]}/${parts[0]?.slice?.(2) ?? parts[0]}`
+                            return v
                           }}
                         />
                         <YAxis 
                           stroke="hsl(var(--muted-foreground))"
                           tick={{ fontSize: 11 }}
                           width={56}
-                          tickFormatter={(value) => formatCurrency(value, '')}
+                          tickFormatter={(value) => vistaGraficoComparativo === 'rs' ? formatCurrency(value, '') : (typeof value === 'number' ? `${(value - 100).toFixed(0)}%` : '')}
                           domain={['auto', 'auto']}
                           allowDataOverflow={false}
                         />
@@ -996,137 +1118,103 @@ export default function CarteiraGraficosTab({
                             fontSize: '12px'
                           }}
                           formatter={(value: any, name: string) => {
-                            const labelMap: Record<string, string> = {
+                            const labelMapValor: Record<string, string> = {
                               'carteira_valor': 'Carteira (preço)',
-                              'indice_valor': `${indiceRef.toUpperCase()} simulado`,
-                              'ibov_valor': 'IBOV simulado',
-                              'ivvb11_valor': 'IVVB11 simulado',
-                              'ifix_valor': 'IFIX simulado',
-                              'ipca_valor': 'IPCA simulado',
-                              'cdi_valor': 'CDI simulado',
+                              'indice_valor': `${indiceLabel} simulado`,
+                              'ibov_valor': 'IBOV', 'ivvb11_valor': 'IVVB11', 'ifix_valor': 'IFIX', 'ipca_valor': 'IPCA', 'cdi_valor': 'CDI', 'btc_valor': 'Bitcoin',
                             }
-                            return [formatCurrency(value), labelMap[name] || name]
+                            const labelMapIdx: Record<string, string> = {
+                              'carteira_idx': 'Carteira (preço)',
+                              'indice_idx': `${indiceLabel} (índice)`,
+                              'ibov_idx': 'IBOV', 'ivvb11_idx': 'IVVB11', 'ifix_idx': 'IFIX', 'ipca_idx': 'IPCA', 'cdi_idx': 'CDI', 'btc_idx': 'Bitcoin',
+                            }
+                            const labelMap = vistaGraficoComparativo === 'rs' ? labelMapValor : labelMapIdx
+                            const formatted = vistaGraficoComparativo === 'rs' ? formatCurrency(value) : `${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`
+                            return [formatted, labelMap[name] || name]
                           }}
                           labelFormatter={(label) => (label ? `Data: ${label}` : '')}
                         />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="url(#cgEvolCarteiraVal)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
-                        {indiceRef === 'todos' ? (
+                        {vistaGraficoComparativo === 'rs' ? (
                           <>
-                            <Area type="monotone" dataKey="ibov_valor" stroke="#ef4444" fill="url(#cgEvolIbovVal)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
-                            <Area type="monotone" dataKey="ivvb11_valor" stroke="#f59e0b" fill="url(#cgEvolIvvbVal)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
-                            <Area type="monotone" dataKey="ifix_valor" stroke="#8b5cf6" fill="url(#cgEvolIfixVal)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
-                            <Area type="monotone" dataKey="ipca_valor" stroke="#ec4899" fill="url(#cgEvolIpcaVal)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
-                            <Area type="monotone" dataKey="cdi_valor" stroke="#10b981" fill="url(#cgEvolCdiVal)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="carteira_valor" stroke="#3b82f6" fill="url(#cgEvolCarteiraVal)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                            {indiceRef === 'todos' ? (
+                              <>
+                                <Area type="monotone" dataKey="ibov_valor" stroke="#ef4444" fill="url(#cgEvolIbovVal)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ivvb11_valor" stroke="#f59e0b" fill="url(#cgEvolIvvbVal)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ifix_valor" stroke="#8b5cf6" fill="url(#cgEvolIfixVal)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ipca_valor" stroke="#ec4899" fill="url(#cgEvolIpcaVal)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="cdi_valor" stroke="#10b981" fill="url(#cgEvolCdiVal)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="btc_valor" stroke="#f7931a" fill="url(#cgEvolBtcVal)" strokeWidth={1.8} name="Bitcoin" isAnimationActive animationDuration={1350} animationEasing="ease-out" />
+                              </>
+                            ) : (
+                              <Area type="monotone" dataKey="indice_valor" stroke={indiceRef === 'btc' ? '#f7931a' : '#22c55e'} fill={indiceRef === 'btc' ? 'url(#cgEvolBtcVal)' : 'url(#cgEvolIndiceVal)'} strokeWidth={2.5} name={`${indiceLabel} simulado`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                            )}
                           </>
                         ) : (
-                          <Area type="monotone" dataKey="indice_valor" stroke="#22c55e" fill="url(#cgEvolIndiceVal)" strokeWidth={2.5} name={`${indiceRef.toUpperCase()} simulado`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                          <>
+                            <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="url(#cgEvolCarteiraIdx)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                            {indiceRef === 'todos' ? (
+                              <>
+                                <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="url(#cgEvolIbovIdx)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="url(#cgEvolIvvbIdx)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="url(#cgEvolIfixIdx)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="url(#cgEvolIpcaIdx)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="url(#cgEvolCdiIdx)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="btc_idx" stroke="#f7931a" fill="url(#cgEvolBtcIdx)" strokeWidth={1.8} name="Bitcoin" isAnimationActive animationDuration={1350} animationEasing="ease-out" />
+                              </>
+                            ) : (
+                              <Area type="monotone" dataKey="indice_idx" stroke={indiceRef === 'btc' ? '#f7931a' : '#22c55e'} fill={indiceRef === 'btc' ? 'url(#cgEvolBtcIdx)' : 'url(#cgEvolIndiceIdx)'} strokeWidth={2.5} name={`${indiceLabel} (índice)`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                            )}
+                          </>
                         )}
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-              {/* Gráfico de Retorno (%) sem aportes */}
-              <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
-                <div className="text-xs md:text-sm text-muted-foreground mb-2">Retorno (%) — preço (exclui aportes/retiradas)</div>
-                <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
-                  <ResponsiveContainer width="100%" height="100%" minHeight={260}>
-                    <AreaChart data={historicoCarteira.datas.map((d, i) => {
-                      const dataPoint: any = {
-                        data: d,
-                        carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
-                      }
-                      
-                      if (indiceRef === 'todos') {
-                        // Múltiplos benchmarks
-                        dataPoint.ibov_idx = (historicoCarteira?.ibov?.[i] ?? null) as number | null
-                        dataPoint.ivvb11_idx = (historicoCarteira?.ivvb11?.[i] ?? null) as number | null
-                        dataPoint.ifix_idx = (historicoCarteira?.ifix?.[i] ?? null) as number | null
-                        dataPoint.ipca_idx = (historicoCarteira?.ipca?.[i] ?? null) as number | null
-                        dataPoint.cdi_idx = (historicoCarteira?.cdi?.[i] ?? null) as number | null
-                      } else {
-                        // Benchmark individual
-                        dataPoint.indice_idx = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
-                      }
-                      
-                      return dataPoint
-                    })}
-                      margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
-                    >
-                      <defs>
-                        <linearGradient id="cgEvolCarteiraIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolIbovIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolIvvbIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolIfixIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolIpcaIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ec4899" stopOpacity={0.15}/>
-                          <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolCdiIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="cgEvolIndiceIdx" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                      <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} tickFormatter={(v: any) => {
-                        if (!v || typeof v !== 'string') return v
-                        const [y, m] = String(v).split('-')
-                        return m && y ? `${m}/${y?.slice?.(2) ?? y}` : String(v)
-                      }} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} width={52} tickFormatter={(v: any) => (typeof v === 'number' ? `${(v - 100).toFixed(0)}%` : '')} domain={['auto', 'auto']} allowDataOverflow={false} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'hsl(var(--foreground))',
-                          fontSize: '12px'
-                        }}
-                        formatter={(value: any, name: string) => {
-                          const labelMap: Record<string, string> = {
-                            'carteira_idx': 'Carteira (preço)',
-                            'indice_idx': `${indiceRef.toUpperCase()} (índice)`,
-                            'ibov_idx': 'IBOV (índice)',
-                            'ivvb11_idx': 'IVVB11 (índice)',
-                            'ifix_idx': 'IFIX (índice)',
-                            'ipca_idx': 'IPCA (índice)',
-                            'cdi_idx': 'CDI (índice)',
-                          }
-                          return [`${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`, labelMap[name] || name]
-                        }}
-                        labelFormatter={(label) => (label ? `Data: ${label}` : '')}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="url(#cgEvolCarteiraIdx)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
-                      {indiceRef === 'todos' ? (
-                        <>
-                          <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="url(#cgEvolIbovIdx)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
-                          <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="url(#cgEvolIvvbIdx)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
-                          <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="url(#cgEvolIfixIdx)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
-                          <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="url(#cgEvolIpcaIdx)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
-                          <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="url(#cgEvolCdiIdx)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
-                        </>
-                      ) : (
-                        <Area type="monotone" dataKey="indice_idx" stroke="#22c55e" fill="url(#cgEvolIndiceIdx)" strokeWidth={2.5} name={`${indiceRef.toUpperCase()} (índice)`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
-                      )}
-                    </AreaChart>
+                {/* Gráfico: Evolução do patrimônio total (com aportes) — complementar ao comparativo sem aportes */}
+                <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Evolução do patrimônio total (com aportes e retiradas)</h4>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Valor real da carteira ao longo do tempo, incluindo novos aportes e saques.
+                  </p>
+                  <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={260}>
+                      <AreaChart
+                        data={historicoCarteira.datas.map((d, i) => ({
+                          data: d,
+                          patrimonio: historicoCarteira.carteira_valor?.[i] ?? null,
+                        }))}
+                        margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
+                      >
+                        <defs>
+                          <linearGradient id="cgPatrimonioVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35}/>
+                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                        <XAxis
+                          dataKey="data"
+                          stroke="hsl(var(--muted-foreground))"
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => {
+                            if (!v || typeof v !== 'string') return v
+                            const parts = String(v).split('-')
+                            if (parts.length >= 3) return `${parts[2]}/${parts[1]}`
+                            if (parts.length === 2) return `${parts[1]}/${parts[0]?.slice?.(2) ?? parts[0]}`
+                            return v
+                          }}
+                        />
+                        <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} width={56} tickFormatter={(v) => formatCurrency(v, '')} domain={['auto', 'auto']} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                          formatter={(value: any) => [formatCurrency(value), 'Patrimônio']}
+                          labelFormatter={(label) => (label ? `Data: ${label}` : '')}
+                        />
+                        <Area type="monotone" dataKey="patrimonio" stroke="#0ea5e9" fill="url(#cgPatrimonioVal)" strokeWidth={2.5} name="Patrimônio" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -1142,6 +1230,75 @@ export default function CarteiraGraficosTab({
                     Dados de exemplo serão mostrados para demonstração
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Calendário de desempenho mensal (sem aportes) */}
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                  <Calendar className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base md:text-lg font-semibold text-foreground">Desempenho mensal (sem aportes)</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Subida ou queda por mês, apenas preço. Respeita o período selecionado acima (Mensal, Trimestral, Anual, etc.).</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <label className="text-sm text-muted-foreground whitespace-nowrap">Ano:</label>
+                <select
+                  value={anoCalendario}
+                  onChange={(e) => setAnoCalendario(Number(e.target.value))}
+                  className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm min-w-[100px]"
+                  aria-label="Filtrar por ano"
+                >
+                  {anosCalendario.map((ano) => (
+                    <option key={ano} value={ano}>{ano}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {loadingHistorico ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-xl bg-muted/50 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((nomeMes, idx) => {
+                  const mes = idx + 1
+                  const item = calendarioMensal.find(m => m.ano === anoCalendario && m.mes === mes)
+                  const positivo = item ? item.retornoCarteira >= 0 : null
+                  return (
+                    <div
+                      key={mes}
+                      className={`rounded-xl border p-3 min-h-[88px] flex flex-col justify-between transition-colors ${
+                        item
+                          ? positivo
+                            ? 'bg-green-500/10 border-green-500/30'
+                            : 'bg-red-500/10 border-red-500/30'
+                          : 'bg-muted/30 border-border'
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-muted-foreground">{nomeMes}</div>
+                      {item ? (
+                        <>
+                          <div className={`text-lg font-bold ${positivo ? 'text-green-600' : 'text-red-600'}`}>
+                            {positivo ? '+' : ''}{formatPercentage(item.retornoCarteira)}
+                          </div>
+                          <div className={`text-xs ${positivo ? 'text-green-600/80' : 'text-red-600/80'}`}>
+                            {positivo ? '+' : ''}{formatCurrency(item.ganhoPerda, '')}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">—</div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1353,7 +1510,7 @@ export default function CarteiraGraficosTab({
                       <tr className="border-b border-border">
                         <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Período</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">Retorno Carteira</th>
-                        <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">Retorno {indiceRef.toUpperCase()}</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">Retorno {indiceLabel}</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">Diferença</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">Ganho/Perda (R$)</th>
                       </tr>
@@ -1404,7 +1561,7 @@ export default function CarteiraGraficosTab({
                   <h4 className="text-sm font-medium text-muted-foreground mb-4">
                     {indiceRef === 'todos' 
                       ? 'Comparativo de Performance: Carteira vs Todos os Benchmarks'
-                      : `Comparativo de Performance: Carteira vs ${indiceRef.toUpperCase()}`}
+                      : `Comparativo de Performance: Carteira vs ${indiceLabel}`}
                   </h4>
                   <div className="w-full min-h-[300px] h-72 sm:h-80 md:h-96 overflow-visible">
                     <ResponsiveContainer width="100%" height="100%" minHeight={300}>
@@ -1451,7 +1608,7 @@ export default function CarteiraGraficosTab({
                             if (name === 'retornoCarteira') {
                               return [`${value >= 0 ? '+' : ''}${formatPercentage(value)}`, 'Carteira']
                             } else if (name === 'retornoIndice') {
-                              return [`${value >= 0 ? '+' : ''}${formatPercentage(value)}`, indiceRef.toUpperCase()]
+                              return [`${value >= 0 ? '+' : ''}${formatPercentage(value)}`, indiceLabel]
                             }
                             return [value, name]
                           }}
@@ -1480,7 +1637,7 @@ export default function CarteiraGraficosTab({
                         />
                         <Bar
                           dataKey="retornoIndice"
-                          name={indiceRef.toUpperCase()}
+                          name={indiceLabel}
                           fill="hsl(var(--muted-foreground))"
                           radius={[4, 4, 0, 0]}
                           opacity={0.5}
@@ -1903,111 +2060,56 @@ export default function CarteiraGraficosTab({
             )}
           </div>
 
-          {/* Gráficos de Barras */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-            {/* Top 5 Maiores Posições */}
-            <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
-                  <Trophy className="w-5 h-5 text-primary" />
-                </div>
-                <h3 className="text-base md:text-lg font-semibold text-foreground">Top 5 Maiores Posições</h3>
+          {/* Top 10 Maiores Posições (único gráfico de barras — evita repetir Top 5) */}
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                <Trophy className="w-5 h-5 text-primary" />
               </div>
-              {topAtivos.length > 0 ? (
-                <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-                  <BarChart data={topAtivos} margin={{ top: 8, right: 20, left: 12, bottom: 64 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="ticker" 
-                      stroke="hsl(var(--muted-foreground))"
-                        fontSize={10}
-                        angle={-45}
-                        textAnchor="end"
-                        height={56}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))"
-                        fontSize={10}
-                      tickFormatter={(value) => formatCurrency(value).replace('R$ ', '')}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))', 
-                        borderRadius: '8px',
-                        color: 'hsl(var(--foreground))'
-                      }}
-                      formatter={(value: any) => [formatCurrency(value), 'Valor Total']}
-                    />
-                    <Bar 
-                      dataKey="valor_total" 
-                      fill="hsl(var(--primary))" 
-                      radius={[4, 4, 0, 0]}
-                      onClick={() => abrirModalTopAtivos()}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  Nenhuma posição disponível
-                </div>
-              )}
+              <h3 className="text-base md:text-lg font-semibold text-foreground">Top 10 Maiores Posições</h3>
             </div>
-
-            {/* Top 10 Ativos por Valor */}
-            <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
-                  <Activity className="w-5 h-5 text-primary" />
-                </div>
-                <h3 className="text-base md:text-lg font-semibold text-foreground">Top 10 Ativos por Valor</h3>
-              </div>
-              {carteira.length > 0 ? (
-                <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+            {carteira.length > 0 ? (
+              <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
+                <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                   <BarChart data={carteira.slice(0, 10)} margin={{ top: 8, right: 20, left: 12, bottom: 64 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="ticker" 
+                    <XAxis
+                      dataKey="ticker"
                       stroke="hsl(var(--muted-foreground))"
-                        fontSize={10}
+                      fontSize={10}
                       angle={-45}
                       textAnchor="end"
-                        height={56}
+                      height={56}
                     />
-                    <YAxis 
+                    <YAxis
                       stroke="hsl(var(--muted-foreground))"
-                        fontSize={10}
+                      fontSize={10}
                       tickFormatter={(value) => formatCurrency(value).replace('R$ ', '')}
                     />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                         color: 'hsl(var(--foreground))'
                       }}
                       formatter={(value: any) => [formatCurrency(value), 'Valor Total']}
                     />
-                    <Bar 
-                      dataKey="valor_total" 
-                      fill="hsl(var(--primary))" 
+                    <Bar
+                      dataKey="valor_total"
+                      fill="hsl(var(--primary))"
                       radius={[4, 4, 0, 0]}
                       onClick={() => abrirModalTodosAtivos()}
                       style={{ cursor: 'pointer' }}
                     />
                   </BarChart>
                 </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  Nenhum ativo disponível
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                Nenhuma posição disponível
+              </div>
+            )}
           </div>
         </div>
       )}

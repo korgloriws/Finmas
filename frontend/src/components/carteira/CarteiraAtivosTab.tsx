@@ -723,6 +723,8 @@ interface CarteiraAtivosTabProps {
   tiposDisponiveisComputed: string[]
   tesouroTitulos?: { titulos: Array<any> }
   onPickTesouro?: (item: any) => void
+  /** Abre o modal de adicionar ativo (empty state) */
+  onOpenAddAtivo?: () => void
 }
 
 export default function CarteiraAtivosTab({
@@ -768,7 +770,8 @@ export default function CarteiraAtivosTab({
   indicadores,
   tiposDisponiveisComputed,
   tesouroTitulos,
-  onPickTesouro
+  onPickTesouro,
+  onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
 
@@ -1027,10 +1030,7 @@ export default function CarteiraAtivosTab({
             </button>
             
             <button
-              onClick={() => {
-                
-                alert('Funcionalidade de adicionar ativo será implementada')
-              }}
+              onClick={() => onOpenAddAtivo?.()}
               className="flex items-center gap-1.5 px-3 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />

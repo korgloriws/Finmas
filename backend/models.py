@@ -5665,7 +5665,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
     try:
         usuario = get_usuario_atual()
         if not usuario:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
 
         if _is_postgres():
             conn = _pg_conn_for_user(usuario)
@@ -5691,15 +5691,38 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             movimentos = cursor.fetchall()
 
         if not movimentos:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
 
 
         datas_mov = [datetime.strptime(m[0][:10], '%Y-%m-%d') for m in movimentos]
-        data_ini = min(datas_mov)
+        data_primeira = min(datas_mov)
         data_fim = datetime.now()
 
-        # granularidade pedida via agregacao
-        gran = agregacao if agregacao in ('mensal','trimestral','semestral','anual','maximo','semanal') else 'mensal'
+        # Período = intervalo de tempo; granularidade = densidade dos pontos (para o gráfico mostrar subidas e quedas).
+        # Sempre usamos pontos mensais ou semanais no intervalo, sem reduzir a um ponto por ano.
+        if agregacao == 'maximo':
+            data_ini = data_primeira
+            gran = 'mensal'
+        elif agregacao == 'anual':
+            # Últimos 12 meses, pontos mensais (12 pontos no gráfico)
+            data_ini = max(data_primeira, data_fim - timedelta(days=365))
+            gran = 'mensal'
+        elif agregacao == 'semestral':
+            data_ini = max(data_primeira, data_fim - timedelta(days=182))
+            gran = 'mensal'
+        elif agregacao == 'trimestral':
+            data_ini = max(data_primeira, data_fim - timedelta(days=92))
+            gran = 'mensal'
+        elif agregacao == 'mensal':
+            data_ini = max(data_primeira, data_fim - timedelta(days=31))
+            gran = 'semanal'  # 4–5 pontos no mês para ver volatilidade
+        elif agregacao == 'semanal':
+            # Todo o histórico com pontos semanais (máxima densidade)
+            data_ini = data_primeira
+            gran = 'semanal'
+        else:
+            data_ini = data_primeira
+            gran = 'mensal'
         pontos = _gerar_pontos_tempo(gran, data_ini, data_fim)
 
 
@@ -5793,7 +5816,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         indices_map = {
             'ibov': ['^BVSP', 'BOVA11.SA'],
             'ivvb11': ['IVVB11.SA'],
-            'ifix': ['^IFIX', 'XFIX11.SA']
+            'ifix': ['^IFIX', 'XFIX11.SA'],
+            'btc': ['BTC-BRL', 'BTC-USD'],
         }
         indices_vals = {k: [] for k in indices_map.keys()}
         
@@ -5855,7 +5879,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
 
                 base = 100.0
                 for lab in datas_labels:
-                    var = ipca_map.get(lab)
+                    chave = lab[:7] if len(lab) >= 7 else lab  # YYYY-MM-DD -> YYYY-MM
+                    var = ipca_map.get(chave)
                     if var is not None:
                         base *= (1.0 + var/100.0)
                     ipca_series.append(base)
@@ -5905,8 +5930,9 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                     last_by_month[lab] = base
                 
                 for i, lab in enumerate(datas_labels):
-                    if lab in last_by_month:
-                        cdi_series.append(last_by_month[lab])
+                    chave = lab[:7] if len(lab) >= 7 else lab  # YYYY-MM-DD -> YYYY-MM
+                    if chave in last_by_month:
+                        cdi_series.append(last_by_month[chave])
                     else:
                         cdi_series.append(cdi_series[-1] if cdi_series else None)
             else:
@@ -5958,9 +5984,10 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             'ivvb11': indices_vals['ivvb11'],
             'ifix': indices_vals['ifix'],
             'ipca': ipca_series if ipca_series else [None for _ in datas_labels],
-            'cdi': cdi_series if cdi_series else [None for _ in datas_labels]
+            'cdi': cdi_series if cdi_series else [None for _ in datas_labels],
+            'btc': indices_vals['btc'],
         }
-        datas_labels, series_dict = reduce_by_granularity(datas_labels, series_dict, gran)
+        # Não reduzir por granularidade: manter todos os pontos para o gráfico mostrar subidas e quedas reais
 
         carteira_price_base = []
         if pontos:
@@ -6003,6 +6030,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         ifix_rebased = rebase(series_dict['ifix'])
         ipca_rebased = rebase(series_dict['ipca']) if series_dict['ipca'] else [None for _ in datas_labels]
         cdi_rebased = rebase(series_dict['cdi']) if series_dict['cdi'] else [None for _ in datas_labels]
+        btc_rebased = rebase(series_dict['btc'])
 
         return {
             "datas": datas_labels,
@@ -6012,12 +6040,13 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             "ifix": ifix_rebased,
             "ipca": ipca_rebased,
             "cdi": cdi_rebased,
+            "btc": btc_rebased,
             "carteira_valor": series_dict['carteira'],
             "carteira_price": carteira_price_series,
         }
     except Exception as e:
         print(f"Erro em obter_historico_carteira_comparado: {e}")
-        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "carteira_valor": [], "carteira_price": []}
+        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
 
 
 # ==================== FUNÇÕES DE CONTROLE FINANCEIRO ====================
