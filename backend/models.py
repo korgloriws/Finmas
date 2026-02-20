@@ -5690,21 +5690,46 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             """)
             movimentos = cursor.fetchall()
 
-        if not movimentos:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
+        # Carteira atual: incluir TODOS os ativos (não só os que têm movimentações) para refletir saldo real
+        carteira_atual_list = obter_carteira()
+        if not isinstance(carteira_atual_list, list):
+            carteira_atual_list = []
+        carteira_map = {}
+        for a in carteira_atual_list:
+            tk = (a.get('ticker') or '').strip()
+            if not tk:
+                continue
+            qty = float(a.get('quantidade') or 0)
+            preco_atual = float(a.get('preco_atual') or 0)
+            data_adic = a.get('data_adicao')
+            try:
+                dt_adic = datetime.strptime(str(data_adic)[:10], '%Y-%m-%d') if data_adic else None
+            except Exception:
+                dt_adic = None
+            if tk not in carteira_map:
+                carteira_map[tk] = {'quantidade': qty, 'data_adicao': dt_adic, 'preco_atual': preco_atual}
+            else:
+                carteira_map[tk]['quantidade'] += qty
+                carteira_map[tk]['preco_atual'] = preco_atual
 
-
-        datas_mov = [datetime.strptime(m[0][:10], '%Y-%m-%d') for m in movimentos]
-        data_primeira = min(datas_mov)
         data_fim = datetime.now()
+        if movimentos:
+            datas_mov = [datetime.strptime(m[0][:10], '%Y-%m-%d') for m in movimentos]
+            data_primeira = min(datas_mov)
+        else:
+            data_primeira = data_fim - timedelta(days=365)
+            if carteira_map:
+                for v in carteira_map.values():
+                    if v.get('data_adicao'):
+                        d = v['data_adicao']
+                        if d < data_primeira:
+                            data_primeira = d
 
         # Período = intervalo de tempo; granularidade = densidade dos pontos (para o gráfico mostrar subidas e quedas).
-        # Sempre usamos pontos mensais ou semanais no intervalo, sem reduzir a um ponto por ano.
         if agregacao == 'maximo':
             data_ini = data_primeira
             gran = 'mensal'
         elif agregacao == 'anual':
-            # Últimos 12 meses, pontos mensais (12 pontos no gráfico)
             data_ini = max(data_primeira, data_fim - timedelta(days=365))
             gran = 'mensal'
         elif agregacao == 'semestral':
@@ -5715,9 +5740,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             gran = 'mensal'
         elif agregacao == 'mensal':
             data_ini = max(data_primeira, data_fim - timedelta(days=31))
-            gran = 'semanal'  # 4–5 pontos no mês para ver volatilidade
+            gran = 'semanal'
         elif agregacao == 'semanal':
-            # Todo o histórico com pontos semanais (máxima densidade)
             data_ini = data_primeira
             gran = 'semanal'
         else:
@@ -5725,8 +5749,13 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             gran = 'mensal'
         pontos = _gerar_pontos_tempo(gran, data_ini, data_fim)
 
+        # Tickers = união dos que têm movimentações e dos que estão na carteira atual (para refletir saldo real)
+        tickers_from_mov = {m[1] for m in movimentos} if movimentos else set()
+        tickers_from_carteira = set(carteira_map.keys())
+        tickers = sorted(list(tickers_from_mov | tickers_from_carteira))
+        if not tickers:
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
 
-        tickers = sorted(list({m[1] for m in movimentos}))
         ticker_to_hist = {}
         
         # Paralelização: busca histórico de múltiplos tickers simultaneamente
@@ -5779,21 +5808,40 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
 
 
         mov_by_ticker = {}
-        for data_str, tk, qtd, preco, tipo in movimentos:
-            dt = datetime.strptime(data_str[:10], '%Y-%m-%d')
-            mov_by_ticker.setdefault(tk, []).append((dt, float(qtd if qtd is not None else 0.0), str(tipo)))
+        if movimentos:
+            for data_str, tk, qtd, preco, tipo in movimentos:
+                dt = datetime.strptime(data_str[:10], '%Y-%m-%d')
+                mov_by_ticker.setdefault(tk, []).append((dt, float(qtd if qtd is not None else 0.0), str(tipo)))
 
         def quantity_until(tk, dt):
-            q = 0.0
-            for mdt, mq, mtype in mov_by_ticker.get(tk, []):
-                if mdt <= dt:
-                    if mtype == 'venda':
-                        q -= mq
-                    else:
-                        q += mq
-            return q
+            if tk in mov_by_ticker:
+                q = 0.0
+                for mdt, mq, mtype in mov_by_ticker.get(tk, []):
+                    if mdt <= dt:
+                        if mtype == 'venda':
+                            q -= mq
+                        else:
+                            q += mq
+                return q
+            # Ativo só na carteira (sem movimentações): quantidade atual a partir da data de adição
+            info = carteira_map.get(tk)
+            if not info:
+                return 0.0
+            dt_adic = info.get('data_adicao')
+            if dt_adic is not None and dt < dt_adic:
+                return 0.0
+            return info.get('quantidade') or 0.0
 
- 
+        def price_at_point(tk, pt):
+            p = price_on_or_before(ticker_to_hist.get(tk), pt)
+            if p is not None:
+                return p
+            # Sem histórico yf (ex.: renda fixa): usar preço atual da carteira como aproximação
+            info = carteira_map.get(tk)
+            if info and (info.get('preco_atual') or 0) > 0:
+                return float(info['preco_atual'])
+            return None
+
         carteira_vals = []
         datas_labels = []
         for pt in pontos:
@@ -5802,7 +5850,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 q = quantity_until(tk, pt)
                 if q <= 0:
                     continue
-                price = price_on_or_before(ticker_to_hist.get(tk), pt)
+                price = price_at_point(tk, pt)
                 if price is None:
                     continue
                 total += q * price
@@ -5812,7 +5860,15 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             else:
                 datas_labels.append(pt.strftime('%Y-%m'))
 
- 
+        if carteira_vals:
+            try:
+                carteira_atual = obter_carteira()
+                if isinstance(carteira_atual, list) and carteira_atual:
+                    valor_real_total = sum(float(a.get('valor_total') or 0) for a in carteira_atual)
+                    carteira_vals[-1] = valor_real_total
+            except Exception:
+                pass
+
         indices_map = {
             'ibov': ['^BVSP', 'BOVA11.SA'],
             'ivvb11': ['IVVB11.SA'],
@@ -6002,8 +6058,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                     q_prev = quantity_until(tk, prev_pt)
                     if q_prev <= 0:
                         continue
-                    p_prev = price_on_or_before(ticker_to_hist.get(tk), prev_pt)
-                    p_cur = price_on_or_before(ticker_to_hist.get(tk), cur_pt)
+                    p_prev = price_at_point(tk, prev_pt)
+                    p_cur = price_at_point(tk, cur_pt)
                     if p_prev is None or p_cur is None:
                         continue
                     V_prev += q_prev * p_prev

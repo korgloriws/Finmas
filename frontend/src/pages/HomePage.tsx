@@ -1727,6 +1727,10 @@ export default function HomePage() {
                       <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
                       <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="evolBtc" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f7931a" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#f7931a" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis 
@@ -1766,7 +1770,8 @@ export default function HomePage() {
                   <Area type="monotone" dataKey="ivvb11" stroke="#f59e0b" fill="url(#evolIvvb)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
                   <Area type="monotone" dataKey="ifix" stroke="#a855f7" fill="url(#evolIfix)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
                   <Area type="monotone" dataKey="ipca" stroke="#ef4444" fill="url(#evolIpca)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
-                  <Area type="monotone" dataKey="cdi" stroke="#06b6d4" fill="url(#evolCdi)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="cdi" stroke="#06b6d4" fill="url(#evolCdi)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" /> 
+                  <Area type="monotone" dataKey="btc" stroke="#f7931a" fill="url(#evolBtc)" strokeWidth={1.8} name="Bitcoin" isAnimationActive animationDuration={1350} animationEasing="ease-out" />
                 </AreaChart>
                 </ResponsiveContainer>
               </div>

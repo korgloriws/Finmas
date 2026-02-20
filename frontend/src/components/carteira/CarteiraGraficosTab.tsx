@@ -55,6 +55,8 @@ interface CarteiraGraficosTabProps {
     btc?: (number | null)[]
     carteira_price?: (number | null)[]
   } | null
+  /** Histórico em período máximo, usado só no calendário para que os valores por mês não mudem ao trocar o filtro */
+  historicoParaCalendario?: { datas: string[]; carteira_valor?: number[]; carteira?: (number | null)[]; carteira_price?: (number | null)[] } | null
   filtroPeriodo: string
   setFiltroPeriodo: (value: string) => void
   ativosPorTipo: Record<string, number>
@@ -64,6 +66,7 @@ export default function CarteiraGraficosTab({
   carteira,
   loadingHistorico,
   historicoCarteira,
+  historicoParaCalendario = null,
   filtroPeriodo,
   setFiltroPeriodo,
   ativosPorTipo
@@ -437,9 +440,10 @@ export default function CarteiraGraficosTab({
   // Calendário mensal: retorno por mês (sem aportes). Funciona com qualquer filtro (mensal, trimestral, etc.) e com qualquer quantidade de dados (ex.: só Jan e Fev).
   // Retorno do mês = variação em relação ao valor do mês anterior (não “dentro do mês”), para que 1 ponto por mês mostre o % correto.
   const calendarioMensal = useMemo(() => {
-    if (!historicoCarteira?.datas?.length) return []
-    const datas = historicoCarteira.datas
-    const carteiraSeries = (historicoCarteira.carteira_price ?? historicoCarteira.carteira ?? []) as (number | null)[]
+    const fonte = historicoParaCalendario?.datas?.length ? historicoParaCalendario : historicoCarteira
+    if (!fonte?.datas?.length) return []
+    const datas = fonte.datas
+    const carteiraSeries = (fonte.carteira_price ?? fonte.carteira ?? []) as (number | null)[]
     const len = Math.min(datas.length, carteiraSeries.length)
     if (len === 0) return []
 
@@ -468,6 +472,16 @@ export default function CarteiraGraficosTab({
       .sort((a, b) => a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)
 
     const base = 100
+    const initialWealthCalendario = fonte === historicoParaCalendario && (fonte as any).carteira_valor?.length
+      ? (() => {
+          const arr = (fonte as any).carteira_valor as (number | null)[]
+          for (let i = 0; i < arr.length; i++) {
+            const v = arr[i]
+            if (typeof v === 'number' && !isNaN(v)) return v
+          }
+          return initialWealth
+        })()
+      : initialWealth
     return entradasOrdenadas.map((ent, i) => {
       const valorAtual = ent.carteiraFim
       const valorAnterior = i === 0 ? base : (entradasOrdenadas[i - 1].carteiraFim ?? base)
@@ -475,7 +489,7 @@ export default function CarteiraGraficosTab({
       let ganhoPerda = 0
       if (valorAtual != null && valorAnterior != null && valorAnterior > 0) {
         retornoCarteira = ((valorAtual / valorAnterior) - 1) * 100
-        ganhoPerda = initialWealth * (retornoCarteira / 100)
+        ganhoPerda = initialWealthCalendario * (retornoCarteira / 100)
       }
       return {
         ano: ent.ano,
@@ -485,7 +499,7 @@ export default function CarteiraGraficosTab({
         ganhoPerda,
       }
     })
-  }, [historicoCarteira, initialWealth])
+  }, [historicoCarteira, historicoParaCalendario, initialWealth])
 
   const anosCalendario = useMemo(() => {
     const anos = Array.from(new Set(calendarioMensal.map(m => m.ano))).sort((a, b) => b - a)

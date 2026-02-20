@@ -311,6 +311,16 @@ export default function CarteiraPage() {
     refetchOnMount: false, 
   })
 
+  // Histórico em período máximo só para o calendário de desempenho mensal, para que os valores por mês não mudem ao trocar o filtro de período
+  const { data: historicoParaCalendario } = useQuery({
+    queryKey: ['historico-carteira-calendario', user],
+    queryFn: () => carteiraService.getHistorico('maximo'),
+    enabled: !!user && activeTab === 'graficos',
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+
   const adicionarMutation = useMutation({
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
       carteiraService.adicionarAtivo(ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir),
@@ -804,6 +814,7 @@ export default function CarteiraPage() {
             carteira={carteira || []}
             loadingHistorico={loadingHistorico}
             historicoCarteira={historicoCarteira as any || null}
+            historicoParaCalendario={historicoParaCalendario as any || null}
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
             ativosPorTipo={ativosPorTipo}
