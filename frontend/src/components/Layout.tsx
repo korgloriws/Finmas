@@ -62,7 +62,7 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Análise – Ações', path: '/analise', keywords: 'analise acoes lista', params: { tab: 'lista', sub: 'acoes' } },
     { label: 'Análise – BDRs', path: '/analise', keywords: 'analise bdrs lista', params: { tab: 'lista', sub: 'bdrs' } },
     { label: 'Controle – Financeiro', path: '/controle', keywords: 'controle financeiro receitas despesas fluxo', params: { tab: 'financeiro' } },
-    { label: 'Controle – Alimentação', path: '/controle', keywords: 'controle alimentacao marmitas', params: { tab: 'alimentacao' } },
+    { label: 'Controle – Alimentação', path: '/controle', keywords: 'controle alimentação', params: { tab: 'alimentacao' } },
     { label: 'Carteira – Projeção', path: '/carteira', keywords: 'carteira projecao projeção simulacao', params: { tab: 'projecao' } },
     { label: 'Carteira – Ativos', path: '/carteira', keywords: 'carteira ativos posicoes', params: { tab: 'ativos' } },
     { label: 'Carteira – Proventos', path: '/carteira', keywords: 'carteira proventos dividendos', params: { tab: 'proventos' } },

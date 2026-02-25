@@ -521,7 +521,7 @@ export default function ControlePage() {
                  <p className="text-2xl font-bold text-foreground mb-2">
                    {ocultarValores ? '***' : formatCurrency(totalAlimentacao)}
                  </p>
-                 <p className="text-xs text-muted-foreground">Clique para gerenciar marmitas</p>
+                 <p className="text-xs text-muted-foreground">Clique para gerenciar alimentação</p>
         </motion.div>
       </div>
 
@@ -614,7 +614,7 @@ export default function ControlePage() {
                   <ChefHat size={24} className="text-primary" />
         </div>
                 <div className="text-left">
-                  <div className="font-semibold text-foreground">Controle Marmitas</div>
+                  <div className="font-semibold text-foreground">Alimentação</div>
                   <div className="text-sm text-muted-foreground">Gerenciar alimentação</div>
             </div>
               </motion.button>

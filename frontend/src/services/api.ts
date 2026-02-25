@@ -274,7 +274,7 @@ export const adminService = {
     return response.data
   },
 
-  /** Marmitas do usuário (somente leitura). mes/ano opcionais. */
+  /** Alimentação do usuário (somente leitura). mes/ano opcionais. */
   getMarmitasUsuario: async (username: string, mes?: number | string, ano?: number | string) => {
     const encoded = encodeURIComponent(username)
     const params = new URLSearchParams()
@@ -912,11 +912,13 @@ export const controleService = {
   },
 }
 
+/** 15 minutos: análise pode demorar muito na primeira carga ou com muitos ativos */
+const ANALISE_ATIVOS_TIMEOUT_MS = 15 * 60 * 1000
+
 export const analiseService = {
 
   getAtivos: async (tipo: string, filtros: FiltrosAnalise): Promise<AtivoAnalise[]> => {
-    // Timeout longo: backend processa todos os ativos (ex.: BDRs) sem limite; evita 504
-    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 600000 })
+    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: ANALISE_ATIVOS_TIMEOUT_MS })
     return response.data
   },
 

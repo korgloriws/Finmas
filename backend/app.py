@@ -4320,7 +4320,7 @@ def api_adicionar_marmita():
         except Exception:
             pass
         
-        return jsonify({"success": True, "message": "Marmita adicionada com sucesso"}), 201
+        return jsonify({"success": True, "message": "Registro de alimentação adicionado com sucesso"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4340,9 +4340,9 @@ def api_atualizar_marmita(id):
                     cache.clear()
             except Exception:
                 pass
-            return jsonify({"success": True, "message": "Marmita atualizada com sucesso"}), 200
+            return jsonify({"success": True, "message": "Registro de alimentação atualizado com sucesso"}), 200
         else:
-            return jsonify({"error": resultado.get('message', 'Erro ao atualizar marmita')}), 400
+            return jsonify({"error": resultado.get('message', 'Erro ao atualizar registro de alimentação')}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4356,7 +4356,7 @@ def api_remover_marmita(id):
                 cache.clear()
         except Exception:
             pass
-        return jsonify({"success": True, "message": "Marmita removida com sucesso"}), 200
+        return jsonify({"success": True, "message": "Registro de alimentação removido com sucesso"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

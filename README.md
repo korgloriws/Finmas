@@ -22,7 +22,7 @@ Sistema completo de gestão financeira pessoal focado em investimentos, controle
 
 - **Gestão de Carteira de Investimentos**: Ações, FIIs, BDRs, Criptomoedas, Renda Fixa
 - **Análise de Mercado**: Filtros avançados, comparação de ativos, rankings
-- **Controle Financeiro**: Receitas, despesas, cartões de crédito, marmitas
+- **Controle Financeiro**: Receitas, despesas, cartões de crédito, alimentação
 - **Análise de Proventos**: Agenda de dividendos, histórico, projeções
 - **Relatórios e Insights**: Gráficos, relatórios PDF/CSV, análises de performance
 
@@ -231,7 +231,7 @@ Finmas/
 -  Receitas (recorrentes, parceladas)
 -  Despesas variáveis
 -  Cartões de crédito (cadastro, compras, pagamentos)
--  Controle de marmitas (gastos com alimentação)
+-  Alimentação (controle de gastos com alimentação)
 -  Evolução financeira (gráficos)
 -  Saldo por pessoa
 

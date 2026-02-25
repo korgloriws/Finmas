@@ -71,7 +71,7 @@ export default function MarmitasPage() {
   }, [inputData, inputValor, inputComprou, adicionarMutation])
 
   const handleRemover = useCallback((id: number) => {
-    if (confirm('Tem certeza que deseja remover esta marmita?')) {
+    if (confirm('Tem certeza que deseja remover este registro de alimentação?')) {
       removerMutation.mutate(id)
     }
   }, [removerMutation])
@@ -98,14 +98,14 @@ export default function MarmitasPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Controle de Marmitas</h1>
+        <h1 className="text-3xl font-bold">Alimentação</h1>
       </div>
 
       {/* Formulário de Adição */}
       <div className="bg-card border border-border rounded-lg p-6">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <Plus className="w-5 h-5 text-green-500" />
-          Adicionar Marmita
+          Adicionar registro
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -116,7 +116,7 @@ export default function MarmitasPage() {
               value={inputData}
               onChange={(e) => setInputData(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label="Selecionar data da marmita"
+              aria-label="Selecionar data"
             />
           </div>
           
@@ -142,7 +142,7 @@ export default function MarmitasPage() {
                  checked={inputComprou}
                  onChange={() => setInputComprou(true)}
                  className="text-primary"
-                 aria-label="Sim, comprou marmita"
+                 aria-label="Sim, comprou"
                />
                 <span>Sim</span>
               </label>
@@ -152,7 +152,7 @@ export default function MarmitasPage() {
                  checked={!inputComprou}
                  onChange={() => setInputComprou(false)}
                  className="text-primary"
-                 aria-label="Não, não comprou marmita"
+                 aria-label="Não, não comprou"
                />
                 <span>Não</span>
               </label>
@@ -234,7 +234,7 @@ export default function MarmitasPage() {
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-2">
             <Calendar className="w-5 h-5 text-blue-500" />
-            <span className="text-sm text-muted-foreground">Total Marmitas</span>
+            <span className="text-sm text-muted-foreground">Total de registros</span>
           </div>
           <div className="text-2xl font-bold">{totalMarmitas}</div>
         </div>
@@ -258,13 +258,13 @@ export default function MarmitasPage() {
 
       {/* Conteúdo Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tabela de Marmitas */}
+        {/* Tabela de alimentação */}
         <div className="bg-card border border-border rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Histórico de Marmitas</h3>
+          <h3 className="text-lg font-semibold mb-4">Histórico de alimentação</h3>
           
           {loadingMarmitas ? (
             <div className="text-center text-muted-foreground py-8">
-              Carregando marmitas...
+              Carregando...
             </div>
           ) : marmitas && marmitas.length > 0 ? (
             <div className="overflow-x-auto">
@@ -311,7 +311,7 @@ export default function MarmitasPage() {
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-8">
-              Nenhuma marmita encontrada para o período selecionado.
+              Nenhum registro de alimentação encontrado para o período selecionado.
             </div>
           )}
         </div>

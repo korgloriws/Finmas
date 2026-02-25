@@ -1129,12 +1129,12 @@ export default function ConfiguracoesPage() {
                         {tab === 'carteira' && 'Carteira'}
                         {tab === 'movimentacoes' && 'Movimentações'}
                         {tab === 'controle' && 'Controle'}
-                        {tab === 'marmitas' && 'Marmitas'}
+                        {tab === 'marmitas' && 'Alimentação'}
                       </button>
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground mb-3 shrink-0">
-                    Carteira: estado atual. Movimentações e Marmitas: todo o histórico (opcional: filtrar por mês/ano). Controle: últimas 200 linhas por tipo.
+                    Carteira: estado atual. Movimentações e Alimentação: todo o histórico (opcional: filtrar por mês/ano). Controle: últimas 200 linhas por tipo.
                   </p>
                   <div className="flex-1 overflow-y-auto min-h-0">
                     {verDadosTab === 'dados' && (
@@ -1284,7 +1284,7 @@ export default function ConfiguracoesPage() {
                               <thead><tr className="border-b border-border"><th className="text-left py-2 pr-2">Data</th><th className="text-right py-2">Valor</th><th className="text-left py-2">Comprou</th></tr></thead>
                               <tbody>{(Array.isArray(verMarmitasUsuario) ? verMarmitasUsuario : []).map((m: any, i: number) => <tr key={m.id ?? i} className="border-b border-border/50"><td className="py-1.5">{m.data}</td><td className="text-right py-1.5">{m.valor != null ? Number(m.valor).toFixed(2) : '—'}</td><td className="py-1.5">{m.comprou != null ? String(m.comprou) : '—'}</td></tr>)}</tbody>
                             </table>
-                            {(Array.isArray(verMarmitasUsuario) ? verMarmitasUsuario : []).length === 0 && <p className="text-muted-foreground text-sm py-4">Nenhuma marmita.</p>}
+                            {(Array.isArray(verMarmitasUsuario) ? verMarmitasUsuario : []).length === 0 && <p className="text-muted-foreground text-sm py-4">Nenhum registro de alimentação.</p>}
                           </div>
                         )}
                       </>

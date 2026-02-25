@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { 
@@ -101,7 +101,7 @@ export default function ControleAlimentacaoTab({
   }, [inputData, inputValor, inputComprou, adicionarMarmitaMutation])
 
   const handleRemoverMarmita = useCallback((id: number) => {
-    if (confirm('Tem certeza que deseja remover esta marmita?')) {
+    if (confirm('Tem certeza que deseja remover este registro de alimentação?')) {
       removerMarmitaMutation.mutate(id)
     }
   }, [removerMarmitaMutation])
@@ -166,7 +166,7 @@ export default function ControleAlimentacaoTab({
           <div className="p-2 rounded-lg bg-primary/10">
             <Plus className="w-5 h-5 text-primary" />
           </div>
-          Adicionar Marmita
+          Adicionar registro
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -179,7 +179,7 @@ export default function ControleAlimentacaoTab({
               value={inputData}
               onChange={(e) => setInputData(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Data da marmita"
+              aria-label="Data"
             />
           </div>
           
@@ -206,7 +206,7 @@ export default function ControleAlimentacaoTab({
               value={inputComprou ? '1' : '0'}
               onChange={(e) => setInputComprou(e.target.value === '1')}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Comprou a marmita"
+              aria-label="Comprou"
             >
               <option value="1">Sim</option>
               <option value="0">Não</option>
@@ -253,7 +253,7 @@ export default function ControleAlimentacaoTab({
             <div className="p-2 rounded-lg bg-primary/10">
               <Calendar className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-sm text-muted-foreground">Total Marmitas</span>
+            <span className="text-sm text-muted-foreground">Total de registros</span>
           </div>
           <div className="text-2xl font-bold text-foreground">{totalMarmitas}</div>
         </div>
@@ -281,17 +281,17 @@ export default function ControleAlimentacaoTab({
 
       {/* Conteúdo Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tabela de Marmitas */}
+        {/* Tabela de alimentação */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className="bg-card border border-border rounded-2xl p-6 shadow-xl"
         >
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Histórico de Marmitas</h3>
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Histórico de alimentação</h3>
           
           {loadingMarmitas ? (
             <div className="text-center text-muted-foreground py-8">
-              Carregando marmitas...
+              Carregando...
             </div>
           ) : marmitas && marmitas.length > 0 ? (
             <div className="overflow-x-auto">
@@ -314,7 +314,7 @@ export default function ControleAlimentacaoTab({
                             value={editMarmitaData}
                             onChange={(e) => setEditMarmitaData(e.target.value)}
                             className="px-2 py-1 text-sm border border-border rounded bg-background"
-                            aria-label="Data da marmita"
+                            aria-label="Data"
                           />
                         ) : (
                           marmita.data
@@ -329,7 +329,7 @@ export default function ControleAlimentacaoTab({
                             className="px-2 py-1 text-sm border border-border rounded bg-background w-24"
                             step="0.01"
                             min="0"
-                            aria-label="Valor da marmita"
+                            aria-label="Valor"
                             placeholder="0.00"
                           />
                         ) : (
@@ -342,7 +342,7 @@ export default function ControleAlimentacaoTab({
                             value={editMarmitaComprou ? '1' : '0'}
                             onChange={(e) => setEditMarmitaComprou(e.target.value === '1')}
                             className="px-2 py-1 text-sm border border-border rounded bg-background"
-                            aria-label="Comprou a marmita"
+                            aria-label="Comprou"
                           >
                             <option value="1">Sim</option>
                             <option value="0">Não</option>
@@ -404,7 +404,7 @@ export default function ControleAlimentacaoTab({
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-8">
-              Nenhuma marmita encontrada para o período selecionado.
+              Nenhum registro de alimentação encontrado para o período selecionado.
             </div>
           )}
         </motion.div>

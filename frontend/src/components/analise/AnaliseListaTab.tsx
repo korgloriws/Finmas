@@ -9,6 +9,30 @@ import TickerWithLogo from '../TickerWithLogo'
 import { formatNumber, formatCurrency } from '../../utils/formatters'
 import { ExternalLink } from 'lucide-react'
 
+const MAX_TENTATIVAS_ANALISE = 3
+const DELAY_ENTRE_TENTATIVAS_MS = [0, 6000, 15000] // 0 antes da 1ª, 6s antes da 2ª, 15s antes da 3ª
+
+function isRetryableAnaliseError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const msg = err instanceof Error ? err.message : String(err)
+  const code = (err as { code?: string }).code
+  const status = (err as { response?: { status?: number } }).response?.status
+  if (msg === 'Network Error' || code === 'ECONNABORTED') return true
+  if (status === 502 || status === 503 || status === 504) return true
+  return false
+}
+
+function mensagemErroAnalise(err: unknown): string {
+  if (isRetryableAnaliseError(err)) {
+    return 'A requisição demorou muito ou a conexão caiu. Tente novamente em alguns minutos ou em horário de menor uso.'
+  }
+  if (err instanceof Error && err.message) return err.message
+  return 'Erro ao carregar. Tente novamente.'
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 // Lista de setores comuns (baseado nos setores do yfinance)
 const SETORES_COMUNS = [
@@ -499,7 +523,9 @@ function TabelaAtivos({
   error, 
   tipo,
   isAtivoNaCarteira,
-  fiiMetadataMap
+  fiiMetadataMap,
+  onRetry,
+  loadingAttempt
 }: {
   ativos: AtivoAnalise[]
   loading: boolean
@@ -507,15 +533,23 @@ function TabelaAtivos({
   tipo: string
   isAtivoNaCarteira: (ticker: string) => boolean
   fiiMetadataMap?: Record<string, { tipo?: string; segmento?: string }>
+  onRetry?: () => void
+  loadingAttempt?: number
 }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-4 max-w-md mx-auto">
           <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
           <div className="space-y-2">
             <p className="text-lg font-semibold text-foreground">Carregando {tipo}...</p>
             <p className="text-sm text-muted-foreground">Analisando dados do mercado</p>
+            <p className="text-xs text-muted-foreground">
+              A análise pode demorar 2 a 5 minutos na primeira vez. Mantenha a página aberta.
+            </p>
+            {loadingAttempt != null && loadingAttempt > 1 && (
+              <p className="text-sm text-primary font-medium">Tentativa {loadingAttempt} de {MAX_TENTATIVAS_ANALISE}</p>
+            )}
           </div>
         </div>
       </div>
@@ -525,16 +559,27 @@ function TabelaAtivos({
   if (error) {
     return (
       <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-2xl p-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
-            <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="font-semibold text-red-800 dark:text-red-300">Erro ao carregar {tipo}</p>
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-red-800 dark:text-red-300">Erro ao carregar {tipo}</p>
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          </div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="self-start px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium text-sm"
+            >
+              Tentar novamente
+            </button>
+          )}
         </div>
       </div>
     )
@@ -1174,8 +1219,10 @@ export default function AnaliseListaTab() {
   const [loadingAcoes, setLoadingAcoes] = useState(false)
   const [loadingBdrs, setLoadingBdrs] = useState(false)
   const [loadingFiis, setLoadingFiis] = useState(false)
+  const [loadingAcoesAttempt, setLoadingAcoesAttempt] = useState(1)
+  const [loadingBdrsAttempt, setLoadingBdrsAttempt] = useState(1)
+  const [loadingFiisAttempt, setLoadingFiisAttempt] = useState(1)
 
- 
   const [errorAcoes, setErrorAcoes] = useState<string | null>(null)
   const [errorBdrs, setErrorBdrs] = useState<string | null>(null)
   const [errorFiis, setErrorFiis] = useState<string | null>(null)
@@ -1244,44 +1291,74 @@ export default function AnaliseListaTab() {
     buscarMetadados()
   }, [ativosFiis])
 
-  // Funções de busca (declaradas primeiro para serem usadas nas funções de mudança de filtro)
+  // Funções de busca com retry automático (504 / Network Error / timeout)
   const handleBuscarAcoes = useCallback(async () => {
     setLoadingAcoes(true)
     setErrorAcoes(null)
-    try {
-      const data = await analiseService.getAtivos('acoes', filtrosAcoes)
-      setAtivosAcoes(data)
-    } catch (error) {
-      setErrorAcoes(error instanceof Error ? error.message : 'Erro ao buscar ações')
-    } finally {
-      setLoadingAcoes(false)
+    setLoadingAcoesAttempt(1)
+    for (let attempt = 1; attempt <= MAX_TENTATIVAS_ANALISE; attempt++) {
+      setLoadingAcoesAttempt(attempt)
+      if (attempt > 1) await sleep(DELAY_ENTRE_TENTATIVAS_MS[attempt - 1])
+      try {
+        const data = await analiseService.getAtivos('acoes', filtrosAcoes)
+        setAtivosAcoes(data)
+        setLoadingAcoes(false)
+        return
+      } catch (error) {
+        if (attempt === MAX_TENTATIVAS_ANALISE || !isRetryableAnaliseError(error)) {
+          setErrorAcoes(mensagemErroAnalise(error))
+          setLoadingAcoes(false)
+          return
+        }
+      }
     }
+    setLoadingAcoes(false)
   }, [filtrosAcoes])
 
   const handleBuscarBdrs = useCallback(async () => {
     setLoadingBdrs(true)
     setErrorBdrs(null)
-    try {
-      const data = await analiseService.getAtivos('bdrs', filtrosBdrs)
-      setAtivosBdrs(data)
-    } catch (error) {
-      setErrorBdrs(error instanceof Error ? error.message : 'Erro ao buscar BDRs')
-    } finally {
-      setLoadingBdrs(false)
+    setLoadingBdrsAttempt(1)
+    for (let attempt = 1; attempt <= MAX_TENTATIVAS_ANALISE; attempt++) {
+      setLoadingBdrsAttempt(attempt)
+      if (attempt > 1) await sleep(DELAY_ENTRE_TENTATIVAS_MS[attempt - 1])
+      try {
+        const data = await analiseService.getAtivos('bdrs', filtrosBdrs)
+        setAtivosBdrs(data)
+        setLoadingBdrs(false)
+        return
+      } catch (error) {
+        if (attempt === MAX_TENTATIVAS_ANALISE || !isRetryableAnaliseError(error)) {
+          setErrorBdrs(mensagemErroAnalise(error))
+          setLoadingBdrs(false)
+          return
+        }
+      }
     }
+    setLoadingBdrs(false)
   }, [filtrosBdrs])
 
   const handleBuscarFiis = useCallback(async () => {
     setLoadingFiis(true)
     setErrorFiis(null)
-    try {
-      const data = await analiseService.getAtivos('fiis', filtrosFiis)
-      setAtivosFiis(data)
-    } catch (error) {
-      setErrorFiis(error instanceof Error ? error.message : 'Erro ao buscar FIIs')
-    } finally {
-      setLoadingFiis(false)
+    setLoadingFiisAttempt(1)
+    for (let attempt = 1; attempt <= MAX_TENTATIVAS_ANALISE; attempt++) {
+      setLoadingFiisAttempt(attempt)
+      if (attempt > 1) await sleep(DELAY_ENTRE_TENTATIVAS_MS[attempt - 1])
+      try {
+        const data = await analiseService.getAtivos('fiis', filtrosFiis)
+        setAtivosFiis(data)
+        setLoadingFiis(false)
+        return
+      } catch (error) {
+        if (attempt === MAX_TENTATIVAS_ANALISE || !isRetryableAnaliseError(error)) {
+          setErrorFiis(mensagemErroAnalise(error))
+          setLoadingFiis(false)
+          return
+        }
+      }
     }
+    setLoadingFiis(false)
   }, [filtrosFiis])
 
   // Funções de mudança de filtro
@@ -1465,6 +1542,8 @@ export default function AnaliseListaTab() {
               error={errorAcoes} 
               tipo="Ações"
               isAtivoNaCarteira={isAtivoNaCarteira}
+              onRetry={handleBuscarAcoes}
+              loadingAttempt={loadingAcoesAttempt}
             />
           </motion.div>
         )}
@@ -1492,6 +1571,8 @@ export default function AnaliseListaTab() {
               error={errorBdrs} 
               tipo="BDRs"
               isAtivoNaCarteira={isAtivoNaCarteira}
+              onRetry={handleBuscarBdrs}
+              loadingAttempt={loadingBdrsAttempt}
             />
           </motion.div>
         )}
@@ -1520,6 +1601,8 @@ export default function AnaliseListaTab() {
               tipo="FIIs"
               isAtivoNaCarteira={isAtivoNaCarteira}
               fiiMetadataMap={fiiMetadataMap}
+              onRetry={handleBuscarFiis}
+              loadingAttempt={loadingFiisAttempt}
             />
           </motion.div>
         )}

@@ -7082,7 +7082,7 @@ def atualizar_marmita(id_registro, data=None, valor=None, comprou=None):
                 cursor.execute('SELECT data, valor, comprou FROM marmitas WHERE id = %s', (id_registro,))
                 row = cursor.fetchone()
                 if not row:
-                    return {"success": False, "message": "Marmita não encontrada"}
+                    return {"success": False, "message": "Registro de alimentação não encontrado"}
                 
                 # Usar valores atuais se não fornecidos
                 nova_data = data if data is not None else row[0]
@@ -7104,7 +7104,7 @@ def atualizar_marmita(id_registro, data=None, valor=None, comprou=None):
             cursor.execute('SELECT data, valor, comprou FROM marmitas WHERE id = ?', (id_registro,))
             row = cursor.fetchone()
             if not row:
-                return {"success": False, "message": "Marmita não encontrada"}
+                return {"success": False, "message": "Registro de alimentação não encontrado"}
             
             # Usar valores atuais se não fornecidos
             nova_data = data if data is not None else row[0]
