@@ -243,7 +243,8 @@ export const adminService = {
 
   atualizarTelasUsuario: async (username: string, telas: string[] | null) => {
     const encoded = encodeURIComponent(username)
-    const response = await api.put(`/admin/usuarios/${encoded}/telas`, { telas: telas ?? [] })
+    // Enviar null = "todas as telas"; [] = nenhuma. Não converter null em [].
+    const response = await api.put(`/admin/usuarios/${encoded}/telas`, { telas })
     return response.data
   },
 

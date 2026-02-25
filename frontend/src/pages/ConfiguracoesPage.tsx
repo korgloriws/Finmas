@@ -1022,7 +1022,25 @@ export default function ConfiguracoesPage() {
                   className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col"
                 >
                   <h3 className="text-lg font-semibold text-foreground mb-2">Telas permitidas para @{usuarioParaTelas.username}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">Marque as telas que o usuário pode acessar. Deixe todas desmarcadas para negar acesso a tudo (exceto a página de acesso negado).</p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    <strong>Marque</strong> as telas que o usuário pode acessar. <strong>Todas marcadas = acesso total.</strong> Todas desmarcadas = usuário não acessa nenhuma tela (só a página de acesso negado).
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setTelasSelecionadas(TELAS_APP.map((t) => t.id))}
+                      className="text-sm px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 font-medium"
+                    >
+                      Permitir todas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTelasSelecionadas([])}
+                      className="text-sm px-3 py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 font-medium"
+                    >
+                      Desmarcar todas
+                    </button>
+                  </div>
                   <div className="flex-1 overflow-y-auto space-y-2 mb-4">
                     {TELAS_APP.map((tela) => (
                       <label key={tela.id} className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-muted/50">
@@ -1051,6 +1069,13 @@ export default function ConfiguracoesPage() {
                     </button>
                     <button
                       onClick={() => {
+                        if (telasSelecionadas.length === 0) {
+                          toast(() => (
+                            <span>
+                              Nenhuma tela selecionada: o usuário não acessará nenhuma página. Para <strong>acesso total</strong>, use o botão &quot;Permitir todas&quot; antes de salvar.
+                            </span>
+                          ), { icon: '⚠️', duration: 5000 })
+                        }
                         const telas = telasSelecionadas.length === TELAS_APP.length ? null : telasSelecionadas
                         atualizarTelasUsuarioMutation.mutate({ username: usuarioParaTelas.username, telas })
                       }}
