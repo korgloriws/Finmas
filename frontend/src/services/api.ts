@@ -295,18 +295,19 @@ export const adminService = {
   },
 }
 
-/** Lista de telas do app para controle de acesso (id = path ou chave da rota) */
+/** Lista de telas do app para controle de acesso (id = path ou chave da rota). Ordem: Home, Detalhes, Carteira, Controle, Guia, depois as demais. */
 export const TELAS_APP = [
   { id: 'home', path: '/', label: 'Home' },
-  { id: 'analise', path: '/analise', label: 'Análise de oportunidades' },
   { id: 'detalhes', path: '/detalhes', label: 'Detalhes dos ativos' },
   { id: 'carteira', path: '/carteira', label: 'Carteira' },
+  { id: 'controle', path: '/controle', label: 'Controle Financeiro' },
+  { id: 'guia', path: '/guia', label: 'Guia do Mercado' },
+  { id: 'analise', path: '/analise', label: 'Análise de oportunidades' },
   { id: 'noticias', path: '/noticias', label: 'Notícias' },
   { id: 'agenda-dividendos', path: '/agenda-dividendos', label: 'Agenda de Dividendos' },
   { id: 'juros-compostos', path: '/juros-compostos', label: 'Calculadora de Juros Compostos' },
-  { id: 'guia', path: '/guia', label: 'Guia do Mercado' },
   { id: 'conversor', path: '/conversor', label: 'Conversor de Moedas' },
-  { id: 'controle', path: '/controle', label: 'Controle Financeiro' },
+  { id: 'correcao-monetaria', path: '/correcao-monetaria', label: 'Correção Monetária' },
   { id: 'rankings', path: '/rankings', label: 'Rankings' },
   { id: 'conceitos', path: '/detalhes/conceitos', label: 'Conceitos (Detalhes)' },
   { id: 'radar-dividendos', path: '/detalhes/radar-dividendos', label: 'Radar de Dividendos (Detalhes)' },
@@ -394,6 +395,19 @@ export const carteiraService = {
     return response.data
   },
 
+  /** Valorização por período (1m, 3m, 6m, 1a, ytd) em R$ e % por ativo; usado nas barras por tipo */
+  getValorizacaoPeriodo: async (periodo: string): Promise<Array<{
+    id: number
+    ticker: string
+    quantidade: number
+    preco_atual: number
+    preco_inicio_periodo?: number | null
+    valorizacao_reais: number | null
+    valorizacao_pct: number | null
+  }>> => {
+    const response = await api.get(`/carteira/valorizacao-periodo?periodo=${encodeURIComponent(periodo)}`)
+    return response.data
+  },
 
   adicionarAtivo: async (
     ticker: string,
@@ -912,13 +926,35 @@ export const controleService = {
   },
 }
 
-/** 15 minutos: análise pode demorar muito na primeira carga ou com muitos ativos */
-const ANALISE_ATIVOS_TIMEOUT_MS = 15 * 60 * 1000
+/** Índices para correção monetária (Calculadora do Cidadão) - dados do BCB */
+export const correcaoMonetariaService = {
+  getIndices: async (): Promise<Array<{ id: string; nome: string; serie_id: number; descricao?: string }>> => {
+    const response = await api.get('/correcao-monetaria/indices')
+    return response.data
+  },
+  calcular: async (params: {
+    indice_id: string
+    data_inicio: string
+    data_fim: string
+    valor: number
+  }): Promise<{
+    erro: string | null
+    fator: number | null
+    valor_corrigido: number | null
+    meses: number
+    indices_usados: Array<{ data: string; valor: number }>
+    indice_nome?: string
+  }> => {
+    const response = await api.post('/correcao-monetaria/calcular', params)
+    return response.data
+  },
+}
 
 export const analiseService = {
 
   getAtivos: async (tipo: string, filtros: FiltrosAnalise): Promise<AtivoAnalise[]> => {
-    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: ANALISE_ATIVOS_TIMEOUT_MS })
+    // Sem timeout: backend carrega todos os ativos um a um até terminar; front só mostra loading até receber a lista
+    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 0 })
     return response.data
   },
 

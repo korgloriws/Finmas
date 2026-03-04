@@ -18,6 +18,7 @@ import ControlePage from './pages/ControlePage'
 import JurosCompostosPage from './pages/JurosCompostosPage'
 import GuiaMercadoPage from './pages/GuiaMercadoPage'
 import ConversorMoedasPage from './pages/ConversorMoedasPage'
+import CorrecaoMonetariaPage from './pages/CorrecaoMonetariaPage'
 import AgendaDividendosPage from './pages/AgendaDividendosPage'
 import RankingsPage from './pages/RankingsPage'
 import ConfiguracoesPage from './pages/ConfiguracoesPage'
@@ -117,6 +118,16 @@ function App() {
               <SecurityCheck>
                 <Layout>
                   <ConversorMoedasPage />
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/correcao-monetaria" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <CorrecaoMonetariaPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>

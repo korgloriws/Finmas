@@ -1240,7 +1240,7 @@ export default function AnaliseListaTab() {
     queryKey: ['carteira', user],
     queryFn: carteiraService.getCarteira,
     enabled: !!user,
-    retry: 3,
+    retry: false,
     refetchOnWindowFocus: false
   })
 

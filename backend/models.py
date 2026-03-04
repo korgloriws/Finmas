@@ -1558,7 +1558,8 @@ def obter_preco_atual(ticker, max_retentativas=3):
     
     return None
 
-def obter_informacoes(ticker, tipo_ativo, max_retentativas=3):
+def obter_informacoes(ticker, tipo_ativo):
+    """Obtém informações do ativo no yfinance. Uma única tentativa por ticker (sem retentativas)."""
     def to_float_or_inf(valor):
         try:
             result = float(valor)
@@ -1566,88 +1567,72 @@ def obter_informacoes(ticker, tipo_ativo, max_retentativas=3):
         except (ValueError, TypeError):
             return None
 
-    tentativas = 0
-    while tentativas < max_retentativas:
-        try:
-            print(f"🔍 Buscando informações para {ticker}...")
+    try:
+        print(f"🔍 Buscando informações para {ticker}...")
+        acao = yf.Ticker(ticker)
+        info = acao.info
 
-            acao = yf.Ticker(ticker)
-            info = acao.info
+        if not info:
+            return None
 
-           
-            if not info:
+        if tipo_ativo == 'FII':
+            if not info.get("longName") and not info.get("shortName"):
+                print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
+                return None
+        else:
+            if "sector" not in info:
+                print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
                 return None
 
+        preco_atual = info.get("currentPrice")
+        if preco_atual is None:
+            preco_atual = info.get("regularMarketPrice") or 0.0
+        roe_raw = info.get("returnOnEquity", 0.0)
+        dividend_yield_api = info.get("dividendYield")
+        average_volume = info.get("averageVolume") or 0
+        liquidez_diaria = preco_atual * average_volume
 
-            if tipo_ativo == 'FII':
-                if not info.get("longName") and not info.get("shortName"):
-                    print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
-                    return None
-            else:
+        trailing_pe_raw = info.get("trailingPE")
+        price_to_book_raw = info.get("priceToBook")
 
-                if "sector" not in info:
-                    print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
-                    return None
+        pl = to_float_or_inf(trailing_pe_raw)
+        if pl is None:
+            pl = float('inf') if tipo_ativo != 'FII' else 0.0
+        pvp = to_float_or_inf(price_to_book_raw)
+        if pvp is None:
+            pvp = float('inf') if tipo_ativo != 'FII' else 0.0
 
-            preco_atual = info.get("currentPrice")
-            if preco_atual is None:
-                preco_atual = info.get("regularMarketPrice") or 0.0
-            roe_raw = info.get("returnOnEquity", 0.0)
-            dividend_yield_api = info.get("dividendYield")
-            average_volume = info.get("averageVolume") or 0  
-            liquidez_diaria = preco_atual * average_volume
+        roe = round(roe_raw * 100, 2) if roe_raw else 0.0
 
-            trailing_pe_raw = info.get("trailingPE")
-            price_to_book_raw = info.get("priceToBook")
+        if dividend_yield_api is None:
+            dividend_yield = 0.0
+        elif tipo_ativo == 'FII':
+            dividend_yield = round((dividend_yield_api * 100) if dividend_yield_api < 1 else dividend_yield_api, 2)
+        else:
+            dividend_yield = round(dividend_yield_api, 6)
 
-            pl = to_float_or_inf(trailing_pe_raw)
-            if pl is None:
-                pl = float('inf') if tipo_ativo != 'FII' else 0.0
-            pvp = to_float_or_inf(price_to_book_raw)
-            if pvp is None:
-                pvp = float('inf') if tipo_ativo != 'FII' else 0.0
+        setor = info.get("sector", "").strip() or "Desconhecido"
 
-            roe = round(roe_raw * 100, 2) if roe_raw else 0.0
-            
+        return {
+            "ticker": ticker,
+            "nome_completo": info.get("longName", ""),
+            "setor": setor,
+            "industria": info.get("industry", ""),
+            "website": info.get("website", ""),
+            "roe": roe,
+            "preco_atual": preco_atual,
+            "dividend_yield": dividend_yield,
+            "pl": pl,
+            "pvp": pvp,
+            "pais": info.get("country", ""),
+            "tipo": tipo_ativo,
+            "liquidez_diaria": liquidez_diaria,
+            "volume_medio": average_volume,
+        }
 
-            if dividend_yield_api is None:
-                dividend_yield = 0.0
-            elif tipo_ativo == 'FII':
-                dividend_yield = round((dividend_yield_api * 100) if dividend_yield_api < 1 else dividend_yield_api, 2)
-            else:
-                dividend_yield = round(dividend_yield_api, 6)
-                
-            setor = info.get("sector", "").strip() or "Desconhecido"
-
-            return {
-                "ticker": ticker,
-                "nome_completo": info.get("longName", ""),
-                "setor": setor,
-                "industria": info.get("industry", ""),
-                "website": info.get("website", ""),
-                "roe": roe,
-                "preco_atual": preco_atual,
-                "dividend_yield": dividend_yield,
-                "pl": pl,
-                "pvp": pvp,
-                "pais": info.get("country", ""),
-                "tipo": tipo_ativo,
-                "liquidez_diaria": liquidez_diaria,
-                "volume_medio": average_volume,
-            }
-
-        except Exception as e:
-            msg_erro = str(e).lower()
-            if "too many requests" in msg_erro or "rate limited" in msg_erro:
-                print(f"[AVISO] Rate limit detectado para {ticker}. Aguardando 60s e tentando novamente...")
-                time.sleep(60)
-                tentativas += 1
-            else:
-                print(f" Erro ao obter informações para {ticker}: {e}")
-                return None
-
-    print(f"[AVISO] Nao foi possivel obter {ticker} apos {max_retentativas} tentativas. Ignorando...")
-    return None
+    except Exception as e:
+        print(f" Erro ao obter informações para {ticker}: {e}")
+        return None
 def aplicar_filtros_acoes(dados):
 
     return sorted([
@@ -2157,25 +2142,19 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
             conn.close()
 
 def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
-    """Processa lista de ativos com filtros. Até YF_MAX_CONCURRENT requisições simultâneas ao yfinance."""
+    """Processa lista de ativos com filtros. Um por um (sequencial), sem retentativas; carrega todos e retorna os filtrados."""
     if not lista_ativos:
         return []
-    
+
     dados = []
-    max_workers = min(len(lista_ativos), YF_MAX_CONCURRENT)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker
-            for ticker in lista_ativos
-        }
-        for future in as_completed(future_to_ticker):
-            try:
-                resultado = future.result()
-                if resultado is not None:
-                    dados.append(resultado)
-            except Exception as e:
-                ticker = future_to_ticker[future]
-                print(f"Erro ao processar {ticker}: {str(e)}")
+    for ticker in lista_ativos:
+        try:
+            resultado = obter_informacoes(ticker, tipo_ativo)
+            if resultado is not None:
+                dados.append(resultado)
+        except Exception as e:
+            print(f"Erro ao processar {ticker}: {str(e)}")
+
     filtrados = [
         ativo for ativo in dados if (
             ativo['roe'] >= (roe_min or 0) and
@@ -2199,26 +2178,19 @@ def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, 
     return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
-    """Processa lista de FIIs com filtros. Até YF_MAX_CONCURRENT requisições simultâneas ao yfinance."""
+    """Processa lista de FIIs com filtros. Um por um (sequencial), sem retentativas; carrega todos e retorna os filtrados."""
     fiis = LISTA_FIIS
     if not fiis:
         return []
-    
+
     dados = []
-    max_workers = min(len(fiis), YF_MAX_CONCURRENT)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, 'FII'): ticker
-            for ticker in fiis
-        }
-        for future in as_completed(future_to_ticker):
-            try:
-                resultado = future.result()
-                if resultado is not None:
-                    dados.append(resultado)
-            except Exception as e:
-                ticker = future_to_ticker[future]
-                print(f"Erro ao processar FII {ticker}: {str(e)}")
+    for ticker in fiis:
+        try:
+            resultado = obter_informacoes(ticker, 'FII')
+            if resultado is not None:
+                dados.append(resultado)
+        except Exception as e:
+            print(f"Erro ao processar FII {ticker}: {str(e)}")
 
     filtrados = [
         ativo for ativo in dados if (
@@ -2609,6 +2581,108 @@ def obter_taxas_indexadores():
     except Exception as e:
         print(f"Erro ao obter taxas dos indexadores: {e}")
         return {"SELIC": None, "CDI": None, "IPCA": None}
+
+
+# ==================== CORREÇÃO MONETÁRIA (Calculadora do Cidadão) ====================
+# Índices do Banco Central (SGS) para correção de valores - variação mensal em %
+INDICES_CORRECAO_MONETARIA = [
+    {"id": "ipca", "nome": "IPCA", "serie_id": 433, "descricao": "Índice de Preços ao Consumidor Amplo"},
+    {"id": "inpc", "nome": "INPC", "serie_id": 188, "descricao": "Índice Nacional de Preços ao Consumidor"},
+    {"id": "igpm", "nome": "IGP-M", "serie_id": 189, "descricao": "Índice Geral de Preços do Mercado"},
+    {"id": "igpdi", "nome": "IGP-DI", "serie_id": 190, "descricao": "Índice Geral de Preços - Disponibilidade Interna"},
+]
+
+
+def obter_serie_bcb(serie_id, data_inicio, data_fim):
+    """Busca série histórica no BCB SGS. data_inicio/data_fim são date. Retorna lista de {data: str, valor: float}."""
+    try:
+        import requests
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie_id}/dados"
+        params = {
+            "formato": "json",
+            "dataInicial": data_inicio.strftime("%d/%m/%Y"),
+            "dataFinal": data_fim.strftime("%d/%m/%Y"),
+        }
+        r = requests.get(url, params=params, timeout=30)
+        r.raise_for_status()
+        dados = r.json()
+        if not dados:
+            return []
+        out = []
+        for item in dados:
+            try:
+                data_str = item.get("data", "")
+                valor = float(item.get("valor", 0))
+                out.append({"data": data_str, "valor": valor})
+            except (ValueError, TypeError):
+                continue
+        return out
+    except Exception as e:
+        print(f"Erro ao obter série BCB {serie_id}: {e}")
+        return []
+
+
+def calcular_correcao_monetaria(indice_id, data_inicio_str, data_fim_str, valor_original):
+    """
+    Calcula correção monetária pelo índice no período.
+    Fator = produto de (1 + valor_mensal/100) para cada mês no período.
+    valor_inicio/fim: 'YYYY-MM-DD' ou 'DD/MM/YYYY'. valor_original: float.
+    Retorna { fator, valor_corrigido, meses, indices_usados, erro }.
+    """
+    try:
+        import requests
+        indice = next((i for i in INDICES_CORRECAO_MONETARIA if i["id"] == indice_id), None)
+        if not indice:
+            return {"erro": "Índice não encontrado", "fator": None, "valor_corrigido": None, "meses": 0, "indices_usados": []}
+
+        def parse_data(s):
+            s = (s or "").strip()
+            if not s:
+                return None
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+                try:
+                    return datetime.strptime(s[:10] if len(s) >= 10 else s, fmt).date()
+                except ValueError:
+                    continue
+            return None
+
+        data_inicio = parse_data(data_inicio_str)
+        data_fim = parse_data(data_fim_str)
+        if not data_inicio or not data_fim:
+            return {"erro": "Datas inválidas. Use DD/MM/AAAA ou AAAA-MM-DD.", "fator": None, "valor_corrigido": None, "meses": 0, "indices_usados": []}
+        if data_inicio > data_fim:
+            data_inicio, data_fim = data_fim, data_inicio
+
+        valor = float(valor_original) if valor_original is not None else 0
+        if valor < 0:
+            valor = 0
+
+        serie = obter_serie_bcb(indice["serie_id"], data_inicio, data_fim)
+        if not serie:
+            return {"erro": f"Nenhum dado do {indice['nome']} no período.", "fator": None, "valor_corrigido": None, "meses": 0, "indices_usados": []}
+
+        fator = 1.0
+        for item in serie:
+            v = item.get("valor")
+            if v is not None:
+                try:
+                    fator *= 1.0 + (float(v) / 100.0)
+                except (ValueError, TypeError):
+                    pass
+
+        valor_corrigido = round(valor * fator, 2)
+        return {
+            "erro": None,
+            "fator": round(fator, 6),
+            "valor_corrigido": valor_corrigido,
+            "meses": len(serie),
+            "indices_usados": serie,
+            "indice_nome": indice["nome"],
+        }
+    except Exception as e:
+        print(f"Erro ao calcular correção monetária: {e}")
+        return {"erro": str(e), "fator": None, "valor_corrigido": None, "meses": 0, "indices_usados": []}
+
 
 def _obter_taxa_media_historica(indexador, data_inicio):
     """Obtém a taxa média histórica de um indexador desde uma data específica"""
@@ -5128,6 +5202,88 @@ def obter_carteira():
     except Exception as e:
         print(f"Erro ao obter carteira: {e}")
         return []
+
+
+def obter_valorizacao_periodo(periodo):
+    """
+    Retorna valorização em R$ e % por ativo para um período (1m, 3m, 6m, 1a, ytd).
+    Usa preço histórico na data inicial do período para calcular ganho/perda no período.
+    """
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return []
+        carteira = obter_carteira()
+        if not carteira or not isinstance(carteira, list):
+            return []
+        hoje = datetime.now().date()
+        periodo = (periodo or "").strip().lower()
+        if periodo == "1m":
+            data_inicio = hoje - timedelta(days=30)
+        elif periodo == "3m":
+            data_inicio = hoje - timedelta(days=90)
+        elif periodo == "6m":
+            data_inicio = hoje - timedelta(days=180)
+        elif periodo == "1a":
+            data_inicio = hoje - timedelta(days=365)
+        elif periodo == "ytd":
+            data_inicio = hoje.replace(month=1, day=1)
+        else:
+            return []
+        data_inicio_str = data_inicio.isoformat()
+        max_workers = min(len(carteira), YF_MAX_CONCURRENT, 12)
+
+        def item_para_ativo(ativo):
+            ticker = (ativo.get("ticker") or "").strip()
+            qtd = float(ativo.get("quantidade") or 0)
+            preco_atual = float(ativo.get("preco_atual") or 0)
+            if not ticker or qtd <= 0:
+                return {
+                    "id": ativo.get("id"),
+                    "ticker": ticker,
+                    "quantidade": qtd,
+                    "preco_atual": preco_atual,
+                    "preco_inicio_periodo": None,
+                    "valorizacao_reais": None,
+                    "valorizacao_pct": None,
+                }
+            res = obter_preco_historico(ticker, data_inicio_str)
+            preco_inicio = float(res["preco"]) if res and res.get("preco") is not None else None
+            if preco_inicio is None or preco_inicio <= 0:
+                return {
+                    "id": ativo.get("id"),
+                    "ticker": ticker,
+                    "quantidade": qtd,
+                    "preco_atual": preco_atual,
+                    "preco_inicio_periodo": None,
+                    "valorizacao_reais": None,
+                    "valorizacao_pct": None,
+                }
+            valorizacao_reais = (preco_atual - preco_inicio) * qtd
+            valorizacao_pct = ((preco_atual - preco_inicio) / preco_inicio) * 100
+            return {
+                "id": ativo.get("id"),
+                "ticker": ticker,
+                "quantidade": qtd,
+                "preco_atual": preco_atual,
+                "preco_inicio_periodo": preco_inicio,
+                "valorizacao_reais": valorizacao_reais,
+                "valorizacao_pct": valorizacao_pct,
+            }
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(item_para_ativo, ativo): ativo for ativo in carteira}
+            resultados = []
+            for fut in as_completed(futures):
+                try:
+                    resultados.append(fut.result())
+                except Exception as e:
+                    print(f"Erro ao calcular valorização por período: {e}")
+            return resultados
+    except Exception as e:
+        print(f"Erro em obter_valorizacao_periodo: {e}")
+        return []
+
 
 # ==================== REBALANCEAMENTO ====================
 

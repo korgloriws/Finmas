@@ -16,9 +16,11 @@ import TickerWithLogo from '../TickerWithLogo'
 import VencimentoStatus from '../VencimentoStatus'
 import B3ImportModal from './B3ImportModal'
 import { B3Ativo } from '../../utils/excelParser'
-import { ativoService } from '../../services/api'
+import { ativoService, carteiraService } from '../../services/api'
 
 
+
+export type PeriodoValorizacao = 'acumulado' | '1m' | '3m' | '6m' | '1a' | 'ytd'
 
 function TabelaAtivosPorTipo({ 
   tipo, 
@@ -39,7 +41,9 @@ function TabelaAtivosPorTipo({
   handleRemover, 
   setManageTipoOpen, 
   setRenameTipoValue,
-  getMetadadosAtivo
+  getMetadadosAtivo,
+  valorizacaoPeriodoMap,
+  periodoLabel
 }: {
   tipo: string
   carteira: any[]
@@ -60,6 +64,8 @@ function TabelaAtivosPorTipo({
   setManageTipoOpen: (value: { open: boolean; tipo?: string }) => void
   setRenameTipoValue: (value: string) => void
   getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number } | null
+  valorizacaoPeriodoMap?: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>
+  periodoLabel?: string
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
   const totalTipo = ativosDoTipo.reduce((total, ativo) => total + (ativo?.valor_total || 0), 0)
@@ -69,6 +75,58 @@ function TabelaAtivosPorTipo({
   const isRendaFixa = tipo.toLowerCase().includes('renda fixa')
   const isCripto = tipo.toLowerCase().includes('cripto')
   const isFii = tipo.toLowerCase().includes('fii')
+
+  const { valorizacaoReaisBarra, rendPctBarra } = (() => {
+    if (valorizacaoPeriodoMap && periodoLabel) {
+      let somaReais = 0
+      let somaValorInicio = 0
+      for (const a of ativosDoTipo) {
+        const id = Number(a?.id)
+        const d = Number.isNaN(id) ? undefined : valorizacaoPeriodoMap[id]
+        if (d?.valorizacao_reais != null) somaReais += d.valorizacao_reais
+        if (d?.preco_inicio_periodo != null && (a?.quantidade || 0) > 0)
+          somaValorInicio += d.preco_inicio_periodo * (a?.quantidade || 0)
+      }
+      const pct = somaValorInicio > 0 ? (somaReais / somaValorInicio) * 100 : null
+      return { valorizacaoReaisBarra: somaReais, rendPctBarra: pct }
+    }
+    const movs = movimentacoesAll || []
+    let somaValoresAtuais = 0
+    let somaValoresInvestidos = 0
+    for (const a of ativosDoTipo) {
+      const mlist = movs
+        .filter(m => m.ticker?.toUpperCase?.() === (a?.ticker || '').toUpperCase())
+        .sort((x, y) => String(x.data).localeCompare(String(y.data)))
+      type Lot = { qty: number; price: number; date: string }
+      const lots: Lot[] = []
+      for (const m of mlist) {
+        const q = Number(m.quantidade || 0)
+        const p = Number(m.preco || 0)
+        if (m.tipo === 'compra') lots.push({ qty: q, price: p, date: m.data })
+        else if (m.tipo === 'venda') {
+          let remaining = q
+          while (remaining > 0 && lots.length > 0) {
+            const lot = lots[0]
+            const consume = Math.min(lot.qty, remaining)
+            lot.qty -= consume
+            remaining -= consume
+            if (lot.qty <= 0) lots.shift()
+          }
+        }
+      }
+      const qtd = lots.reduce((s, l) => s + l.qty, 0)
+      const val = lots.reduce((s, l) => s + l.qty * l.price, 0)
+      const precoMed = qtd > 0 ? (val / qtd) : null
+      const precoBase = (a as any)?.preco_medio ?? a?.preco_compra ?? precoMed
+      if (precoBase != null) {
+        somaValoresInvestidos += precoBase * (a?.quantidade || 0)
+        somaValoresAtuais += (a?.preco_atual || 0) * (a?.quantidade || 0)
+      }
+    }
+    const rendTipo = (somaValoresInvestidos > 0) ? ((somaValoresAtuais - somaValoresInvestidos) / somaValoresInvestidos) * 100 : null
+    const reais = somaValoresInvestidos > 0 ? somaValoresAtuais - somaValoresInvestidos : null
+    return { valorizacaoReaisBarra: reais, rendPctBarra: rendTipo }
+  })()
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden shadow-lg mb-6">
@@ -98,50 +156,14 @@ function TabelaAtivosPorTipo({
           </div>
           <div className="text-right flex items-center gap-1 sm:gap-2 md:gap-3 flex-shrink-0">
             <div className="text-xs sm:text-sm md:text-lg font-bold">{formatCurrency(totalTipo)}</div>
-            {(() => {
-              const movs = movimentacoesAll || []
-              let somaValoresAtuais = 0
-              let somaValoresInvestidos = 0
-              for (const a of ativosDoTipo) {
-                const mlist = movs
-                  .filter(m => m.ticker?.toUpperCase?.() === (a?.ticker || '').toUpperCase())
-                  .sort((x, y) => String(x.data).localeCompare(String(y.data)))
-                type Lot = { qty: number; price: number; date: string }
-                const lots: Lot[] = []
-                for (const m of mlist) {
-                  const q = Number(m.quantidade || 0)
-                  const p = Number(m.preco || 0)
-                  if (m.tipo === 'compra') {
-                    lots.push({ qty: q, price: p, date: m.data })
-                  } else if (m.tipo === 'venda') {
-                    let remaining = q
-                    while (remaining > 0 && lots.length > 0) {
-                      const lot = lots[0]
-                      const consume = Math.min(lot.qty, remaining)
-                      lot.qty -= consume
-                      remaining -= consume
-                      if (lot.qty <= 0) lots.shift()
-                    }
-                  }
-                }
-                const qtd = lots.reduce((s, l) => s + l.qty, 0)
-                const val = lots.reduce((s, l) => s + l.qty * l.price, 0)
-                const precoMed = qtd > 0 ? (val / qtd) : null
-               
-                const precoBase = (a as any)?.preco_medio ?? a?.preco_compra ?? precoMed
-                
-                if (precoBase != null) {
-                    somaValoresInvestidos += precoBase * (a?.quantidade || 0)
-                    somaValoresAtuais += (a?.preco_atual || 0) * (a?.quantidade || 0)
-                }
-              }
-              const rendTipo = (somaValoresInvestidos > 0) ? ((somaValoresAtuais - somaValoresInvestidos) / somaValoresInvestidos) * 100 : null
-              return (
-                <div className={`text-xs font-medium ${rendTipo != null ? (rendTipo >= 0 ? 'text-emerald-600' : 'text-red-600') : 'text-muted-foreground'}`}>
-                  {rendTipo != null ? `${rendTipo.toFixed(1).replace('.', ',')}%` : '-'}
-                </div>
-              )
-            })()}
+            {valorizacaoReaisBarra != null ? (
+              <div className={`text-xs font-medium ${valorizacaoReaisBarra >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {valorizacaoReaisBarra >= 0 ? '+' : ''}{formatCurrency(valorizacaoReaisBarra)}
+              </div>
+            ) : null}
+            <div className={`text-xs font-medium ${rendPctBarra != null ? (rendPctBarra >= 0 ? 'text-emerald-600' : 'text-red-600') : 'text-muted-foreground'}`}>
+              {rendPctBarra != null ? `${rendPctBarra >= 0 ? '+' : ''}${rendPctBarra.toFixed(1).replace('.', ',')}%` : '-'}
+            </div>
             <div className="hidden sm:block text-xs sm:text-sm text-muted-foreground">{porcentagemTipo}% do total</div>
             <button
               onClick={(e)=>{ e.stopPropagation(); setManageTipoOpen({open: true, tipo}); setRenameTipoValue(tipo) }}
@@ -774,6 +796,41 @@ export default function CarteiraAtivosTab({
   onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
+  const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('acumulado')
+
+  const periodoParaFetch = periodoValorizacao === 'acumulado' ? null : periodoValorizacao
+  const { data: valorizacaoPeriodoList, isFetching: carregandoValorizacaoPeriodo, isError: erroValorizacaoPeriodo } = useQuery({
+    queryKey: ['carteira-valorizacao-periodo', periodoParaFetch, carteira?.length],
+    queryFn: () => carteiraService.getValorizacaoPeriodo(periodoValorizacao as string),
+    enabled: !!periodoParaFetch && !!carteira?.length,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  })
+
+  const valorizacaoPeriodoMap = useMemo(() => {
+    if (!valorizacaoPeriodoList || !Array.isArray(valorizacaoPeriodoList)) return undefined
+    const map: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }> = {}
+    for (const item of valorizacaoPeriodoList as Array<{ id: number; valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>) {
+      const id = Number(item.id)
+      if (!Number.isNaN(id)) {
+        map[id] = {
+          valorizacao_reais: item.valorizacao_reais,
+          valorizacao_pct: item.valorizacao_pct,
+          preco_inicio_periodo: item.preco_inicio_periodo ?? null,
+        }
+      }
+    }
+    return map
+  }, [valorizacaoPeriodoList])
+
+  const periodoLabel = periodoValorizacao === 'acumulado' ? undefined
+    : periodoValorizacao === '1m' ? '1 mês'
+    : periodoValorizacao === '3m' ? '3 meses'
+    : periodoValorizacao === '6m' ? '6 meses'
+    : periodoValorizacao === '1a' ? '1 ano'
+    : periodoValorizacao === 'ytd' ? 'YTD'
+    : undefined
 
   // Identificar FIIs na carteira para buscar metadados sob demanda
   const fiisNaCarteira = useMemo(() => {
@@ -891,6 +948,7 @@ export default function CarteiraAtivosTab({
           </div>
         </div>
       ) : carteira && carteira.length > 0 && (
+        <>
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-border rounded-lg p-3 sm:p-4 md:p-6 mb-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
@@ -930,6 +988,35 @@ export default function CarteiraAtivosTab({
               </div>
             </div>
           </div>
+        </div>
+        </>
+      )}
+
+      {/* Filtro de período: acima da primeira barra, com rótulo claro */}
+      {carteira && carteira.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 py-2 px-1">
+          <span className="text-sm text-muted-foreground">
+            Período da valorização (R$ e %) nas barras abaixo:
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {(['acumulado', '1m', '3m', '6m', '1a', 'ytd'] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriodoValorizacao(p)}
+                disabled={p !== 'acumulado' && carregandoValorizacaoPeriodo}
+                className={`px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  periodoValorizacao === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                } ${p !== 'acumulado' && carregandoValorizacaoPeriodo ? 'opacity-60 cursor-wait' : ''}`}
+              >
+                {p === 'acumulado' ? 'Acumulado' : p === '1m' ? '1 mês' : p === '3m' ? '3 meses' : p === '6m' ? '6 meses' : p === '1a' ? '1 ano' : 'YTD'}
+              </button>
+            ))}
+          </div>
+          {carregandoValorizacaoPeriodo && <span className="text-sm text-muted-foreground">Carregando…</span>}
+          {erroValorizacaoPeriodo && periodoValorizacao !== 'acumulado' && (
+            <span className="text-sm text-destructive" title="Recarregue a página ou tente outro período">Erro ao carregar</span>
+          )}
         </div>
       )}
 
@@ -1002,6 +1089,8 @@ export default function CarteiraAtivosTab({
               setManageTipoOpen={setManageTipoOpen}
               setRenameTipoValue={setRenameTipoValue}
               getMetadadosAtivo={getMetadadosAtivo}
+              valorizacaoPeriodoMap={valorizacaoPeriodoMap}
+              periodoLabel={periodoLabel}
             />
           ))}
         </div>

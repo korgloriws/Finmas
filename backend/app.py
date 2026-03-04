@@ -16,7 +16,7 @@ from authlib.integrations.flask_client import OAuth
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import (
-    global_state, carregar_ativos, obter_carteira, adicionar_ativo_carteira, 
+    global_state, carregar_ativos, obter_carteira, obter_valorizacao_periodo, adicionar_ativo_carteira, 
     remover_ativo_carteira, atualizar_ativo_carteira, obter_movimentacoes, obter_historico_carteira,
     obter_data_primeira_compra_por_ticker,
 
@@ -76,6 +76,8 @@ from models import (
     obter_preco_historico,
     obter_preco_atual,
     simular_choques_indexadores,
+    INDICES_CORRECAO_MONETARIA,
+    calcular_correcao_monetaria,
     obter_cenarios_predefinidos,
     executar_monte_carlo,
     limpar_cache_usuario,
@@ -2408,6 +2410,21 @@ def api_get_carteira():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@server.route("/api/carteira/valorizacao-periodo", methods=["GET"])
+def api_carteira_valorizacao_periodo():
+    """Retorna valorização em R$ e % por ativo para o período (1m, 3m, 6m, 1a, ytd)."""
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+        periodo = request.args.get("periodo", "1m").strip().lower()
+        if periodo not in ("1m", "3m", "6m", "1a", "ytd"):
+            return jsonify({"error": "Período inválido. Use: 1m, 3m, 6m, 1a, ytd"}), 400
+        dados = obter_valorizacao_periodo(periodo)
+        return jsonify(dados)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @server.route("/api/carteira/com-metadados-fii", methods=["GET"])
 def api_carteira_com_metadados_fii():
     """API para obter carteira com metadados de FIIs (usado apenas quando necessário)"""
@@ -3727,6 +3744,33 @@ def api_indicadores():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# Correção monetária (Calculadora do Cidadão) - índices BCB
+@server.route("/api/correcao-monetaria/indices", methods=["GET"])
+def api_correcao_monetaria_indices():
+    try:
+        return jsonify(INDICES_CORRECAO_MONETARIA)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/correcao-monetaria/calcular", methods=["POST"])
+def api_correcao_monetaria_calcular():
+    try:
+        data = request.get_json() or {}
+        indice_id = data.get("indice_id") or data.get("indice")
+        data_inicio = data.get("data_inicio") or data.get("dataInicio")
+        data_fim = data.get("data_fim") or data.get("dataFim")
+        valor = data.get("valor") or data.get("valor_original")
+        if not indice_id or not data_inicio or not data_fim:
+            return jsonify({"error": "Envie indice_id, data_inicio, data_fim e valor"}), 400
+        resultado = calcular_correcao_monetaria(indice_id, data_inicio, data_fim, valor)
+        if resultado.get("erro") and not resultado.get("fator"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # Taxas de indexadores (SELIC, CDI, IPCA) via função do models.py
 @server.route("/api/taxas-indexadores", methods=["GET"])

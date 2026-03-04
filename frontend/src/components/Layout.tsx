@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper, Scale } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
@@ -11,15 +11,16 @@ interface LayoutProps {
 
 const menuItems = [
   { path: '/', label: 'Home', icon: Home },
-  { path: '/analise', label: 'Análise de oportunidades', icon: BarChart3 },
   { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
   { path: '/carteira', label: 'Carteira', icon: Wallet },
+  { path: '/controle', label: 'Controle Financeiro', icon: Calculator },
+  { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
+  { path: '/analise', label: 'Análise de oportunidades', icon: BarChart3 },
   { path: '/noticias', label: 'Notícias', icon: Newspaper },
   { path: '/agenda-dividendos', label: 'Agenda de Dividendos', icon: Calendar },
   { path: '/juros-compostos', label: 'Calculadora de Juros Compostos', icon: TrendingUp },
-  { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
   { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
-  { path: '/controle', label: 'Controle Financeiro', icon: Calculator },
+  { path: '/correcao-monetaria', label: 'Correção Monetária', icon: Scale },
   { path: '/rankings', label: 'Rankings', icon: Trophy },
 ]
 
