@@ -3,11 +3,11 @@ import {
   TrendingUp, 
   PieChart, 
   BarChart3, 
-  Trophy, 
   Activity,
   Calendar,
   TrendingDown,
-  Award
+  Award,
+  Banknote
 } from 'lucide-react'
 import { formatCurrency, formatPercentage } from '../../utils/formatters'
 import { getDisplayTicker } from '../../utils/tickerUtils'
@@ -42,6 +42,8 @@ function parseAnoMesCalendario(dataStr: string): { ano: number; mes: number; cha
 
 interface CarteiraGraficosTabProps {
   carteira: any[]
+  /** Saldo atual da carteira (soma valor_total) em tempo real do banco — usado na comparação com índices */
+  valorTotal: number
   loadingHistorico: boolean
   historicoCarteira: {
     datas: string[]
@@ -60,16 +62,31 @@ interface CarteiraGraficosTabProps {
   filtroPeriodo: string
   setFiltroPeriodo: (value: string) => void
   ativosPorTipo: Record<string, number>
+  /** Proventos recebidos por ativo (dividendos/juros) para gráfico Top 10 */
+  proventosRecebidos?: Array<{
+    ticker: string
+    nome?: string
+    total_recebido: number
+    proventos_recebidos?: Array<{ data: string; valor_recebido: number; tipo: string }>
+  }>
+  loadingProventos?: boolean
+  filtroProventosGraficos?: 'mes' | '6meses' | '1ano' | '5anos' | 'total'
+  setFiltroProventosGraficos?: (value: 'mes' | '6meses' | '1ano' | '5anos' | 'total') => void
 }
 
 export default function CarteiraGraficosTab({
   carteira,
+  valorTotal,
   loadingHistorico,
   historicoCarteira,
   historicoParaCalendario = null,
   filtroPeriodo,
   setFiltroPeriodo,
-  ativosPorTipo
+  ativosPorTipo,
+  proventosRecebidos = [],
+  loadingProventos = false,
+  filtroProventosGraficos = 'total',
+  setFiltroProventosGraficos,
 }: CarteiraGraficosTabProps) {
   const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi' | 'btc' | 'todos'>('ibov')
   const [periodoPerformance, setPeriodoPerformance] = useState<'mensal' | 'trimestral' | 'anual'>('anual')
@@ -233,7 +250,8 @@ export default function CarteiraGraficosTab({
       gapAbsoluto: number
     }
     const carteiraInicial = carteiraArr.find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
-    const carteiraFinal = [...carteiraArr].reverse().find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
+    // Saldo em tempo real do banco para comparar com os índices (evita atraso do último ponto da série)
+    const carteiraFinal = valorTotal > 0 ? valorTotal : ([...carteiraArr].reverse().find((v) => typeof v === 'number' && v !== null) || initialWealth || 0)
     const indiceInicial = indiceArr.find((v) => typeof v === 'number' && v !== null) || 0
     const indiceFinal = [...indiceArr].reverse().find((v) => typeof v === 'number' && v !== null) || 0
     const deltaIndice = (indiceFinal || 0) - (indiceInicial || 0)
@@ -250,7 +268,7 @@ export default function CarteiraGraficosTab({
       deltaCarteira,
       gapAbsoluto,
     }
-  }, [historicoCarteira, indiceValorSeries, indiceRef, carteiraValorPrecoSeries, initialWealth])
+  }, [historicoCarteira, indiceValorSeries, indiceRef, carteiraValorPrecoSeries, initialWealth, valorTotal])
 
   // Calcular Tracking Error e Beta (apenas quando benchmark específico selecionado)
   const metricasAvancadas = useMemo(() => {
@@ -689,6 +707,14 @@ export default function CarteiraGraficosTab({
     }
   }, [carteira])
 
+  // Top 10 maiores proventos pagos (por total_recebido) para gráfico de barras
+  const top10Proventos = useMemo(() => {
+    return [...(proventosRecebidos || [])]
+      .filter(p => p.total_recebido > 0)
+      .sort((a, b) => b.total_recebido - a.total_recebido)
+      .slice(0, 10)
+  }, [proventosRecebidos])
+
   // Função para interpretar Sharpe Ratio
   const interpretarSharpe = (sharpe: number | null): { label: string; cor: string; descricao: string } => {
     if (sharpe === null) {
@@ -812,7 +838,7 @@ export default function CarteiraGraficosTab({
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
                     <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Atual (preço)</div>
                     <div className="text-base md:text-lg font-bold text-foreground">
-                      {formatCurrency(carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)}
+                      {formatCurrency(valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0))}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
@@ -820,7 +846,7 @@ export default function CarteiraGraficosTab({
                     <div className={`text-base md:text-lg font-bold ${
                       (() => {
                         const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0
+                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)
                         return atual > inicial
                       })()
                         ? 'text-green-600' 
@@ -828,7 +854,7 @@ export default function CarteiraGraficosTab({
                     }`}>
                       {(() => {
                         const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0
+                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)
                         const diferenca = atual - inicial
                         return `${diferenca >= 0 ? '+' : ''}${formatCurrency(diferenca, '')}`
                       })()}
@@ -838,19 +864,16 @@ export default function CarteiraGraficosTab({
                     <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (%) — preço (sem aportes)</div>
                     <div className={`text-base md:text-lg font-bold ${
                       (() => {
-                        const s = carteiraRetornoSeries || []
-                        const first = s.find(v => typeof v === 'number') as number | undefined
-                        const last = [...s].reverse().find(v => typeof v === 'number') as number | undefined
-                        return (first && last && last >= first) ? 'text-green-600' : 'text-red-600'
+                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
+                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] ?? initialWealth)
+                        return inicial > 0 && atual >= inicial ? 'text-green-600' : 'text-red-600'
                       })()
                     }`}>
                       {(() => {
-                        const s = carteiraRetornoSeries || []
-                        const first = s.find(v => typeof v === 'number') as number | undefined
-                        const last = [...s].reverse().find(v => typeof v === 'number') as number | undefined
-                        if (!first || !last) return '0%'
-                        const crescimento = ((last / first) - 1) * 100
-                        return `${crescimento > 0 ? '+' : ''}${crescimento.toFixed(2)}%`
+                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
+                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] ?? initialWealth)
+                        const pct = inicial > 0 ? ((atual / inicial) - 1) * 100 : 0
+                        return `${pct >= 0 ? '+' : ''}${formatPercentage(pct)}`
                       })()}
                     </div>
                   </div>
@@ -2074,54 +2097,88 @@ export default function CarteiraGraficosTab({
             )}
           </div>
 
-          {/* Top 10 Maiores Posições (único gráfico de barras — evita repetir Top 5) */}
+          {/* Top 10 Maiores Proventos Pagos */}
           <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
-                <Trophy className="w-5 h-5 text-primary" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                  <Banknote className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="text-base md:text-lg font-semibold text-foreground">Top 10 Maiores Proventos Pagos</h3>
               </div>
-              <h3 className="text-base md:text-lg font-semibold text-foreground">Top 10 Maiores Posições</h3>
+              {setFiltroProventosGraficos && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <label htmlFor="filtro-proventos-graficos" className="text-sm text-muted-foreground whitespace-nowrap">
+                    Período:
+                  </label>
+                  <select
+                    id="filtro-proventos-graficos"
+                    value={filtroProventosGraficos}
+                    onChange={(e) => setFiltroProventosGraficos(e.target.value as 'mes' | '6meses' | '1ano' | '5anos' | 'total')}
+                    className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm min-w-0 w-full sm:w-auto"
+                    aria-label="Filtrar proventos por período"
+                  >
+                    <option value="mes">Mês</option>
+                    <option value="6meses">6 meses</option>
+                    <option value="1ano">1 ano</option>
+                    <option value="5anos">5 anos</option>
+                    <option value="total">Total</option>
+                  </select>
+                </div>
+              )}
             </div>
-            {carteira.length > 0 ? (
+            {loadingProventos ? (
+              <div className="h-64 flex items-center justify-center">
+                <div className="animate-pulse h-48 w-full max-w-sm bg-muted rounded-lg" />
+              </div>
+            ) : top10Proventos.length > 0 ? (
               <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] overflow-visible">
                 <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-                  <BarChart data={carteira.slice(0, 10)} margin={{ top: 8, right: 20, left: 12, bottom: 64 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <BarChart
+                    data={top10Proventos.map(item => ({
+                      ticker: getDisplayTicker(item.ticker),
+                      totalRecebido: item.total_recebido,
+                      nome: item.nome || item.ticker,
+                      qtdProventos: item.proventos_recebidos?.length ?? 0,
+                    }))}
+                    layout="vertical"
+                    margin={{ top: 8, right: 32, left: 72, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                     <XAxis
-                      dataKey="ticker"
+                      type="number"
                       stroke="hsl(var(--muted-foreground))"
-                      fontSize={10}
-                      angle={-45}
-                      textAnchor="end"
-                      height={56}
+                      fontSize={11}
+                      tickFormatter={(value) => formatCurrency(value).replace(/\s/g, '')}
                     />
                     <YAxis
+                      type="category"
+                      dataKey="ticker"
                       stroke="hsl(var(--muted-foreground))"
-                      fontSize={10}
-                      tickFormatter={(value) => formatCurrency(value).replace('R$ ', '')}
+                      fontSize={11}
+                      width={70}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
-                        color: 'hsl(var(--foreground))'
+                        color: 'hsl(var(--foreground))',
+                        fontSize: '12px',
+                        padding: '8px 12px',
                       }}
-                      formatter={(value: any) => [formatCurrency(value), 'Valor Total']}
+                      formatter={(value: number) => [formatCurrency(value), 'Total recebido']}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.nome || ''}
                     />
-                    <Bar
-                      dataKey="valor_total"
-                      fill="hsl(var(--primary))"
-                      radius={[4, 4, 0, 0]}
-                      onClick={() => abrirModalTodosAtivos()}
-                      style={{ cursor: 'pointer' }}
-                    />
+                    <Bar dataKey="totalRecebido" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={32} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                Nenhuma posição disponível
+              <div className="h-64 flex flex-col items-center justify-center text-muted-foreground text-center px-4">
+                <Banknote className="w-10 h-10 mb-2 opacity-50" />
+                <p className="text-sm font-medium">Nenhum provento recebido no período</p>
+                <p className="text-xs mt-1">Os proventos são calculados com base no histórico de dividendos dos ativos da sua carteira</p>
               </div>
             )}
           </div>

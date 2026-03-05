@@ -173,6 +173,7 @@ export default function CarteiraPage() {
   })
   const [filtroPeriodo, setFiltroPeriodo] = useState<'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'maximo'>('mensal')
   const [filtroProventos, setFiltroProventos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('mes')
+  const [filtroProventosGraficos, setFiltroProventosGraficos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('total')
 
   const queryClient = useQueryClient()
 
@@ -298,9 +299,19 @@ export default function CarteiraPage() {
     staleTime: 10 * 60 * 1000, // 10 minutos
   })
 
+  // Proventos recebidos para a aba Gráficos (filtro de período próprio)
+  const { data: proventosRecebidosGraficos, isLoading: loadingProventosGraficos } = useQuery({
+    queryKey: ['proventos-recebidos-graficos', user, filtroProventosGraficos],
+    queryFn: () => carteiraService.getProventosRecebidos(filtroProventosGraficos),
+    enabled: !!user && !!carteira && carteira.length > 0 && activeTab === 'graficos',
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 10 * 60 * 1000,
+  })
 
 
-  const { data: historicoCarteira, isLoading: loadingHistorico } = useQuery({
+
+  const { data: historicoCarteira, isLoading: loadingHistorico, refetch: refetchHistorico } = useQuery({
     queryKey: ['historico-carteira', user, filtroPeriodo],
     queryFn: () => carteiraService.getHistorico(filtroPeriodo),
     enabled: !!user && (activeTab === 'projecao' || activeTab === 'graficos'),
@@ -311,7 +322,7 @@ export default function CarteiraPage() {
     refetchOnMount: false, 
   })
 
-  // Histórico em período máximo só para o calendário de desempenho mensal, para que os valores por mês não mudem ao trocar o filtro de período
+
   const { data: historicoParaCalendario } = useQuery({
     queryKey: ['historico-carteira-calendario', user],
     queryFn: () => carteiraService.getHistorico('maximo'),
@@ -320,6 +331,14 @@ export default function CarteiraPage() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   })
+
+  // Aba Gráficos: ler saldo e histórico em tempo real do banco ao abrir a aba
+  useEffect(() => {
+    if (activeTab === 'graficos') {
+      refetchCarteira()
+      refetchHistorico()
+    }
+  }, [activeTab, refetchCarteira, refetchHistorico])
 
   const adicionarMutation = useMutation({
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
@@ -812,12 +831,17 @@ export default function CarteiraPage() {
         {activeTab === 'graficos' && (
           <CarteiraGraficosTab
             carteira={carteira || []}
+            valorTotal={valorTotal}
             loadingHistorico={loadingHistorico}
             historicoCarteira={historicoCarteira as any || null}
             historicoParaCalendario={historicoParaCalendario as any || null}
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
             ativosPorTipo={ativosPorTipo}
+            proventosRecebidos={proventosRecebidosGraficos ?? []}
+            loadingProventos={loadingProventosGraficos}
+            filtroProventosGraficos={filtroProventosGraficos}
+            setFiltroProventosGraficos={(v: string) => setFiltroProventosGraficos(v as 'mes' | '6meses' | '1ano' | '5anos' | 'total')}
           />
         )}
 
