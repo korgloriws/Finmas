@@ -448,11 +448,12 @@ export const carteiraService = {
   },
 
 
-  atualizarAtivo: async (id: number, payload: { quantidade?: number; preco_atual?: number; preco_compra?: number }): Promise<any> => {
+  atualizarAtivo: async (id: number, payload: { quantidade?: number; preco_atual?: number; preco_compra?: number; preco_medio?: number }): Promise<any> => {
     const body: any = {}
     if (typeof payload.quantidade === 'number') body.quantidade = payload.quantidade
     if (typeof payload.preco_atual === 'number') body.preco_atual = payload.preco_atual
     if (typeof payload.preco_compra === 'number') body.preco_compra = payload.preco_compra
+    if (typeof payload.preco_medio === 'number') body.preco_medio = payload.preco_medio
     const response = await api.put(`/carteira/atualizar/${id}`, body)
     return response.data
   },

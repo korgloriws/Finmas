@@ -75,6 +75,8 @@ from models import (
     calcular_aportes_reais,
     obter_preco_historico,
     obter_preco_atual,
+    is_crypto_ticker,
+    obter_informacoes_ativo,
     simular_choques_indexadores,
     INDICES_CORRECAO_MONETARIA,
     calcular_correcao_monetaria,
@@ -1375,6 +1377,13 @@ def api_get_ativo_details(ticker):
         
         acao = yf.Ticker(ticker)
         info = acao.info or {}
+        # Criptomoedas: preço em BRL via Binance + BRL=X (card de valor na tela de detalhes)
+        if is_crypto_ticker(ticker):
+            info_ativo = obter_informacoes_ativo(ticker)
+            if info_ativo and info_ativo.get('preco_atual') is not None:
+                preco_brl = float(info_ativo['preco_atual'])
+                info['currentPrice'] = preco_brl
+                info['regularMarketPrice'] = preco_brl
         historico = acao.history(period="max")
         dividends = acao.dividends if hasattr(acao, 'dividends') else None
         # ==================== MÉTRICAS DERIVADAS E FUNDAMENTOS ====================
@@ -2085,22 +2094,33 @@ def _buscar_info_ticker_para_comparacao(ticker):
     """
     Função auxiliar para buscar informações de um ticker.
     Usada para paralelização no endpoint /api/comparar.
+    Criptomoedas: preço via obter_informacoes_ativo (Binance + BRL=X).
     """
     try:
         ticker_original = ticker.strip().upper()
-        # Se já tem ponto ou hífen, mantém como está
+        if is_crypto_ticker(ticker):
+            info_ativo = obter_informacoes_ativo(ticker)
+            if info_ativo:
+                return {
+                    "ticker": ticker_original,
+                    "nome": info_ativo.get('nome_completo', ticker_original),
+                    "preco_atual": info_ativo.get('preco_atual'),
+                    "pl": info_ativo.get('pl'),
+                    "pvp": info_ativo.get('pvp'),
+                    "dy": info_ativo.get('dy'),
+                    "roe": info_ativo.get('roe'),
+                    "setor": "-",
+                    "pais": "-",
+                }
         if '.' not in ticker_original and '-' not in ticker_original:
-            # Verifica se termina em número (ações brasileiras)
             if re.search(r'[0-9]$', ticker_original):
                 ticker_yf = ticker_original + '.SA'
             else:
                 ticker_yf = ticker_original
         else:
             ticker_yf = ticker_original
-            
         acao = yf.Ticker(ticker_yf)
         info = acao.info or {}
-        
         return {
             "ticker": ticker_original,
             "nome": info.get('longName', '-'),
@@ -3629,9 +3649,10 @@ def api_atualizar_ativo(id):
         quantidade = data.get('quantidade')
         preco_atual = data.get('preco_atual')
         preco_compra = data.get('preco_compra')
-        if quantidade is None and preco_atual is None and preco_compra is None:
-            return jsonify({"error": "Informe quantidade, preco_atual e/ou preco_compra"}), 400
-        resultado = atualizar_ativo_carteira(id, quantidade, preco_atual, preco_compra)
+        preco_medio = data.get('preco_medio')
+        if quantidade is None and preco_atual is None and preco_compra is None and preco_medio is None:
+            return jsonify({"error": "Informe quantidade, preco_atual, preco_compra e/ou preco_medio"}), 400
+        resultado = atualizar_ativo_carteira(id, quantidade, preco_atual, preco_compra, preco_medio)
         try:
             if cache:
                 cache.clear()

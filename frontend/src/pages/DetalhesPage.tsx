@@ -78,9 +78,10 @@ export default function DetalhesPage() {
     queryKey: ['ativo-detalhes', ticker],
     queryFn: () => ativoService.getDetalhes(ticker),
     enabled: !!ticker,
-    staleTime: 10 * 60 * 1000, // 10 minutos - dados considerados frescos
-    refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
-    refetchOnWindowFocus: false,
+    staleTime: 0, // Card de valor em tempo real
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000, // Atualizar preço/valores a cada 30 segundos
   })
 
   

@@ -5,12 +5,13 @@ from flask import Flask
 from flask_caching import Cache
 import time
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import bcrypt
 import os
 import json
 import secrets
 import re
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     import psycopg
@@ -1445,31 +1446,36 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
     while tentativas < max_retentativas:
         try:
             print(f"🔍 Buscando preço histórico para {ticker} na data {data}...")
-            
-        
-            ticker_yf = ticker.strip().upper()
-            if '-' not in ticker_yf and '.' not in ticker_yf and len(ticker_yf) <= 6:
-                ticker_yf += '.SA'
-            
-            acao = yf.Ticker(ticker_yf)
-            
-         
             if isinstance(data, str):
                 data_obj = datetime.strptime(data[:10], '%Y-%m-%d').date()
             else:
                 data_obj = data
-            
-       
+            # Criptomoedas: Binance + BRL=X
+            if is_crypto_ticker(ticker):
+                preco_usd = obter_preco_cripto_binance_historico_usd(ticker, data_obj)
+                if preco_usd and preco_usd > 0:
+                    try:
+                        taxa_brl = obter_taxa_usd_brl()
+                        preco_final = converter_crypto_usd_para_brl(preco_usd, taxa_brl)
+                        print(f"[OK] Preco historico cripto (Binance+BRL=X): R$ {preco_final:.2f} em {data_obj}")
+                        return {
+                            "preco": preco_final,
+                            "data_historico": data_obj.isoformat(),
+                            "data_solicitada": data_obj.isoformat(),
+                            "ticker": ticker
+                        }
+                    except Exception as e:
+                        print(f"[AVISO] Conversão USD→BRL para {ticker} falhou: {e}")
+            ticker_yf = ticker.strip().upper()
+            if '-' not in ticker_yf and '.' not in ticker_yf and len(ticker_yf) <= 6:
+                ticker_yf += '.SA'
+            acao = yf.Ticker(ticker_yf)
             start_date = data_obj - timedelta(days=30)
             end_date = data_obj + timedelta(days=1)
-            
             historico = acao.history(start=start_date.isoformat(), end=end_date.isoformat())
-            
             if historico is None or historico.empty:
                 print(f"[ERRO] Nenhum historico encontrado para {ticker}")
                 return None
-            
-           
             preco_encontrado = None
             for idx, row in historico[::-1].iterrows():
                 data_historico = idx.date()
@@ -1477,7 +1483,6 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
                     preco_encontrado = to_float_or_none(row.get('Close') or row.get('Adj Close'))
                     if preco_encontrado:
                         preco_final = preco_encontrado
-                        # Criptomoedas no yfinance vêm em USD; converter para BRL para consistência com a carteira
                         if is_crypto_ticker(ticker):
                             try:
                                 taxa_brl = obter_taxa_usd_brl()
@@ -1493,7 +1498,6 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
                             "data_solicitada": data_obj.isoformat(),
                             "ticker": ticker
                         }
-            
             print(f"[ERRO] Nenhum preco valido encontrado para {ticker} na data {data}")
             return None
             
@@ -1513,25 +1517,33 @@ def obter_preco_atual(ticker, max_retentativas=3):
     while tentativas < max_retentativas:
         try:
             print(f"🔍 Buscando preço atual para {ticker}...")
-            
-         
+            # Criptomoedas: Binance + BRL=X
+            if is_crypto_ticker(ticker):
+                preco_usd = obter_preco_cripto_binance_usd(ticker)
+                if preco_usd and preco_usd > 0:
+                    try:
+                        taxa_brl = obter_taxa_usd_brl()
+                        preco_final = converter_crypto_usd_para_brl(preco_usd, taxa_brl)
+                        print(f"[OK] Preco atual cripto (Binance+BRL=X): R$ {preco_final:.2f}")
+                        return {
+                            "preco": preco_final,
+                            "data": datetime.now().strftime('%Y-%m-%d'),
+                            "ticker": ticker
+                        }
+                    except Exception as e:
+                        print(f"[AVISO] Conversão USD→BRL para {ticker} falhou: {e}")
             ticker_yf = ticker.strip().upper()
             if '-' not in ticker_yf and '.' not in ticker_yf and len(ticker_yf) <= 6:
                 ticker_yf += '.SA'
-            
             acao = yf.Ticker(ticker_yf)
             info = acao.info
-            
             if not info:
                 return None
-            
             preco_atual = info.get("currentPrice")
             if preco_atual is None:
                 preco_atual = info.get("regularMarketPrice")
-            
             if preco_atual and preco_atual > 0:
                 preco_final = float(preco_atual)
-                # Criptomoedas no yfinance vêm em USD; converter para BRL para consistência com a carteira
                 if is_crypto_ticker(ticker):
                     try:
                         taxa_brl = obter_taxa_usd_brl()
@@ -2471,7 +2483,29 @@ def _normalize_ticker_for_yf(ticker: str) -> str:
 def obter_informacoes_ativo(ticker):
 
     try:
-       
+        # Criptomoedas: preço via Binance + conversão BRL com BRL=X
+        if is_crypto_ticker(ticker):
+            preco_usd = obter_preco_cripto_binance_usd(ticker)
+            if preco_usd is not None:
+                cotacao_brl = obter_taxa_usd_brl()
+                preco_atual = converter_crypto_usd_para_brl(preco_usd, cotacao_brl)
+            else:
+                preco_atual = None
+            # Nome/tipo via yfinance (só metadata)
+            normalized = _normalize_ticker_for_yf(ticker)
+            acao = yf.Ticker(normalized)
+            info = acao.info or {}
+            return {
+                "ticker": ticker.upper(),
+                "nome_completo": info.get("longName", ticker.upper()),
+                "preco_atual": preco_atual,
+                "tipo": "Criptomoeda",
+                "pl": info.get("trailingPE"),
+                "pvp": info.get("priceToBook"),
+                "dy": info.get("dividendYield"),
+                "roe": info.get("returnOnEquity"),
+            }
+
         normalized = _normalize_ticker_for_yf(ticker)
         acao = yf.Ticker(normalized)
         info = acao.info or {}
@@ -2492,7 +2526,6 @@ def obter_informacoes_ativo(ticker):
         
         if preco_atual is None:
             return None
-            
 
         cotacao_brl = obter_cotacao_dolar()
         if tipo == "Criptomoeda":
@@ -3061,18 +3094,110 @@ def obter_taxa_usd_brl():
         print(f"[ERRO] Erro ao obter taxa USD/BRL: {e}")
         return 5.20  # Taxa padrão de fallback
 
+# --- Preços de criptomoedas via API Binance (em vez de yfinance) ---
+BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
+BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+
+def _ticker_para_simbolo_binance(ticker):
+    """Normaliza ticker para símbolo Binance (ex: BTC-USD, BTC -> BTCUSDT)."""
+    if not ticker:
+        return None
+    t = (ticker or "").strip().upper()
+    # Remove sufixos -USD, -USDT, .SA, etc.
+    for suf in ["-USD", "-USDT", ".SA"]:
+        if t.endswith(suf):
+            t = t[:-len(suf)]
+    if not t:
+        return None
+    return t + "USDT"
+
+def obter_preco_cripto_binance_usd(ticker):
+    """
+    Obtém preço atual de uma criptomoeda em USD via API pública Binance.
+    Retorna float ou None.
+    """
+    try:
+        symbol = _ticker_para_simbolo_binance(ticker)
+        if not symbol:
+            return None
+        req = urllib.request.Request(
+            BINANCE_TICKER_URL + "?symbol=" + symbol,
+            headers={"User-Agent": "Finmas/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        return float(data.get("price", 0))
+    except Exception as e:
+        print(f"[AVISO] Binance preço {ticker}: {e}")
+        return None
+
+def obter_precos_cripto_binance_usd(tickers):
+    """
+    Obtém preços atuais de várias criptos em USD (um request para todos os pares).
+    Retorna dict: ticker_original -> preço_usd (float).
+    """
+    if not tickers:
+        return {}
+    try:
+        req = urllib.request.Request(
+            BINANCE_TICKER_URL,
+            headers={"User-Agent": "Finmas/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            lista = json.loads(resp.read().decode())
+        # lista = [ {"symbol": "BTCUSDT", "price": "97234.50"}, ... ]
+        binance_prices = {item["symbol"]: float(item["price"]) for item in lista}
+        out = {}
+        for t in tickers:
+            sym = _ticker_para_simbolo_binance(t)
+            if sym and sym in binance_prices:
+                out[t] = binance_prices[sym]
+        return out
+    except Exception as e:
+        print(f"[AVISO] Binance batch preços: {e}")
+        return {}
+
+def obter_preco_cripto_binance_historico_usd(ticker, data):
+    """
+    Obtém preço de fechamento de uma cripto em uma data (USD) via Binance klines.
+    data: datetime.date ou str YYYY-MM-DD.
+    """
+    try:
+        symbol = _ticker_para_simbolo_binance(ticker)
+        if not symbol:
+            return None
+        if hasattr(data, 'strftime'):
+            dt = data
+        else:
+            dt = datetime.strptime(str(data)[:10], "%Y-%m-%d").date()
+        # Binance klines em UTC
+        start_ts = int(datetime.combine(dt, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000)
+        end_ts = start_ts + 86400 * 1000
+        url = f"{BINANCE_KLINES_URL}?symbol={symbol}&interval=1d&startTime={start_ts}&endTime={end_ts}&limit=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "Finmas/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            arr = json.loads(resp.read().decode())
+        if not arr:
+            return None
+        # kline: [ open_time, open, high, low, close, ... ]
+        return float(arr[0][4])
+    except Exception as e:
+        print(f"[AVISO] Binance histórico {ticker} em {data}: {e}")
+        return None
+
 def is_crypto_ticker(ticker):
     """
-    Identifica se um ticker é uma criptomoeda
+    Identifica se um ticker é uma criptomoeda (preços via Binance + BRL=X).
     """
     crypto_tickers = [
-        'BTC', 'ETH', 'ADA', 'DOT', 'LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX',
-        'YFI', 'SUSHI', 'CRV', '1INCH', 'BAL', 'LRC', 'BAT', 'ZRX', 'REP', 'KNC',
+        'BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'SOL', 'DOGE', 'DOT', 'MATIC', 'LTC', 'AVAX', 'LINK',
+        'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'YFI', 'SUSHI', 'CRV', '1INCH', 'BAL', 'LRC', 'BAT', 'ZRX', 'REP', 'KNC',
         'BTC-USD', 'ETH-USD', 'ADA-USD', 'DOT-USD', 'LINK-USD', 'UNI-USD',
-        'AAVE-USD', 'COMP-USD', 'MKR-USD', 'SNX-USD', 'YFI-USD', 'SUSHI-USD',"USDC-USD"
+        'AAVE-USD', 'COMP-USD', 'MKR-USD', 'SNX-USD', 'YFI-USD', 'SUSHI-USD', 'USDC-USD',
     ]
-    
-    ticker_upper = ticker.upper()
+    if not ticker:
+        return False
+    ticker_upper = (ticker or "").strip().upper()
     return any(crypto in ticker_upper for crypto in crypto_tickers)
 
 def converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl=None):
@@ -3085,8 +3210,20 @@ def converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl=None):
     return preco_usd * taxa_usd_brl
 
 def _obter_preco_um_ticker(ticker, taxa_usd_brl):
-    """Worker: obtém preço e indicadores de um único ticker (para uso em ThreadPoolExecutor)."""
+    """Worker: obtém preço e indicadores de um único ticker (para uso em ThreadPoolExecutor). Criptos via Binance + BRL=X."""
     try:
+        if is_crypto_ticker(ticker):
+            preco_usd = obter_preco_cripto_binance_usd(ticker)
+            if preco_usd is None:
+                return None
+            preco_final = converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl) if taxa_usd_brl else preco_usd
+            return (ticker, {
+                'preco_atual': preco_final,
+                'dy': None,
+                'pl': None,
+                'pvp': None,
+                'roe': None
+            })
         normalized = _normalize_ticker_for_yf(ticker)
         ticker_obj = yf.Ticker(normalized)
         info = ticker_obj.info
@@ -3099,10 +3236,7 @@ def _obter_preco_um_ticker(ticker, taxa_usd_brl):
                 preco_usd = float(hist['Close'].iloc[-1])
         if preco_usd is None:
             return None
-        if is_crypto_ticker(ticker) and taxa_usd_brl:
-            preco_final = converter_crypto_usd_para_brl(preco_usd, taxa_usd_brl)
-        else:
-            preco_final = preco_usd
+        preco_final = preco_usd
         return (ticker, {
             'preco_atual': preco_final,
             'dy': info.get('dividendYield') if info else None,
@@ -3345,12 +3479,7 @@ def atualizar_precos_indicadores_carteira():
                     if _indexador and _indexador_pct:
                         print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
                         
-                        # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
-                        # 1. indexador_base_preco (se configurado explicitamente)
-                        # 2. preco_compra (preço de compra original)
-                        # 3. preco_medio (preço médio ponderado)
-                        # 4. Primeira movimentação (último recurso)
-                        # NUNCA usar preco_atual como base!
+
                         if base_preco is not None and base_data:
                             preco_inicial = base_preco
                             _data_adicao = base_data
@@ -3382,9 +3511,7 @@ def atualizar_precos_indicadores_carteira():
                         
                         preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
                         
-                        # VALIDAÇÃO CRÍTICA: Verificar se o preço calculado é razoável
-                        # Não pode ser menor que 20% do inicial (queda absurda) nem maior que 20x (crescimento absurdo mesmo para 10 anos)
-                        # Para renda fixa, mesmo com 10 anos a 115% CDI, o fator máximo seria ~3.5x, então 20x é seguro
+
                         if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
                             print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
                             preco_atual = preco_inicial
@@ -3439,13 +3566,13 @@ def _calcular_status_vencimento(vencimento):
         from datetime import datetime, date
         hoje = date.today()
         
-        # Converter vencimento para date se for string
+
         if isinstance(vencimento, str):
             vencimento_date = datetime.strptime(vencimento[:10], '%Y-%m-%d').date()
         else:
             vencimento_date = vencimento
         
-        # Calcular diferença em dias
+
         dias_restantes = (vencimento_date - hoje).days
         
         if dias_restantes < 0:
@@ -3466,7 +3593,7 @@ def _determinar_preco_compra(ticker, preco_inicial, data_aplicacao, tipo):
     if preco_inicial is not None and float(preco_inicial) > 0:
         preco_manual = float(preco_inicial)
         
-        # Verificar se é criptomoeda e converter USD → BRL se necessário
+       
         if is_crypto_ticker(ticker):
             try:
                 cotacao_brl = obter_cotacao_dolar()
@@ -3494,13 +3621,21 @@ def _determinar_preco_compra(ticker, preco_inicial, data_aplicacao, tipo):
         try:
             from datetime import datetime, timedelta
             base_date = datetime.strptime(str(data_aplicacao)[:10], '%Y-%m-%d').date()
+            # Criptomoedas: preço histórico via Binance + BRL=X
+            if is_crypto_ticker(ticker):
+                close_val = obter_preco_cripto_binance_historico_usd(ticker, base_date)
+                if close_val and close_val > 0:
+                    try:
+                        cotacao_brl = obter_taxa_usd_brl()
+                        close_val_brl = converter_crypto_usd_para_brl(close_val, cotacao_brl)
+                        print(f"DEBUG: Preço histórico cripto {ticker} em {data_aplicacao} (Binance+BRL=X): R$ {close_val_brl:.2f}")
+                        return close_val_brl
+                    except Exception as e:
+                        print(f"DEBUG: Erro ao converter preço histórico cripto {ticker}: {e}")
             start = base_date - timedelta(days=14)
             end = base_date + timedelta(days=1)
-            
-            # Normalizar ticker para yfinance
             t = ticker.strip().upper()
             t_yf = t + '.SA' if ('-' not in t and '.' not in t and len(t) <= 6) else t
-            
             hist = yf.Ticker(t_yf).history(start=start.isoformat(), end=end.isoformat())
             if hist is not None and not hist.empty:
                 close_val = None
@@ -3510,17 +3645,6 @@ def _determinar_preco_compra(ticker, preco_inicial, data_aplicacao, tipo):
                         close_val = float(row.get('Close') or row.get('Adj Close') or 0)
                         break
                 if close_val and close_val > 0:
-                    # Verificar se é criptomoeda e converter USD → BRL se necessário
-                    if is_crypto_ticker(ticker):
-                        try:
-                            cotacao_brl = obter_cotacao_dolar()
-                            close_val_brl = converter_crypto_usd_para_brl(close_val, cotacao_brl)
-                            print(f"DEBUG: Convertendo preço histórico de criptomoeda {ticker} em {data_aplicacao}: ${close_val:.2f} USD → R$ {close_val_brl:.2f} BRL")
-                            return close_val_brl
-                        except Exception as e:
-                            print(f"DEBUG: Erro ao converter preço histórico de criptomoeda {ticker}: {e}")
-                            return close_val
-                    
                     print(f"DEBUG: Usando preço histórico para {ticker} em {data_aplicacao}: {close_val}")
                     return close_val
         except Exception as e:
@@ -3575,7 +3699,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
         if tipo:
             info["tipo"] = tipo
 
-        # Sanitize optional fields for Postgres compatibility
+
         def _to_float_or_none(v):
             try:
                 if v is None:
@@ -3623,7 +3747,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
             conn = _pg_conn_for_user(usuario)
             try:
                 with conn.cursor() as cursor:
-                    # Garantir que todas as colunas existam no PostgreSQL
+                    
                     try:
                         cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS preco_compra NUMERIC')
                         cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS indexador TEXT')
@@ -3937,9 +4061,9 @@ def remover_ativo_carteira(id):
     except Exception as e:
         return {"success": False, "message": f"Erro ao remover ativo: {str(e)}"}
 
-def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra=None):
-
-  
+def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra=None, preco_medio=None):
+    """Atualiza ativo na carteira. preco_medio quando informado é apenas sobrescrito (ajuste manual);
+    não altera a lógica de cálculo do preço médio em outras partes do sistema."""
     try:
         usuario = get_usuario_atual()
         if not usuario:
@@ -3991,6 +4115,9 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
                             novo_pm = ((preco_medio_atual * current_qty) + (float(preco_compra) * qty_diff)) / (new_qty or 1)
                             update_fields.append('preco_medio = %s')
                             update_values.append(novo_pm)
+                    if preco_medio is not None:
+                        update_fields.append('preco_medio = %s')
+                        update_values.append(float(preco_medio))
                     
                     update_values.append(id)
         
@@ -4058,6 +4185,9 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
                     novo_pm = ((preco_medio_atual * current_qty) + (float(preco_compra) * qty_diff)) / (new_qty or 1)
                     update_fields.append('preco_medio = ?')
                     update_values.append(novo_pm)
+            if preco_medio is not None:
+                update_fields.append('preco_medio = ?')
+                update_values.append(float(preco_medio))
         
             update_values.append(id)
         

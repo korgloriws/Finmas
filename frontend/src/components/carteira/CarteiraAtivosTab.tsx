@@ -43,7 +43,8 @@ function TabelaAtivosPorTipo({
   setRenameTipoValue,
   getMetadadosAtivo,
   valorizacaoPeriodoMap,
-  periodoLabel
+  periodoLabel,
+  onOpenAddAtivo
 }: {
   tipo: string
   carteira: any[]
@@ -66,6 +67,7 @@ function TabelaAtivosPorTipo({
   getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number } | null
   valorizacaoPeriodoMap?: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>
   periodoLabel?: string
+  onOpenAddAtivo?: () => void
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
   const totalTipo = ativosDoTipo.reduce((total, ativo) => total + (ativo?.valor_total || 0), 0)
@@ -420,6 +422,15 @@ function TabelaAtivosPorTipo({
                               </>
                             ) : (
                               <>
+                                {onOpenAddAtivo && (
+                                  <button
+                                    onClick={onOpenAddAtivo}
+                                    className="p-1 text-green-600 hover:text-green-700"
+                                    title="Adicionar ativo"
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleEditar(ativo?.id || 0, ativo?.quantidade || 0)}
                                   className="p-1 text-blue-600 hover:text-blue-700"
@@ -509,6 +520,15 @@ function TabelaAtivosPorTipo({
                             </>
                           ) : (
                             <>
+                              {onOpenAddAtivo && (
+                                <button
+                                  onClick={onOpenAddAtivo}
+                                  className="p-1.5 sm:p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded"
+                                  title="Adicionar ativo"
+                                >
+                                  <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleEditar(ativo?.id || 0, ativo?.quantidade || 0)}
                                 className="p-1.5 sm:p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
@@ -1091,6 +1111,7 @@ export default function CarteiraAtivosTab({
               getMetadadosAtivo={getMetadadosAtivo}
               valorizacaoPeriodoMap={valorizacaoPeriodoMap}
               periodoLabel={periodoLabel}
+              onOpenAddAtivo={onOpenAddAtivo}
             />
           ))}
         </div>

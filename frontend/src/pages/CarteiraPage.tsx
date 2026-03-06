@@ -49,6 +49,7 @@ import CarteiraRelatoriosTab from '../components/carteira/CarteiraRelatoriosTab'
 import CarteiraSimuladorTab from '../components/carteira/CarteiraSimuladorTab'
 import AddAtivoModal from '../components/carteira/AddAtivoModal'
 import EditAtivoModal from '../components/carteira/EditAtivoModal'
+import VenderAtivoModal from '../components/carteira/VenderAtivoModal'
 import RendaFixaFormModal from '../components/carteira/RendaFixaFormModal'
 
 export default function CarteiraPage() {
@@ -75,6 +76,8 @@ export default function CarteiraPage() {
   const [ativoParaEditar, setAtivoParaEditar] = useState<any>(null)
   const [rendaFixaModalOpen, setRendaFixaModalOpen] = useState(false)
   const [ativoRendaFixaParaEditar, setAtivoRendaFixaParaEditar] = useState<any>(null)
+  const [venderModalOpen, setVenderModalOpen] = useState(false)
+  const [ativoParaVender, setAtivoParaVender] = useState<any>(null)
   const [filtroMes, setFiltroMes] = useState<number>(new Date().getMonth() + 1)
   const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear())
   const [activeTab, setActiveTab] = useState(() => {
@@ -376,28 +379,6 @@ export default function CarteiraPage() {
     },
   })
 
-  const removerMutation = useMutation({
-    mutationFn: carteiraService.removerAtivo,
-    onSuccess: () => {
-      // Invalidar e forçar refetch imediato das queries ativas
-      queryClient.invalidateQueries({ queryKey: ['carteira', user] })
-      queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
-      queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
-      queryClient.invalidateQueries({ queryKey: ['proventos', user] })
-      queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
-      // Invalidar queries da HomePage para atualizar cards e gráficos
-      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
-      queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
-      
-      // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
-      queryClient.refetchQueries({ queryKey: ['carteira', user] })
-      // Forçar refetch de movimentações se a aba estiver ativa
-      if (activeTab === 'movimentacoes') {
-        queryClient.refetchQueries({ queryKey: ['movimentacoes', user] })
-      }
-    },
-  })
-
   const atualizarMutation = useMutation({
     mutationFn: ({ id, quantidade, preco_atual }: { id: number; quantidade?: number; preco_atual?: number }) =>
       carteiraService.atualizarAtivo(id, { quantidade, preco_atual }),
@@ -490,10 +471,12 @@ export default function CarteiraPage() {
   }, [])
 
   const handleRemover = useCallback((id: number) => {
-    if (confirm('Tem certeza que deseja remover este ativo?')) {
-      removerMutation.mutate(id)
+    const ativo = (carteira || []).find((a: any) => a?.id === id)
+    if (ativo) {
+      setAtivoParaVender(ativo)
+      setVenderModalOpen(true)
     }
-  }, [removerMutation])
+  }, [carteira])
 
   const handleEditar = useCallback((id: number) => {
     const ativo = (carteira || []).find((a: any) => a?.id === id)
@@ -1190,6 +1173,18 @@ export default function CarteiraPage() {
             setAtivoParaEditar(null)
           }}
           ativo={ativoParaEditar}
+        />
+      )}
+
+      {/* Modal de vender ativo (aberto pelo botão apagar) */}
+      {venderModalOpen && (
+        <VenderAtivoModal
+          open={venderModalOpen}
+          onClose={() => {
+            setVenderModalOpen(false)
+            setAtivoParaVender(null)
+          }}
+          ativo={ativoParaVender}
         />
       )}
 

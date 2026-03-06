@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react'
+import { X, DollarSign, BarChart3 } from 'lucide-react'
 import { carteiraService, ativoService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -14,69 +14,77 @@ interface EditAtivoModalProps {
     quantidade: number
     preco_atual: number
     valor_total: number
+    preco_compra?: number | null
+    preco_medio?: number | null
   } | null
 }
 
+type ModoAjuste = 'preco_compra' | 'preco_medio'
+
 export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalProps) {
-  const [novaQuantidade, setNovaQuantidade] = useState('')
-  const [tipoOperacao, setTipoOperacao] = useState<'comprar' | 'vender' | 'ajustar'>('ajustar')
-  const [venderTudo, setVenderTudo] = useState(false)
-  const [precoOperacao, setPrecoOperacao] = useState('')
+  const [modo, setModo] = useState<ModoAjuste>('preco_compra')
+  // Preço de compra: origem do valor (atual, histórico, manual)
   const [tipoPreco, setTipoPreco] = useState<'atual' | 'historico' | 'manual'>('atual')
+  const [precoManualCompra, setPrecoManualCompra] = useState('')
   const [dataOperacao, setDataOperacao] = useState('')
-  const [precoAtual, setPrecoAtual] = useState<{preco: number, data: string, ticker: string} | null>(null)
-  const [precoHistorico, setPrecoHistorico] = useState<{preco: number, data_historico: string, data_solicitada: string, ticker: string} | null>(null)
+  const [precoAtual, setPrecoAtual] = useState<{ preco: number; data: string; ticker: string } | null>(null)
+  const [precoHistorico, setPrecoHistorico] = useState<{
+    preco: number
+    data_historico: string
+    data_solicitada: string
+    ticker: string
+  } | null>(null)
   const [erroPrecoHistorico, setErroPrecoHistorico] = useState('')
   const [carregandoPreco, setCarregandoPreco] = useState(false)
+  // Preço médio: único campo manual (ajuste direto, não altera o cálculo em outras partes)
+  const [precoMedioManual, setPrecoMedioManual] = useState('')
 
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
-
   useEffect(() => {
     if (open && ativo) {
-      setNovaQuantidade(ativo.quantidade.toString())
-      setTipoOperacao('ajustar')
-      setVenderTudo(false)
-      setPrecoOperacao('')
+      setModo('preco_compra')
       setTipoPreco('atual')
+      setPrecoManualCompra('')
       setDataOperacao('')
       setPrecoAtual(null)
       setPrecoHistorico(null)
       setErroPrecoHistorico('')
+      const pm = (ativo as any).preco_medio ?? ativo.preco_compra
+      setPrecoMedioManual(pm != null && Number(pm) > 0 ? String(Number(pm).toFixed(2)) : '')
     }
   }, [open, ativo])
-
 
   useEffect(() => {
     if (open && ativo && tipoPreco === 'atual' && !precoAtual) {
       const buscarPrecoAtual = async () => {
         try {
           setCarregandoPreco(true)
-          
-          // Verificar se é renda fixa - não buscar preço via yfinance
           const ticker = ativo.ticker.toUpperCase()
-          const isRendaFixa = ticker.includes('TD-') || ticker.includes('CDB') || ticker.includes('LCI') || ticker.includes('LCA') || 
-                             ticker.includes('DEB') || ticker.includes('TESOURO') || ativo.ticker.includes('renda fixa')
-          
+          const isRendaFixa =
+            ticker.includes('TD-') ||
+            ticker.includes('CDB') ||
+            ticker.includes('LCI') ||
+            ticker.includes('LCA') ||
+            ticker.includes('DEB') ||
+            ticker.includes('TESOURO') ||
+            ativo.ticker.includes('renda fixa')
           if (isRendaFixa) {
-            
             setPrecoAtual({
               preco: ativo.preco_atual,
               data: new Date().toISOString().split('T')[0],
-              ticker: ativo.ticker
+              ticker: ativo.ticker,
             })
           } else {
             const resultado = await ativoService.getPrecoAtual(ativo.ticker)
             setPrecoAtual(resultado)
           }
-        } catch (error) {
-          console.error('Erro ao buscar preço atual:', error)
-          // Fallback: usar preço atual do ativo
+        } catch {
           setPrecoAtual({
             preco: ativo.preco_atual,
             data: new Date().toISOString().split('T')[0],
-            ticker: ativo.ticker
+            ticker: ativo.ticker,
           })
         } finally {
           setCarregandoPreco(false)
@@ -86,26 +94,27 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
     }
   }, [open, ativo, tipoPreco])
 
-  // Buscar preço histórico quando data for alterada
   useEffect(() => {
     if (open && ativo && tipoPreco === 'historico' && dataOperacao) {
       const buscarPrecoHistorico = async () => {
         try {
           setCarregandoPreco(true)
           setErroPrecoHistorico('')
-          
-          // Verificar se é renda fixa - não buscar preço via yfinance
           const ticker = ativo.ticker.toUpperCase()
-          const isRendaFixa = ticker.includes('TD-') || ticker.includes('CDB') || ticker.includes('LCI') || ticker.includes('LCA') || 
-                             ticker.includes('DEB') || ticker.includes('TESOURO') || ativo.ticker.includes('renda fixa')
-          
+          const isRendaFixa =
+            ticker.includes('TD-') ||
+            ticker.includes('CDB') ||
+            ticker.includes('LCI') ||
+            ticker.includes('LCA') ||
+            ticker.includes('DEB') ||
+            ticker.includes('TESOURO') ||
+            ativo.ticker.includes('renda fixa')
           if (isRendaFixa) {
-            // Para renda fixa, usar preço atual do ativo como fallback
             setPrecoHistorico({
               preco: ativo.preco_atual,
               data_historico: dataOperacao,
               data_solicitada: dataOperacao,
-              ticker: ativo.ticker
+              ticker: ativo.ticker,
             })
           } else {
             const resultado = await ativoService.getPrecoHistorico(ativo.ticker, dataOperacao)
@@ -122,88 +131,59 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
     }
   }, [open, ativo, tipoPreco, dataOperacao])
 
+  const valorPrecoCompra =
+    tipoPreco === 'atual' && precoAtual
+      ? precoAtual.preco
+      : tipoPreco === 'historico' && precoHistorico
+        ? precoHistorico.preco
+        : tipoPreco === 'manual' && precoManualCompra
+          ? parseFloat(precoManualCompra.replace(',', '.'))
+          : null
+
+  const valorPrecoMedio = precoMedioManual.trim()
+    ? parseFloat(precoMedioManual.replace(',', '.'))
+    : null
+
   const atualizarMutation = useMutation({
     mutationFn: async () => {
       if (!ativo) return
-
-      let quantidadeNova: number
-      
-      if (tipoOperacao === 'vender' && venderTudo) {
-        // Vender tudo = quantidade 0
-        quantidadeNova = 0
+      if (modo === 'preco_compra') {
+        const preco = valorPrecoCompra
+        if (preco == null || preco <= 0) return
+        return carteiraService.atualizarAtivo(ativo.id, {
+          quantidade: ativo.quantidade,
+          preco_compra: preco,
+        })
       } else {
-        quantidadeNova = parseFloat(novaQuantidade.replace(',', '.'))
+        const pm = valorPrecoMedio
+        if (pm == null || pm <= 0) return
+        return carteiraService.atualizarAtivo(ativo.id, { preco_medio: pm })
       }
-
-      let precoCompraFinal: number | undefined
-      
-      if (tipoPreco === 'atual' && precoAtual) {
-        precoCompraFinal = precoAtual.preco
-      } else if (tipoPreco === 'historico' && precoHistorico) {
-        precoCompraFinal = precoHistorico.preco
-      } else if (tipoPreco === 'manual' && precoOperacao) {
-        precoCompraFinal = parseFloat(precoOperacao.replace(',', '.'))
-      }
-      
-      return carteiraService.atualizarAtivo(ativo.id, { 
-        quantidade: quantidadeNova,
-        preco_compra: precoCompraFinal
-      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
-      // Invalidar queries da HomePage para atualizar cards e gráficos
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
-      // Backfill
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-insights'] })
-      
-      // Forçar refetch imediato da carteira para atualização instantânea
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
       queryClient.refetchQueries({ queryKey: ['carteira'] })
-      
       onClose()
-    }
+    },
   })
 
-  const calcularResultado = () => {
-    if (!ativo) return null
-
-    const quantidadeAtual = ativo.quantidade
-    let quantidadeNova: number
-    
-    if (tipoOperacao === 'vender' && venderTudo) {
-      quantidadeNova = 0
-    } else {
-      quantidadeNova = parseFloat(novaQuantidade.replace(',', '.'))
-    }
-    
-    const diferenca = quantidadeNova - quantidadeAtual
-
-    let precoOperacaoFinal = 0
-    if (tipoPreco === 'atual' && precoAtual) {
-      precoOperacaoFinal = precoAtual.preco
-    } else if (tipoPreco === 'historico' && precoHistorico) {
-      precoOperacaoFinal = precoHistorico.preco
-    } else if (tipoPreco === 'manual' && precoOperacao) {
-      precoOperacaoFinal = parseFloat(precoOperacao.replace(',', '.'))
-    }
-
-    return {
-      diferenca,
-      precoOperacao: precoOperacaoFinal,
-      valorOperacao: Math.abs(diferenca) * precoOperacaoFinal,
-      tipoOperacao: diferenca > 0 ? 'compra' : diferenca < 0 ? 'venda' : 'ajuste'
-    }
-  }
-
-  const resultado = calcularResultado()
+  const podeConfirmar =
+    modo === 'preco_compra'
+      ? valorPrecoCompra != null && valorPrecoCompra > 0
+      : valorPrecoMedio != null && valorPrecoMedio > 0
 
   if (!open || !ativo) return null
+
+  const precoMedioAtual = (ativo as any).preco_medio ?? ativo.preco_compra ?? null
+  const precoCompraAtual = ativo.preco_compra ?? null
 
   return (
     <div className="fixed inset-0 z-[100]">
@@ -211,266 +191,185 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-            <div className="font-semibold">Editar Ativo - {ativo.ticker}</div>
+            <div className="font-semibold">Ajustar ativo — {ativo.ticker}</div>
             <button onClick={onClose} className="p-2 rounded hover:bg-accent" aria-label="Fechar">
               <X size={18} />
             </button>
           </div>
 
           <div className="p-6 space-y-6">
-            {/* Informações do ativo */}
             <div className="bg-muted/30 p-4 rounded-lg">
-              <div className="text-sm text-muted-foreground mb-2">Ativo atual</div>
+              <div className="text-sm text-muted-foreground mb-2">Ativo</div>
               <div className="font-medium">{ativo.nome_completo}</div>
               <div className="text-sm text-muted-foreground">
-                {ativo.quantidade} ações × R$ {ativo.preco_atual.toFixed(2)} = R$ {ativo.valor_total.toFixed(2)}
+                {ativo.quantidade} × R$ {ativo.preco_atual.toFixed(2)} = R$ {ativo.valor_total.toFixed(2)}
               </div>
-            </div>
-
-            {/* Nova quantidade */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium">Nova quantidade</label>
-              <input
-                type="text"
-                value={novaQuantidade}
-                onChange={(e) => setNovaQuantidade(e.target.value)}
-                placeholder="Ex.: 100"
-                aria-label="Nova quantidade"
-                className="w-full px-3 py-2 bg-background border border-border rounded"
-                disabled={tipoOperacao === 'vender' && venderTudo}
-              />
-              
-              {/* Opção "Vender tudo" */}
-              {tipoOperacao === 'vender' && (
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="venderTudo"
-                    checked={venderTudo}
-                    onChange={(e) => {
-                      setVenderTudo(e.target.checked)
-                      if (e.target.checked) {
-                        setNovaQuantidade('0')
-                      } else {
-                        setNovaQuantidade(ativo.quantidade.toString())
-                      }
-                    }}
-                    className="rounded"
-                  />
-                  <label htmlFor="venderTudo" className="text-sm font-medium text-red-600">
-                    Vender tudo (quantidade = 0)
-                  </label>
+              {(precoCompraAtual != null || precoMedioAtual != null) && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  Preço de compra: {precoCompraAtual != null ? `R$ ${Number(precoCompraAtual).toFixed(2)}` : '—'} · Preço médio: {precoMedioAtual != null ? `R$ ${Number(precoMedioAtual).toFixed(2)}` : '—'}
                 </div>
               )}
             </div>
 
-            {/* Tipo de operação */}
             <div className="space-y-3">
-              <label className="block text-sm font-medium">Tipo de operação</label>
-              <div className="grid grid-cols-3 gap-2">
+              <label className="block text-sm font-medium">O que deseja ajustar?</label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setTipoOperacao('comprar')}
-                  className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                    tipoOperacao === 'comprar'
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                  onClick={() => setModo('preco_compra')}
+                  className={`p-3 rounded-lg border text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                    modo === 'preco_compra'
+                      ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:bg-muted'
                   }`}
                 >
-                  <TrendingUp className="w-4 h-4 mx-auto mb-1" />
-                  Comprar mais
+                  <DollarSign className="w-4 h-4" />
+                  Preço de compra
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTipoOperacao('vender')}
-                  className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                    tipoOperacao === 'vender'
-                      ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                  onClick={() => setModo('preco_medio')}
+                  className={`p-3 rounded-lg border text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                    modo === 'preco_medio'
+                      ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:bg-muted'
                   }`}
                 >
-                  <TrendingDown className="w-4 h-4 mx-auto mb-1" />
-                  Vender
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipoOperacao('ajustar')}
-                  className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                    tipoOperacao === 'ajustar'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                      : 'border-border hover:bg-muted'
-                  }`}
-                >
-                  <DollarSign className="w-4 h-4 mx-auto mb-1" />
-                  Ajustar
+                  <BarChart3 className="w-4 h-4" />
+                  Preço médio
                 </button>
               </div>
             </div>
 
-            {/* Preço da operação */}
-            <div className="space-y-4">
-              <label className="block text-sm font-medium flex items-center gap-2">
-                <DollarSign size={14}/> Preço da operação
-              </label>
-              
-              {/* Opções de preço */}
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="preco-atual-edit"
-                    name="tipo-preco-edit"
-                    value="atual"
-                    checked={tipoPreco === 'atual'}
-                    onChange={() => setTipoPreco('atual')}
-                    className="text-primary"
-                  />
-                  <label htmlFor="preco-atual-edit" className="text-sm">
-                    Preço atual
-                  </label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="preco-historico-edit"
-                    name="tipo-preco-edit"
-                    value="historico"
-                    checked={tipoPreco === 'historico'}
-                    onChange={() => setTipoPreco('historico')}
-                    className="text-primary"
-                  />
-                  <label htmlFor="preco-historico-edit" className="text-sm">
-                    Preço histórico
-                  </label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="preco-manual-edit"
-                    name="tipo-preco-edit"
-                    value="manual"
-                    checked={tipoPreco === 'manual'}
-                    onChange={() => setTipoPreco('manual')}
-                    className="text-primary"
-                  />
-                  <label htmlFor="preco-manual-edit" className="text-sm">
-                    Preço manual
-                  </label>
-                </div>
-              </div>
+            {modo === 'preco_compra' && (
+              <>
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium">Novo preço de compra</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="preco-atual-edit"
+                        name="tipo-preco-edit"
+                        checked={tipoPreco === 'atual'}
+                        onChange={() => setTipoPreco('atual')}
+                        className="text-primary"
+                      />
+                      <label htmlFor="preco-atual-edit" className="text-sm">Preço atual</label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="preco-historico-edit"
+                        name="tipo-preco-edit"
+                        checked={tipoPreco === 'historico'}
+                        onChange={() => setTipoPreco('historico')}
+                        className="text-primary"
+                      />
+                      <label htmlFor="preco-historico-edit" className="text-sm">Preço histórico</label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="preco-manual-edit"
+                        name="tipo-preco-edit"
+                        checked={tipoPreco === 'manual'}
+                        onChange={() => setTipoPreco('manual')}
+                        className="text-primary"
+                      />
+                      <label htmlFor="preco-manual-edit" className="text-sm">Preço manual</label>
+                    </div>
+                  </div>
 
-              {/* Data para preço histórico */}
-              {tipoPreco === 'historico' && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Data da operação</label>
-                  <input
-                    type="date"
-                    value={dataOperacao}
-                    onChange={(e) => setDataOperacao(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
-                    aria-label="Data da operação"
-                    className="w-full px-3 py-2 bg-background border border-border rounded"
-                  />
-                  {precoHistorico && (
-                    <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                      <div className="text-sm text-green-800 dark:text-green-200">
-                        <strong>Preço encontrado:</strong> R$ {precoHistorico.preco.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-green-600 dark:text-green-400">
-                        Data: {new Date(precoHistorico.data_historico).toLocaleDateString('pt-BR')}
-                      </div>
+                  {tipoPreco === 'historico' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">Data da operação</label>
+                      <input
+                        type="date"
+                        value={dataOperacao}
+                        onChange={(e) => setDataOperacao(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className="w-full px-3 py-2 bg-background border border-border rounded"
+                        aria-label="Data da operação"
+                      />
+                      {precoHistorico && (
+                        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-800 dark:text-green-200">
+                          Preço encontrado: R$ {precoHistorico.preco.toFixed(2)} (data: {new Date(precoHistorico.data_historico).toLocaleDateString('pt-BR')})
+                        </div>
+                      )}
+                      {erroPrecoHistorico && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-200">
+                          {erroPrecoHistorico}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {erroPrecoHistorico && (
-                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                      <div className="text-sm text-red-800 dark:text-red-200">
-                        {erroPrecoHistorico}
-                      </div>
+
+                  {tipoPreco === 'manual' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">Preço por unidade (R$)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Ex.: 10,50"
+                        value={precoManualCompra}
+                        onChange={(e) => setPrecoManualCompra(e.target.value)}
+                        className="w-full px-3 py-2 bg-background border border-border rounded"
+                      />
+                      {ativo?.ticker && /\-USD$/i.test(ativo.ticker) && (
+                        <p className="text-xs text-muted-foreground">Para criptomoedas, informe o valor em R$.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {tipoPreco === 'atual' && (
+                    <div>
+                      {carregandoPreco && (
+                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+                          Buscando preço atual...
+                        </div>
+                      )}
+                      {precoAtual && !carregandoPreco && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+                          Preço atual: R$ {precoAtual.preco.toFixed(2)} (data: {new Date(precoAtual.data).toLocaleDateString('pt-BR')})
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+                {valorPrecoCompra != null && valorPrecoCompra > 0 && (
+                  <div className="bg-muted/30 p-4 rounded-lg text-sm">
+                    Será definido como preço de compra: <strong>R$ {valorPrecoCompra.toFixed(2)}</strong>. A quantidade não será alterada.
+                  </div>
+                )}
+              </>
+            )}
 
-              {/* Preço manual */}
-              {tipoPreco === 'manual' && (
+            {modo === 'preco_medio' && (
+              <>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium">Preço por ação (em R$)</label>
+                  <label className="block text-sm font-medium">Novo preço médio (R$)</label>
+                  <p className="text-xs text-muted-foreground">
+                    O preço médio é usado no cálculo da valorização do ativo na carteira. Este ajuste apenas altera o valor exibido e usado nesse cálculo; não altera a lógica de cálculo do preço médio em outras partes do sistema (ex.: novas compras).
+                  </p>
                   <input
                     type="text"
                     inputMode="decimal"
-                    placeholder="Ex.: 10,50"
-                    value={precoOperacao}
-                    onChange={(e) => setPrecoOperacao(e.target.value)}
-                    aria-label="Preço por ação"
+                    placeholder="Ex.: 12,75"
+                    value={precoMedioManual}
+                    onChange={(e) => setPrecoMedioManual(e.target.value)}
                     className="w-full px-3 py-2 bg-background border border-border rounded"
                   />
-                  {ativo?.ticker && /\-USD$/i.test(ativo.ticker) && (
-                    <p className="text-xs text-muted-foreground">Para criptomoedas, informe o valor em R$ (reais). O preço atual e histórico já vêm convertidos.</p>
-                  )}
                 </div>
-              )}
-
-              {/* Preço atual */}
-              {tipoPreco === 'atual' && (
-                <div>
-                  {carregandoPreco && (
-                    <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                      <div className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
-                        Buscando preço atual...
-                      </div>
-                    </div>
-                  )}
-                  {precoAtual && !carregandoPreco && (
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                      <div className="text-sm text-blue-800 dark:text-blue-200">
-                        <strong>Preço atual:</strong> R$ {precoAtual.preco.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">
-                        Data: {new Date(precoAtual.data).toLocaleDateString('pt-BR')}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Resultado da operação */}
-            {resultado && resultado.precoOperacao > 0 && (
-              <div className="bg-muted/30 p-4 rounded-lg">
-                <div className="text-sm text-muted-foreground mb-2">Resultado da operação</div>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span>Quantidade atual:</span>
-                    <span>{ativo.quantidade}</span>
+                {valorPrecoMedio != null && valorPrecoMedio > 0 && (
+                  <div className="bg-muted/30 p-4 rounded-lg text-sm">
+                    Será definido como preço médio: <strong>R$ {valorPrecoMedio.toFixed(2)}</strong>.
                   </div>
-                  <div className="flex justify-between">
-                    <span>Nova quantidade:</span>
-                    <span>{novaQuantidade}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Diferença:</span>
-                    <span className={resultado.diferenca > 0 ? 'text-green-600' : resultado.diferenca < 0 ? 'text-red-600' : ''}>
-                      {resultado.diferenca > 0 ? '+' : ''}{resultado.diferenca}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Preço da operação:</span>
-                    <span>R$ {resultado.precoOperacao.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-medium border-t pt-1">
-                    <span>Valor da operação:</span>
-                    <span className={resultado.tipoOperacao === 'compra' ? 'text-green-600' : resultado.tipoOperacao === 'venda' ? 'text-red-600' : ''}>
-                      {resultado.tipoOperacao === 'compra' ? '+' : resultado.tipoOperacao === 'venda' ? '-' : ''}R$ {resultado.valorOperacao.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
 
-            {/* Botões */}
             <div className="flex gap-3">
               <button
                 onClick={onClose}
@@ -480,7 +379,7 @@ export default function EditAtivoModal({ open, onClose, ativo }: EditAtivoModalP
               </button>
               <button
                 onClick={() => atualizarMutation.mutate()}
-                disabled={atualizarMutation.isPending || !resultado || resultado.precoOperacao <= 0}
+                disabled={atualizarMutation.isPending || !podeConfirmar}
                 className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {atualizarMutation.isPending ? 'Salvando...' : 'Confirmar'}

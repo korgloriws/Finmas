@@ -199,7 +199,13 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
     return <img src={logoUrl} alt={`Logo ${ticker}`} title={ticker} className="w-5 h-5 rounded object-cover" style={{ objectFit: 'cover' }} />
   }
 
-  // Buscar preço atual quando necessário
+  // Ao trocar o ticker, limpar preço para buscar de novo (ex.: cripto em BRL)
+  useEffect(() => {
+    setPrecoAtual(null)
+    setPrecoHistorico(null)
+  }, [ticker])
+
+  // Buscar preço atual quando necessário (criptos já vêm em BRL do backend)
   useEffect(() => {
     if (step === 4 && tipoPreco === 'atual' && ticker && !precoAtual) {
       const buscarPrecoAtual = async () => {
