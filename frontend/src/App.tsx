@@ -5,6 +5,7 @@ import { AnaliseProvider } from './contexts/AnaliseContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import SecurityCheck from './components/SecurityCheck'
+import RootOrRedirect from './components/RootOrRedirect'
 import ErrorBoundary from './components/ErrorBoundary'
 // PERFORMANCE: Importar páginas diretamente (sem lazy) para navegação instantânea
 // As páginas agora são carregadas no bundle inicial, mas a navegação é instantânea
@@ -27,37 +28,38 @@ import HomePage from './pages/HomePage'
 import NoticiasPage from './pages/NoticiasPage'
 import AcessoNegadoPage from './pages/AcessoNegadoPage'
 import VendasPage from './pages/VendasPage'
+import ConhecerPage from './pages/ConhecerPage'
 
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ThemeProvider>
-          <AnaliseProvider>
-            <Routes>
+      <div className="h-full min-h-0">
+        <AuthProvider>
+          <ThemeProvider>
+            <AnaliseProvider>
+              <Routes>
           {/* Rotas públicas */}
+          <Route path="/" element={<RootOrRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
           <Route path="/recuperar-senha" element={<RecuperacaoSenhaPage />} />
           <Route path="/configurar-seguranca" element={<ConfigurarSegurancaPage />} />
           <Route path="/vendas" element={<VendasPage />} />
+
+          {/* Rotas públicas com Layout (gostinho: sem login) */}
+          <Route path="/conhecer" element={<SecurityCheck><Layout><ConhecerPage /></Layout></SecurityCheck>} />
+          <Route path="/guia" element={<SecurityCheck><Layout><GuiaMercadoPage /></Layout></SecurityCheck>} />
+          <Route path="/juros-compostos" element={<SecurityCheck><Layout><JurosCompostosPage /></Layout></SecurityCheck>} />
+          <Route path="/conversor" element={<SecurityCheck><Layout><ConversorMoedasPage /></Layout></SecurityCheck>} />
+          <Route path="/correcao-monetaria" element={<SecurityCheck><Layout><CorrecaoMonetariaPage /></Layout></SecurityCheck>} />
+          <Route path="/detalhes" element={<SecurityCheck><Layout><DetalhesPage /></Layout></SecurityCheck>} />
           
           {/* Rotas protegidas - PERFORMANCE: Sem Suspense para navegação instantânea */}
-          <Route path="/" element={
+          <Route path="/home" element={
             <ProtectedRoute>
               <SecurityCheck>
                 <Layout>
                   <HomePage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/detalhes" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <DetalhesPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -88,46 +90,6 @@ function App() {
               <SecurityCheck>
                 <Layout>
                   <ControlePage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/juros-compostos" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <JurosCompostosPage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/guia" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <GuiaMercadoPage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/conversor" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <ConversorMoedasPage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/correcao-monetaria" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <CorrecaoMonetariaPage />
                 </Layout>
               </SecurityCheck>
             </ProtectedRoute>
@@ -186,10 +148,11 @@ function App() {
           {/* Redirect da rota antiga para a nova */}
           <Route path="/rankings-teste" element={<Navigate to="/rankings" replace />} />
 
-            </Routes>
-          </AnaliseProvider>
-        </ThemeProvider>
-      </AuthProvider>
+              </Routes>
+            </AnaliseProvider>
+          </ThemeProvider>
+        </AuthProvider>
+      </div>
     </ErrorBoundary>
   )
 }

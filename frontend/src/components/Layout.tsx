@@ -2,15 +2,15 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper, Scale } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper, Scale, Compass } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
   children: ReactNode
 }
 
-const menuItems = [
-  { path: '/', label: 'Home', icon: Home },
+const menuItemsFull = [
+  { path: '/home', label: 'Home', icon: Home },
   { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
   { path: '/carteira', label: 'Carteira', icon: Wallet },
   { path: '/controle', label: 'Controle Financeiro', icon: Calculator },
@@ -22,6 +22,16 @@ const menuItems = [
   { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
   { path: '/correcao-monetaria', label: 'Correção Monetária', icon: Scale },
   { path: '/rankings', label: 'Rankings', icon: Trophy },
+]
+
+const menuItemsPublic = [
+  { path: '/', label: 'Início', icon: Home },
+  { path: '/conhecer', label: 'Conhecer sistema completo', icon: Compass },
+  { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
+  { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
+  { path: '/juros-compostos', label: 'Calculadora de Juros Compostos', icon: TrendingUp },
+  { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
+  { path: '/correcao-monetaria', label: 'Correção Monetária', icon: Scale },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -53,9 +63,11 @@ export default function Layout({ children }: LayoutProps) {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  const menuItems = user ? menuItemsFull : menuItemsPublic
+
   const searchItems: Array<{ label: string; path: string; keywords: string; params?: Record<string, string> }> = [
     // Páginas principais
-    ...menuItems.map((m) => ({ label: m.label, path: m.path, keywords: m.label.toLowerCase() })),
+    ...menuItemsFull.map((m) => ({ label: m.label, path: m.path, keywords: m.label.toLowerCase() })),
     // Abas conhecidas
     { label: 'Análise – Lista', path: '/analise', keywords: 'analise lista oportunidades', params: { tab: 'lista' } },
     { label: 'Análise – Gráficos', path: '/analise', keywords: 'analise graficos oportunidades', params: { tab: 'graficos' } },
@@ -107,7 +119,7 @@ export default function Layout({ children }: LayoutProps) {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen max-h-screen min-h-0 overflow-hidden bg-background">
       {/* Sidebar desktop */}
       <div className={`hidden md:flex w-64 border-r border-border shadow-lg flex-col h-screen sticky top-0 overflow-hidden ${
         isDark ? 'bg-black' : 'bg-card'
@@ -115,11 +127,20 @@ export default function Layout({ children }: LayoutProps) {
         <div className="p-6">
           <FinmasLogo size="md" showText={false} className="mb-4 justify-center" />
           <hr className="my-4 border-border" />
-          {/* User Info */}
-          <div className="flex items-center gap-2 mb-4 p-2 bg-accent/50 rounded-lg">
-            <User size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">{user}</span>
-          </div>
+          {/* User Info ou Entrar */}
+          {user ? (
+            <div className="flex items-center gap-2 mb-4 p-2 bg-accent/50 rounded-lg">
+              <User size={16} className="text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground truncate">{user}</span>
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="flex items-center justify-center gap-2 mb-4 p-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-colors"
+            >
+              Entrar
+            </Link>
+          )}
           <div className="mt-2 mb-3">
             <button
               onClick={() => setSearchOpen(true)}
@@ -160,24 +181,28 @@ export default function Layout({ children }: LayoutProps) {
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
             <span className="text-sm">Modo Escuro</span>
           </button>
-          <Link
-            to="/configuracoes"
-            className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
-              location.pathname === '/configuracoes'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-            }`}
-          >
-            <Settings size={18} />
-            <span className="text-sm">Configurações</span>
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <LogOut size={18} />
-            <span className="text-sm">Sair</span>
-          </button>
+          {user && (
+            <>
+              <Link
+                to="/configuracoes"
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
+                  location.pathname === '/configuracoes'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Settings size={18} />
+                <span className="text-sm">Configurações</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <LogOut size={18} />
+                <span className="text-sm">Sair</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -201,10 +226,20 @@ export default function Layout({ children }: LayoutProps) {
                 <X size={18} />
               </button>
             </div>
-            <div className="flex items-center gap-2 mb-4 p-2 bg-accent/50 rounded-lg">
-              <User size={16} className="text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">{user}</span>
-            </div>
+            {user ? (
+              <div className="flex items-center gap-2 mb-4 p-2 bg-accent/50 rounded-lg">
+                <User size={16} className="text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground truncate">{user}</span>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-center gap-2 mb-4 p-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90"
+              >
+                Entrar
+              </Link>
+            )}
             <button
               onClick={() => setSearchOpen(true)}
               className="flex items-center gap-2 px-3 py-2 mb-2 bg-accent/50 hover:bg-accent rounded-lg text-sm text-muted-foreground transition-colors"
@@ -242,31 +277,35 @@ export default function Layout({ children }: LayoutProps) {
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
                 <span className="text-sm">Modo Escuro</span>
               </button>
-              <Link
-                to="/configuracoes"
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
-                  location.pathname === '/configuracoes'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <Settings size={18} />
-                <span className="text-sm">Configurações</span>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <LogOut size={18} />
-                <span className="text-sm">Sair</span>
-              </button>
+              {user && (
+                <>
+                  <Link
+                    to="/configuracoes"
+                    className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg transition-colors mb-2 ${
+                      location.pathname === '/configuracoes'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                  >
+                    <Settings size={18} />
+                    <span className="text-sm">Configurações</span>
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  >
+                    <LogOut size={18} />
+                    <span className="text-sm">Sair</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      {/* Main Content - min-h-0 permite que o flex item role quando o conteúdo é maior que a tela */}
+      <div className="flex-1 min-h-0 overflow-auto">
         {/* Mobile top bar */}
         <div className={`md:hidden sticky top-0 z-30 border-b border-border px-4 py-3 flex items-center justify-between shadow-sm transition-transform duration-300 ${
           isScrolled ? '-translate-y-full' : 'translate-y-0'

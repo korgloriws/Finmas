@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, User, Lock, ArrowRight, RefreshCw, CheckCircle, XCircle, Sun, Moon } from 'lucide-react'
+import { Eye, EyeOff, User, Lock, ArrowRight, ArrowLeft, RefreshCw, CheckCircle, XCircle, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import api from '../services/api'
@@ -75,7 +75,7 @@ const LoginPage = () => {
       } else {
         await register(formData.nome, formData.username, formData.senha, formData.pergunta_seguranca, formData.resposta_seguranca)
       }
-      navigate('/')
+      navigate('/home')
     } catch (err: any) {
       setError(err.message || 'Erro ao processar solicitação')
     } finally {
@@ -88,7 +88,17 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/5 p-4">
+    <div className="h-full min-h-screen overflow-auto flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/5 p-4 relative">
+      {/* Voltar para a landing — fora do formulário para não confundir com "voltar ao login" na inscrição */}
+      <Link
+        to="/"
+        className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-2 rounded-lg bg-card/90 border border-border shadow-sm hover:bg-muted/80 transition-colors text-foreground hover:text-primary"
+        title="Voltar à página inicial"
+        aria-label="Voltar à página inicial"
+      >
+        <ArrowLeft size={20} />
+        <span className="text-sm font-medium">Voltar ao site</span>
+      </Link>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

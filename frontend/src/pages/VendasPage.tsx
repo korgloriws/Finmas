@@ -173,15 +173,18 @@ export default function VendasPage() {
   const opacityBg = useTransform(scrollYProgress, [0, 0.3], [1, 0.4])
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div ref={containerRef} className="h-full min-h-screen overflow-auto overflow-x-hidden bg-background text-foreground">
       {/* Header */}
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4 }}
-        className="border-b border-border dark:border-white/20 bg-card/50 dark:bg-card/80 backdrop-blur-sm sticky top-0 z-10"
+        className="border-b border-border dark:border-white/20 backdrop-blur-sm sticky top-0 z-10"
+        style={{
+          background: 'linear-gradient(to right, hsl(var(--background)) 0%, hsl(var(--background)) 18%, transparent 28%, transparent 72%, hsl(var(--background)) 82%, hsl(var(--background)) 100%)',
+        }}
       >
-        <div className="container max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div className="w-full px-6 sm:px-8 md:px-10 lg:px-12 py-4 flex items-center justify-between gap-3">
           <Link to="/" className="flex items-center text-foreground hover:opacity-90 transition-opacity duration-300">
             <FinmasLogo size="sm" showText={false} />
           </Link>

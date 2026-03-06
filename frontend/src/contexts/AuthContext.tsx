@@ -52,10 +52,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const isAdmin = userRole === 'admin'
 
   const canAccessScreen = useCallback((pathOrId: string) => {
+    if (!user) return false
     if (isAdmin) return true
     if (allowedScreens === null || allowedScreens === undefined) return true
     if (Array.isArray(allowedScreens) && allowedScreens.length === 0) return false
-    const normalized = pathOrId === '/' ? 'home' : pathOrId.replace(/^\//, '')
+    const normalized = (pathOrId === '/' || pathOrId === '/home') ? 'home' : pathOrId.replace(/^\//, '')
     const id = TELAS_APP.find(t => t.path === pathOrId || t.path === `/${normalized}` || t.id === pathOrId || t.id === normalized)?.id ?? normalized
     return allowedScreens.includes(id)
   }, [isAdmin, allowedScreens])

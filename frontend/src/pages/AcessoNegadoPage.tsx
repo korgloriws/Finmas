@@ -122,7 +122,7 @@ function BlocoTelaPremium({
   ctaTexto: string
 }) {
   const { logout, canAccessScreen } = useAuth()
-  const firstAllowed = TELAS_APP.find((t) => canAccessScreen(t.path))?.path ?? '/'
+  const firstAllowed = TELAS_APP.find((t) => canAccessScreen(t.path))?.path ?? '/home'
 
   return (
     <div className="min-h-[80vh] flex flex-col">
@@ -256,7 +256,7 @@ export default function AcessoNegadoPage() {
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from
   const { logout, canAccessScreen } = useAuth()
-  const firstAllowed = TELAS_APP.find((t) => canAccessScreen(t.path))?.path ?? '/'
+  const firstAllowed = TELAS_APP.find((t) => canAccessScreen(t.path))?.path ?? '/home'
   const isAnalise = from === '/analise'
   const isAgendaDividendos = from === '/agenda-dividendos'
   const isRankings = from === '/rankings'

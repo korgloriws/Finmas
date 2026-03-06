@@ -1,6 +1,8 @@
 import { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import Layout from './Layout'
+import LoginRequiredBlock from './LoginRequiredBlock'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -12,7 +14,11 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const pathname = location.pathname
 
   if (!loading && !user) {
-    return <Navigate to="/login" replace />
+    return (
+      <Layout>
+        <LoginRequiredBlock />
+      </Layout>
+    )
   }
 
 

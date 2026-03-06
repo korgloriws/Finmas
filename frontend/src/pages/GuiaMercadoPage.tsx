@@ -1636,7 +1636,7 @@ export default function GuiaMercadoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-0 h-fit">
       <div className="container mx-auto p-4 sm:p-6 space-y-8">
         {/* Header com design moderno */}
         <div className="text-center space-y-6">
@@ -1647,8 +1647,8 @@ export default function GuiaMercadoPage() {
             <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Conhecimento completo para investir com confiança. Estratégias, indicadores e análise de ativos.
             </p>
+          </div>
         </div>
-      </div>
 
         {/* Sistema de Abas com Design Moderno */}
         <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xl">

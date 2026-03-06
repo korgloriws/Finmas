@@ -109,8 +109,16 @@
   * {
     @apply border-border;
   }
+  /* Um único scroll: documento não rola; só a área de conteúdo do Layout (ou a própria página sem Layout) */
+  html, body, #root {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground;
+    overflow: hidden;
+  }
+  #root {
+    overflow: hidden;
   }
   
   /* PWA Splash Screen - fundo branco apenas durante carregamento inicial */
