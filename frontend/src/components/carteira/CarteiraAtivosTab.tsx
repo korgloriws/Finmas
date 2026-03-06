@@ -20,7 +20,7 @@ import { ativoService, carteiraService } from '../../services/api'
 
 
 
-export type PeriodoValorizacao = 'acumulado' | '1m' | '3m' | '6m' | '1a' | 'ytd'
+export type PeriodoValorizacao = '1m' | '3m' | '6m' | '1a' | 'ytd'
 
 function TabelaAtivosPorTipo({ 
   tipo, 
@@ -816,9 +816,9 @@ export default function CarteiraAtivosTab({
   onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
-  const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('acumulado')
+  const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('1m')
 
-  const periodoParaFetch = periodoValorizacao === 'acumulado' ? null : periodoValorizacao
+  const periodoParaFetch = periodoValorizacao
   const { data: valorizacaoPeriodoList, isFetching: carregandoValorizacaoPeriodo, isError: erroValorizacaoPeriodo } = useQuery({
     queryKey: ['carteira-valorizacao-periodo', periodoParaFetch, carteira?.length],
     queryFn: () => carteiraService.getValorizacaoPeriodo(periodoValorizacao as string),
@@ -844,13 +844,11 @@ export default function CarteiraAtivosTab({
     return map
   }, [valorizacaoPeriodoList])
 
-  const periodoLabel = periodoValorizacao === 'acumulado' ? undefined
-    : periodoValorizacao === '1m' ? '1 mês'
+  const periodoLabel = periodoValorizacao === '1m' ? '1 mês'
     : periodoValorizacao === '3m' ? '3 meses'
     : periodoValorizacao === '6m' ? '6 meses'
     : periodoValorizacao === '1a' ? '1 ano'
-    : periodoValorizacao === 'ytd' ? 'YTD'
-    : undefined
+    : 'YTD'
 
   // Identificar FIIs na carteira para buscar metadados sob demanda
   const fiisNaCarteira = useMemo(() => {
@@ -1019,22 +1017,22 @@ export default function CarteiraAtivosTab({
             Período da valorização (R$ e %) nas barras abaixo:
           </span>
           <div className="flex flex-wrap gap-1">
-            {(['acumulado', '1m', '3m', '6m', '1a', 'ytd'] as const).map((p) => (
+            {(['1m', '3m', '6m', '1a', 'ytd'] as const).map((p) => (
               <button
                 key={p}
                 type="button"
                 onClick={() => setPeriodoValorizacao(p)}
-                disabled={p !== 'acumulado' && carregandoValorizacaoPeriodo}
+                disabled={carregandoValorizacaoPeriodo}
                 className={`px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   periodoValorizacao === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                } ${p !== 'acumulado' && carregandoValorizacaoPeriodo ? 'opacity-60 cursor-wait' : ''}`}
+                } ${carregandoValorizacaoPeriodo ? 'opacity-60 cursor-wait' : ''}`}
               >
-                {p === 'acumulado' ? 'Acumulado' : p === '1m' ? '1 mês' : p === '3m' ? '3 meses' : p === '6m' ? '6 meses' : p === '1a' ? '1 ano' : 'YTD'}
+                {p === '1m' ? '1 mês' : p === '3m' ? '3 meses' : p === '6m' ? '6 meses' : p === '1a' ? '1 ano' : 'YTD'}
               </button>
             ))}
           </div>
           {carregandoValorizacaoPeriodo && <span className="text-sm text-muted-foreground">Carregando…</span>}
-          {erroValorizacaoPeriodo && periodoValorizacao !== 'acumulado' && (
+          {erroValorizacaoPeriodo && (
             <span className="text-sm text-destructive" title="Recarregue a página ou tente outro período">Erro ao carregar</span>
           )}
         </div>
