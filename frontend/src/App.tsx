@@ -54,16 +54,8 @@ function App() {
           <Route path="/correcao-monetaria" element={<SecurityCheck><Layout><CorrecaoMonetariaPage /></Layout></SecurityCheck>} />
           <Route path="/detalhes" element={<SecurityCheck><Layout><DetalhesPage /></Layout></SecurityCheck>} />
           
-          {/* Rotas protegidas - PERFORMANCE: Sem Suspense para navegação instantânea */}
-          <Route path="/home" element={
-            <ProtectedRoute>
-              <SecurityCheck>
-                <Layout>
-                  <HomePage />
-                </Layout>
-              </SecurityCheck>
-            </ProtectedRoute>
-          } />
+          {/* /home redireciona para / (entrada oficial é finmas.com.br) */}
+          <Route path="/home" element={<Navigate to="/" replace />} />
           
           <Route path="/analise" element={
             <ProtectedRoute>

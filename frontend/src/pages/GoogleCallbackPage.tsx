@@ -22,7 +22,7 @@ const GoogleCallbackPage = () => {
 
     if (token && username) {
       setUserFromToken(username, role || 'usuario')
-      checkCurrentUser().then(() => navigate('/home', { replace: true }))
+      checkCurrentUser().then(() => navigate('/', { replace: true }))
     } else {
       // Se não houver token, redirecionar para login
       navigate('/login?error=invalid_callback')

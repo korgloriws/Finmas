@@ -179,12 +179,39 @@ export default function VendasPage() {
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4 }}
-        className="border-b border-border dark:border-white/20 backdrop-blur-sm sticky top-0 z-10"
-        style={{
-          background: 'linear-gradient(to right, hsl(var(--background)) 0%, hsl(var(--background)) 18%, transparent 28%, transparent 72%, hsl(var(--background)) 82%, hsl(var(--background)) 100%)',
-        }}
+        className={`border-b border-border sticky top-0 z-10 w-full ${
+          isDark ? 'bg-black' : 'bg-card'
+        }`}
       >
-        <div className="w-full px-6 sm:px-8 md:px-10 lg:px-12 py-4 flex items-center justify-between gap-3">
+        {/* Mobile: mesmo posicionamento do cabeçalho da home (Layout) — px-4 py-3, logo ao centro */}
+        <div className="md:hidden px-4 py-3 flex items-center justify-between">
+          <div className="flex-1 min-w-0" aria-hidden />
+          <Link to="/" className="flex items-center justify-center flex-shrink-0 text-foreground hover:opacity-90 transition-opacity">
+            <FinmasLogo size="sm" showText={false} />
+          </Link>
+          <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded hover:bg-accent text-muted-foreground"
+              aria-label={isDark ? 'Usar tema claro' : 'Usar tema escuro'}
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            {user ? (
+              <Link to="/" className="px-3 py-2 rounded-lg border border-border hover:bg-muted text-sm font-medium flex items-center gap-1.5">
+                <ArrowLeft className="w-4 h-4" />
+                Sair
+              </Link>
+            ) : (
+              <Link to="/login" className="text-sm text-muted-foreground hover:text-foreground px-2 py-1">
+                Já tenho conta
+              </Link>
+            )}
+          </div>
+        </div>
+        {/* Desktop */}
+        <div className="hidden md:flex w-full px-6 lg:px-12 py-4 items-center justify-between gap-3">
           <Link to="/" className="flex items-center text-foreground hover:opacity-90 transition-opacity duration-300">
             <FinmasLogo size="sm" showText={false} />
           </Link>

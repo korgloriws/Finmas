@@ -25,7 +25,7 @@ const TELAS: Array<{
   requiresLogin: boolean
 }> = [
   {
-    path: '/home',
+    path: '/',
     label: 'Home',
     icon: Home,
     requiresLogin: true,

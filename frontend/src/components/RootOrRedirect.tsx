@@ -1,9 +1,13 @@
-import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import LandingPage from '../pages/LandingPage'
+import ProtectedRoute from './ProtectedRoute'
+import SecurityCheck from './SecurityCheck'
+import Layout from './Layout'
+import HomePage from '../pages/HomePage'
 
 /**
- * Rota raiz (/): se o usuário estiver logado, redireciona para /home (dashboard).
+ * Rota raiz (/): entrada do sistema em finmas.com.br.
+ * Se o usuário estiver logado, exibe o dashboard em / (sem redirecionar para /home).
  * Caso contrário, exibe a landing page pública.
  */
 export default function RootOrRedirect() {
@@ -18,7 +22,15 @@ export default function RootOrRedirect() {
   }
 
   if (user) {
-    return <Navigate to="/home" replace />
+    return (
+      <ProtectedRoute>
+        <SecurityCheck>
+          <Layout>
+            <HomePage />
+          </Layout>
+        </SecurityCheck>
+      </ProtectedRoute>
+    )
   }
 
   return <LandingPage />

@@ -297,7 +297,7 @@ export const adminService = {
 
 /** Lista de telas do app para controle de acesso (id = path ou chave da rota). Ordem: Home, Detalhes, Carteira, Controle, Guia, depois as demais. */
 export const TELAS_APP = [
-  { id: 'home', path: '/home', label: 'Home' },
+  { id: 'home', path: '/', label: 'Home' },
   { id: 'detalhes', path: '/detalhes', label: 'Detalhes dos ativos' },
   { id: 'carteira', path: '/carteira', label: 'Carteira' },
   { id: 'controle', path: '/controle', label: 'Controle Financeiro' },

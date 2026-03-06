@@ -10,7 +10,7 @@ interface LayoutProps {
 }
 
 const menuItemsFull = [
-  { path: '/home', label: 'Home', icon: Home },
+  { path: '/', label: 'Home', icon: Home },
   { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
   { path: '/carteira', label: 'Carteira', icon: Wallet },
   { path: '/controle', label: 'Controle Financeiro', icon: Calculator },

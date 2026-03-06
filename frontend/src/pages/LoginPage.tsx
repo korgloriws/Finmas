@@ -75,7 +75,7 @@ const LoginPage = () => {
       } else {
         await register(formData.nome, formData.username, formData.senha, formData.pergunta_seguranca, formData.resposta_seguranca)
       }
-      navigate('/home')
+      navigate('/')
     } catch (err: any) {
       setError(err.message || 'Erro ao processar solicitação')
     } finally {

@@ -35,7 +35,7 @@ export default function ConfigurarSegurancaPage() {
       await atualizarPergunta(user!, pergunta, resposta)
       setSuccess(true)
       setTimeout(() => {
-        navigate('/home')
+        navigate('/')
       }, 2000)
     } catch (err: any) {
       setError(err.message || 'Erro ao configurar pergunta de segurança')
@@ -45,7 +45,7 @@ export default function ConfigurarSegurancaPage() {
   }
 
   const handlePular = () => {
-    navigate('/home')
+    navigate('/')
   }
 
   if (success) {
