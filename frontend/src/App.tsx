@@ -29,6 +29,8 @@ import NoticiasPage from './pages/NoticiasPage'
 import AcessoNegadoPage from './pages/AcessoNegadoPage'
 import VendasPage from './pages/VendasPage'
 import ConhecerPage from './pages/ConhecerPage'
+import TermosDeUsoPage from './pages/TermosDeUsoPage'
+import PoliticaPrivacidadePage from './pages/PoliticaPrivacidadePage'
 
 function App() {
   return (
@@ -45,6 +47,8 @@ function App() {
           <Route path="/recuperar-senha" element={<RecuperacaoSenhaPage />} />
           <Route path="/configurar-seguranca" element={<ConfigurarSegurancaPage />} />
           <Route path="/vendas" element={<VendasPage />} />
+          <Route path="/termos-de-uso" element={<TermosDeUsoPage />} />
+          <Route path="/politica-de-privacidade" element={<PoliticaPrivacidadePage />} />
 
           {/* Rotas públicas com Layout (gostinho: sem login) */}
           <Route path="/conhecer" element={<SecurityCheck><Layout><ConhecerPage /></Layout></SecurityCheck>} />

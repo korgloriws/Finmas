@@ -343,6 +343,20 @@ const LoginPage = () => {
               )}
             </motion.div>
 
+            {/* Termos e Privacidade (apenas no cadastro) */}
+            {!isLogin && (
+              <p className="text-xs text-muted-foreground text-center">
+                Ao cadastrar-se você concorda com os{' '}
+                <Link to="/termos-de-uso" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Termos de Uso
+                </Link>
+                {' '}e com a{' '}
+                <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Política de Privacidade
+                </Link>.
+              </p>
+            )}
+
             {/* Error Message */}
             {error && (
               <motion.div

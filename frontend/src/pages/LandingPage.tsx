@@ -512,6 +512,10 @@ export default function LandingPage() {
       >
         <div className="container max-w-5xl mx-auto px-4 text-center text-sm text-muted-foreground">
           <p>© Finmas. Seu acompanhamento de investimentos em um só lugar.</p>
+          <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+            <Link to="/termos-de-uso" className="text-primary hover:underline">Termos de Uso</Link>
+            <Link to="/politica-de-privacidade" className="text-primary hover:underline">Política de Privacidade</Link>
+          </p>
         </div>
       </motion.footer>
     </div>
