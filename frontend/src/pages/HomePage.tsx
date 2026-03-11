@@ -1565,8 +1565,8 @@ export default function HomePage() {
         <TopRankingsCarousel delay={0.3} />
         </Suspense>
 
-        {/* Cards principais com animações - Mobile First */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        {/* Cards principais: no mobile 2x2; em telas grandes uma linha de 4 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
           <CardPrincipal
             title="Receitas"
             value={formatarValor(totalReceitas)}
@@ -1612,14 +1612,14 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Seção de gráficos - Mobile First */}
+        {/* Seção de gráficos: no mobile Distribuição primeiro; no desktop Evolução primeiro */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
-          {/* Gráfico de evolução financeira */}
+          {/* Gráfico de evolução financeira — no mobile ordem 2, no lg ordem 1 */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.5 }}
-            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl"
+            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl order-2 lg:order-1"
           >
             <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2 mb-2 sm:mb-4">
               <div className="flex items-center gap-3">
@@ -1782,12 +1782,12 @@ export default function HomePage() {
             )}
           </motion.div>
 
-          {/* Gráfico de pizza da carteira */}
+          {/* Gráfico de pizza da carteira — no mobile ordem 1, no lg ordem 2 */}
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.6 }}
-            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl overflow-visible"
+            className="bg-card border border-border rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-lg sm:shadow-xl overflow-visible order-1 lg:order-2"
           >
             <div className="flex items-center gap-2 mb-2 sm:mb-4">
               <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
