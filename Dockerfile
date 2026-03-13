@@ -49,11 +49,10 @@ EXPOSE 8080
 # Usar entrypoint para executar backup antes de iniciar
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Rodar via gunicorn otimizado para Hostinger KVM (2 vCPUs, 8GB RAM)
-# -w 2: 2 workers (um por vCPU - aproveita todos os núcleos)
-# -k gthread: threads para I/O bound (yfinance, requisições HTTP)
-# --threads 8: 8 threads por worker (total: 16 threads simultâneas)
-# -t 0: sem timeout no worker (análise de ativos chama API externa e pode demorar o que for)
-CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 8 -t 0 -b 0.0.0.0:${PORT:-8080} app:server"]
+# Rodar via gunicorn: 1 worker, sem timeout (análise de ativos pode demorar o que for)
+# -w 1: um único worker evita conflito em requisições longas
+# -k gthread --threads 8: threads para I/O (yfinance, HTTP)
+# -t 0: sem timeout no worker
+CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 1 -k gthread --threads 8 -t 0 -b 0.0.0.0:${PORT:-8080} app:server"]
 
 
