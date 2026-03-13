@@ -1089,10 +1089,14 @@ def api_verificar_pergunta():
 
 @server.route("/api/analise/ativos", methods=["POST"])
 def api_analise_ativos():
+    import time as _time
+    _inicio = _time.time()
+    tipo = "?"
     try:
         data = request.get_json()
         tipo = data.get('tipo', 'acoes')  
         filtros = data.get('filtros', {})
+        print(f"[ANALISE] Início /api/analise/ativos tipo={tipo}")
         
         # Criar chave de cache baseada nos parâmetros da requisição
         import hashlib
@@ -1146,9 +1150,14 @@ def api_analise_ativos():
         
         # Armazenar no cache por 30 minutos (1800 segundos)
         cache.set(cache_key_str, dados, timeout=1800)
-            
-        return jsonify(dados)
+        _duracao = round(_time.time() - _inicio, 1)
+        print(f"[ANALISE] Fim /api/analise/ativos tipo={tipo} duracao={_duracao}s len={len(dados)}")
+        resp = jsonify(dados)
+        resp.headers["X-Finmas-Backend"] = "ok"
+        return resp
     except Exception as e:
+        _duracao = round(_time.time() - _inicio, 1)
+        print(f"[ANALISE] Erro /api/analise/ativos tipo={tipo} duracao={_duracao}s err={e}")
         return jsonify({"error": str(e)}), 500
 
 @server.route("/api/listas/ativos", methods=["GET"])
