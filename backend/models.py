@@ -19,7 +19,7 @@ except Exception:
     psycopg = None
 
 # Concorrência para requisições ao yfinance (evita rate limit; 5-8 estável)
-YF_MAX_CONCURRENT = 5
+YF_MAX_CONCURRENT = 3
 
 USUARIO_ATUAL = None  
 SESSION_LOCK = threading.Lock()

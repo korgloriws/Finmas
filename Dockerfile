@@ -53,7 +53,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 # -w 2: 2 workers (um por vCPU - aproveita todos os núcleos)
 # -k gthread: threads para I/O bound (yfinance, requisições HTTP)
 # --threads 8: 8 threads por worker (total: 16 threads simultâneas)
-# Com 8GB RAM e baixo uso atual, podemos usar mais threads por worker
-CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 8 -t 120 -b 0.0.0.0:${PORT:-8080} app:server"]
+# -t 0: sem timeout no worker (análise de ativos chama API externa e pode demorar o que for)
+CMD ["sh", "-c", "cd /app/backend && exec gunicorn -w 2 -k gthread --threads 8 -t 0 -b 0.0.0.0:${PORT:-8080} app:server"]
 
 
