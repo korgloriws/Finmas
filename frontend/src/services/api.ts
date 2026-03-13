@@ -954,8 +954,8 @@ export const correcaoMonetariaService = {
 export const analiseService = {
 
   getAtivos: async (tipo: string, filtros: FiltrosAnalise): Promise<AtivoAnalise[]> => {
-    // Sem timeout: backend carrega todos os ativos um a um até terminar; front só mostra loading até receber a lista
-    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 0 })
+    // Timeout longo (10 min): aguardar a lista completa; front só mostra loading até receber a resposta
+    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 600000000000 })
     return response.data
   },
 
