@@ -958,44 +958,76 @@ export default function DetalhesVisaoGeralTab({
             </div>
           </div>
         ) : historico && historico.length > 0 ? (
-          
+          // Gráfico de variação percentual real no período (subidas e quedas com base no histórico de preços)
           <div className="w-full" style={{ height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
-                data={historico.map((item) => {
-                  const date = new Date(item.Date)
-                  // Formatação de data baseada no período (estilo Google Finance)
-                  let dateLabel = ''
-                  if (periodo === '1d') {
-                    // 1 dia: mostrar hora
-                    dateLabel = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                  } else if (periodo === '1w') {
-                    // 1 semana: mostrar dia e hora
-                    dateLabel = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' ' + 
-                               date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                  } else if (periodo === '1m' || periodo === '3m') {
-                    // 1-3 meses: mostrar dia/mês
-                    dateLabel = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-                  } else if (periodo === '6m' || periodo === '1y') {
-                    // 6 meses - 1 ano: mostrar mês/ano
-                    dateLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
-                  } else {
-                    // 5 anos ou máximo: mostrar mês/ano
-                    dateLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
-                  }
-                  
-                  return {
-                    date: dateLabel,
-                    value: item.Close,
-                    fullDate: date.toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      ...(periodo === '1d' || periodo === '1w' ? { hour: '2-digit', minute: '2-digit' } : {})
-                    }),
-                    timestamp: date.getTime()
-                  }
-                }).sort((a, b) => a.timestamp - b.timestamp)}
+                data={(() => {
+                  const sorted = [...historico].sort(
+                    (a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime()
+                  )
+                  const firstClose = sorted[0].Close || sorted[0].close
+
+                  return sorted.map((item) => {
+                    const close = item.Close ?? item.close
+                    const date = new Date(item.Date)
+
+                    // Formatação de data baseada no período (estilo Google Finance)
+                    let dateLabel = ''
+                    if (periodo === '1d') {
+                      dateLabel = date.toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    } else if (periodo === '1w') {
+                      dateLabel =
+                        date.toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: 'short'
+                        }) +
+                        ' ' +
+                        date.toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                    } else if (periodo === '1m' || periodo === '3m') {
+                      dateLabel = date.toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: 'short'
+                      })
+                    } else if (periodo === '6m' || periodo === '1y') {
+                      dateLabel = date.toLocaleDateString('pt-BR', {
+                        month: 'short',
+                        year: '2-digit'
+                      })
+                    } else {
+                      dateLabel = date.toLocaleDateString('pt-BR', {
+                        month: 'short',
+                        year: 'numeric'
+                      })
+                    }
+
+                    const pctFromStart =
+                      firstClose && close
+                        ? ((close - firstClose) / firstClose) * 100
+                        : 0
+
+                    return {
+                      date: dateLabel,
+                      value: close,
+                      pctFromStart,
+                      fullDate: date.toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        ...(periodo === '1d' || periodo === '1w'
+                          ? { hour: '2-digit', minute: '2-digit' }
+                          : {})
+                      }),
+                      timestamp: date.getTime()
+                    }
+                  })
+                })()}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >
                 <defs>
@@ -1031,16 +1063,14 @@ export default function DetalhesVisaoGeralTab({
                   stroke="currentColor"
                   opacity={0.5}
                   style={{ fontSize: '12px' }}
-                  tickFormatter={(value) => formatCurrency(value)}
+                  tickFormatter={(value) => `${value.toFixed(1)}%`}
                   width={80}
                 />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
                       const data = payload[0].payload
-                      const variacao = historico && historico.length > 1
-                        ? calcularVariacao(data.value, historico[0].Close)
-                        : 0
+                      const variacao = data.pctFromStart ?? 0
                       return (
                         <div className="bg-card border border-border rounded-lg shadow-xl p-3">
                           <p className="text-sm font-semibold text-foreground mb-1">{data.fullDate}</p>
@@ -1063,7 +1093,7 @@ export default function DetalhesVisaoGeralTab({
                 />
                 <Area
                   type="monotone"
-                  dataKey="value"
+                  dataKey="pctFromStart"
                   stroke={historico && historico.length > 1 && historico[historico.length - 1].Close >= historico[0].Close 
                     ? 'rgba(16, 185, 129, 1)' 
                     : 'rgba(239, 68, 68, 1)'}

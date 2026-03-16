@@ -1880,9 +1880,21 @@ def api_get_ativo_historico(ticker):
             ticker += '.SA'
         
         # yfinance aceita: 1d, 5d, 1wk, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
-        # O frontend já mapeia os períodos, mas garantimos compatibilidade aqui também
+        # O frontend já mapeia os períodos, mas garantimos compatibilidade aqui também.
+        # Para o período de 1 dia (aba 1D), precisamos de histórico intradiário (por hora),
+        # para que o gráfico mostre subidas e quedas reais ao longo do dia.
         acao = yf.Ticker(ticker)
-        historico = acao.history(period=periodo)
+        interval = None
+        if periodo == "1d":
+            # 1 dia: usar candles de 1 hora para capturar bem o intraday
+            interval = "1h"
+        # Futuramente poderíamos ajustar outros períodos (ex.: 5d com 1h), mas por enquanto
+        # apenas 1d precisa de granularidade por hora para o gráfico de visão geral.
+
+        if interval:
+            historico = acao.history(period=periodo, interval=interval)
+        else:
+            historico = acao.history(period=periodo)
         
         # Filtrar histórico se necessário (yfinance já faz isso, mas garantimos)
         if periodo != "max" and historico is not None and not historico.empty:

@@ -1445,7 +1445,7 @@ def obter_preco_historico(ticker, data, max_retentativas=3):
     tentativas = 0
     while tentativas < max_retentativas:
         try:
-            print(f"🔍 Buscando preço histórico para {ticker} na data {data}...")
+            print(f"[YF] Buscando preco historico para {ticker} na data {data}...")
             if isinstance(data, str):
                 data_obj = datetime.strptime(data[:10], '%Y-%m-%d').date()
             else:
@@ -1516,7 +1516,7 @@ def obter_preco_atual(ticker, max_retentativas=3):
     tentativas = 0
     while tentativas < max_retentativas:
         try:
-            print(f"🔍 Buscando preço atual para {ticker}...")
+            print(f"[YF] Buscando preco atual para {ticker}...")
             # Criptomoedas: Binance + BRL=X
             if is_crypto_ticker(ticker):
                 preco_usd = obter_preco_cripto_binance_usd(ticker)
@@ -1580,7 +1580,7 @@ def obter_informacoes(ticker, tipo_ativo):
             return None
 
     try:
-        print(f"🔍 Buscando informações para {ticker}...")
+        print(f"[YF] Buscando informacoes para {ticker}...")
         acao = yf.Ticker(ticker)
         info = acao.info
 
@@ -1700,7 +1700,7 @@ def processar_ativos(lista, tipo):
                 ticker = future_to_ticker[future]
                 print(f"Erro ao processar {ticker}: {str(e)}")
 
-    print(f"🔍 {tipo}: {len(dados)} ativos recuperados antes dos filtros.")
+    print(f"[YF] {tipo}: {len(dados)} ativos recuperados antes dos filtros.")
 
     if not dados:
         print(f" Nenhum ativo válido foi encontrado para {tipo}. Verifique a API.")
@@ -2154,18 +2154,26 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
             conn.close()
 
 def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
-    """Processa lista de ativos com filtros. Um por um (sequencial), sem retentativas; carrega todos e retorna os filtrados."""
+    """Processa lista de ativos com filtros. Requisições em paralelo ao yfinance para evitar timeout (504); retorna todos os ativos filtrados."""
     if not lista_ativos:
         return []
 
+    # Paralelizar para concluir em tempo hábil (evitar 504 em proxy/load balancer)
     dados = []
-    for ticker in lista_ativos:
-        try:
-            resultado = obter_informacoes(ticker, tipo_ativo)
-            if resultado is not None:
-                dados.append(resultado)
-        except Exception as e:
-            print(f"Erro ao processar {ticker}: {str(e)}")
+    max_workers = min(len(lista_ativos), 40)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ticker = {
+            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker
+            for ticker in lista_ativos
+        }
+        for future in as_completed(future_to_ticker):
+            try:
+                resultado = future.result()
+                if resultado is not None:
+                    dados.append(resultado)
+            except Exception as e:
+                ticker = future_to_ticker[future]
+                print(f"Erro ao processar {ticker}: {str(e)}")
 
     filtrados = [
         ativo for ativo in dados if (
@@ -2177,7 +2185,8 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
             (not setor or ativo.get('setor', '').strip() == setor.strip())
         )
     ]
-    return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)[:10]
+    # Retornar todos os ativos filtrados (lista completa), ordenados por dividend_yield
+    return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)
 
 def processar_ativos_acoes_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
@@ -2190,19 +2199,26 @@ def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, 
     return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
 
 def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
-    """Processa lista de FIIs com filtros. Um por um (sequencial), sem retentativas; carrega todos e retorna os filtrados."""
+    """Processa lista de FIIs com filtros. Requisições em paralelo ao yfinance; retorna todos os FIIs filtrados."""
     fiis = LISTA_FIIS
     if not fiis:
         return []
 
     dados = []
-    for ticker in fiis:
-        try:
-            resultado = obter_informacoes(ticker, 'FII')
-            if resultado is not None:
-                dados.append(resultado)
-        except Exception as e:
-            print(f"Erro ao processar FII {ticker}: {str(e)}")
+    max_workers = min(len(fiis), 40)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ticker = {
+            executor.submit(obter_informacoes, ticker, 'FII'): ticker
+            for ticker in fiis
+        }
+        for future in as_completed(future_to_ticker):
+            try:
+                resultado = future.result()
+                if resultado is not None:
+                    dados.append(resultado)
+            except Exception as e:
+                ticker = future_to_ticker[future]
+                print(f"Erro ao processar FII {ticker}: {str(e)}")
 
     filtrados = [
         ativo for ativo in dados if (
@@ -2211,34 +2227,30 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
             ativo.get('liquidez_diaria', 0) > (liq_min or 0)
         )
     ]
-    
 
     if tipo_fii or segmento_fii:
         filtrados_final = []
         for ativo in filtrados:
             ticker = ativo.get('ticker', '')
-            
 
             try:
                 from fii_scraper import obter_dados_fii_fundsexplorer
                 metadata = obter_dados_fii_fundsexplorer(ticker)
-                
+
                 if metadata:
                     ativo_tipo = metadata.get('tipo')
                     ativo_segmento = metadata.get('segmento')
-                    
 
                     if tipo_fii and ativo_tipo != tipo_fii:
                         continue
-                        
 
                     if segmento_fii and ativo_segmento != segmento_fii:
                         continue
-                        
+
                     # Adicionar metadados ao ativo
                     ativo['tipo_fii'] = ativo_tipo
                     ativo['segmento_fii'] = ativo_segmento
-                    
+
                 else:
                     # Se não conseguiu obter metadados, incluir apenas se não há filtros específicos
                     if not tipo_fii and not segmento_fii:
@@ -2246,7 +2258,7 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
                         ativo['segmento_fii'] = None
                     else:
                         continue
-                        
+
             except Exception:
                 # Em caso de erro, incluir apenas se não há filtros específicos
                 if not tipo_fii and not segmento_fii:
@@ -2254,12 +2266,13 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
                     ativo['segmento_fii'] = None
                 else:
                     continue
-            
+
             filtrados_final.append(ativo)
-        
+
         filtrados = filtrados_final
-    
-    return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)[:10]
+
+    # Retornar todos os FIIs filtrados (lista completa)
+    return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)
 
 # ==================== FUNÇÕES DE CARTEIRA ====================
 
