@@ -35,17 +35,19 @@ export default function ControleAlimentacaoTab({
   const [editMarmitaComprou, setEditMarmitaComprou] = useState(true)
 
   const queryClient = useQueryClient()
+  const marmitasQueryKey = ['marmitas', user, filtroMes, filtroAno] as const
+  const gastosMensaisQueryKey = ['gastos-mensais', user, periodoGrafico] as const
 
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   // Queries para marmitas
   const { data: marmitas, isLoading: loadingMarmitas } = useQuery<Marmita[]>({
-    queryKey: ['marmitas', user, filtroMes, filtroAno],
+    queryKey: marmitasQueryKey,
     queryFn: () => marmitasService.getMarmitas(parseInt(filtroMes), parseInt(filtroAno)),
     enabled: !!user,
   })
 
   const { data: gastosMensais } = useQuery<GastoMensal[]>({
-    queryKey: ['gastos-mensais', user, periodoGrafico],
+    queryKey: gastosMensaisQueryKey,
     queryFn: () => marmitasService.getGastosMensais(periodoGrafico),
     enabled: !!user,
   })
@@ -54,35 +56,87 @@ export default function ControleAlimentacaoTab({
   const adicionarMarmitaMutation = useMutation({
     mutationFn: ({ data, valor, comprou }: { data: string; valor: number; comprou: boolean }) =>
       marmitasService.adicionarMarmita(data, valor, comprou),
+    onMutate: async (novaMarmita) => {
+      await queryClient.cancelQueries({ queryKey: marmitasQueryKey })
+      const previousMarmitas = queryClient.getQueryData<Marmita[]>(marmitasQueryKey)
+
+      const optimisticMarmita: Marmita = {
+        id: -Date.now(),
+        data: novaMarmita.data,
+        valor: novaMarmita.valor,
+        comprou: novaMarmita.comprou,
+      }
+
+      queryClient.setQueryData<Marmita[]>(marmitasQueryKey, (old = []) =>
+        [optimisticMarmita, ...old].sort((a, b) => b.data.localeCompare(a.data))
+      )
+
+      return { previousMarmitas }
+    },
+    onError: (_error, _novaMarmita, context) => {
+      if (context?.previousMarmitas) {
+        queryClient.setQueryData(marmitasQueryKey, context.previousMarmitas)
+      }
+    },
     onSuccess: () => {
-      // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
-      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       setInputData(new Date().toISOString().split('T')[0])
       setInputValor('')
       setInputComprou(true)
+    },
+    onSettled: () => {
+      // Sincroniza com o backend e mantém todas as visões consistentes
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: gastosMensaisQueryKey, refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user], refetchType: 'active' })
     },
   })
 
   const atualizarMarmitaMutation = useMutation({
     mutationFn: ({ id, data, valor, comprou }: { id: number; data: string; valor: number; comprou: boolean }) =>
       marmitasService.atualizarMarmita(id, data, valor, comprou),
-    onSuccess: () => {
-      // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
-      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
+    onMutate: async (updated) => {
+      await queryClient.cancelQueries({ queryKey: marmitasQueryKey })
+      const previousMarmitas = queryClient.getQueryData<Marmita[]>(marmitasQueryKey)
+      queryClient.setQueryData<Marmita[]>(marmitasQueryKey, (old = []) =>
+        old.map(item => (
+          item.id === updated.id
+            ? { ...item, data: updated.data, valor: updated.valor, comprou: updated.comprou }
+            : item
+        ))
+      )
+      return { previousMarmitas }
+    },
+    onError: (_error, _updated, context) => {
+      if (context?.previousMarmitas) {
+        queryClient.setQueryData(marmitasQueryKey, context.previousMarmitas)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: gastosMensaisQueryKey, refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user], refetchType: 'active' })
     },
   })
 
   const removerMarmitaMutation = useMutation({
     mutationFn: marmitasService.removerMarmita,
-    onSuccess: () => {
-      // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['marmitas', user] })
-      queryClient.invalidateQueries({ queryKey: ['gastos-mensais', user] })
-      queryClient.invalidateQueries({ queryKey: ['saldo', user] })
+    onMutate: async (idRemovido) => {
+      await queryClient.cancelQueries({ queryKey: marmitasQueryKey })
+      const previousMarmitas = queryClient.getQueryData<Marmita[]>(marmitasQueryKey)
+      queryClient.setQueryData<Marmita[]>(marmitasQueryKey, (old = []) =>
+        old.filter(item => item.id !== idRemovido)
+      )
+      return { previousMarmitas }
+    },
+    onError: (_error, _idRemovido, context) => {
+      if (context?.previousMarmitas) {
+        queryClient.setQueryData(marmitasQueryKey, context.previousMarmitas)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['marmitas', user], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: gastosMensaisQueryKey, refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['saldo', user], refetchType: 'active' })
     },
   })
 
