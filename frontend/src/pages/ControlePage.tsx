@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import { useSearchParams } from 'react-router-dom'
 
 import { 
   DollarSign, TrendingDown, BarChart3, 
@@ -54,6 +55,7 @@ const CATEGORIAS_DESPESAS = [
 
 export default function ControlePage() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   
   const getNomeMes = (mes: number) => {
     return new Date(2024, mes - 1).toLocaleDateString('pt-BR', { month: 'long' })
@@ -65,20 +67,45 @@ export default function ControlePage() {
   const [hasError, setHasError] = useState(false)
   const [abrirMesPicker, setAbrirMesPicker] = useState(false)
   const [periodoEvolucao, setPeriodoEvolucao] = useState<'3m' | '6m' | '12m'>('6m')
+  const [carregarComparacao, setCarregarComparacao] = useState(false)
+  const [carregarDadosSecundarios, setCarregarDadosSecundarios] = useState(false)
   
-  const [abaAtiva, setAbaAtiva] = useState<'financeiro' | 'receitas' | 'despesas' | 'alimentacao' | 'cartoes'>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const tab = params.get('tab')
-      if (tab === 'alimentacao') return 'alimentacao'
-      if (tab === 'receitas') return 'receitas'
-      if (tab === 'cartoes') return 'cartoes'
-      if (tab === 'despesas') return 'despesas'
-      return 'financeiro'
-    } catch {
-      return 'financeiro'
-    }
+  const tabsValidas = ['financeiro', 'receitas', 'despesas', 'alimentacao', 'cartoes'] as const
+  type AbaControle = typeof tabsValidas[number]
+  const [abaAtiva, setAbaAtiva] = useState<AbaControle>(() => {
+    const tab = searchParams.get('tab')
+    return (tabsValidas as readonly string[]).includes(tab || '') ? (tab as AbaControle) : 'financeiro'
   })
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    const abaUrl = (tabsValidas as readonly string[]).includes(tab || '') ? (tab as AbaControle) : 'financeiro'
+    if (abaUrl !== abaAtiva) setAbaAtiva(abaUrl)
+  }, [searchParams, abaAtiva])
+
+  useEffect(() => {
+    if (!user || abaAtiva !== 'financeiro') {
+      setCarregarComparacao(false)
+      setCarregarDadosSecundarios(false)
+      return
+    }
+
+    // Carrega dados não essenciais após o primeiro paint para reduzir burst inicial.
+    const timerComparacao = window.setTimeout(() => setCarregarComparacao(true), 300)
+    const timerSecundarios = window.setTimeout(() => setCarregarDadosSecundarios(true), 450)
+
+    return () => {
+      window.clearTimeout(timerComparacao)
+      window.clearTimeout(timerSecundarios)
+    }
+  }, [user, abaAtiva, filtroMes, filtroAno])
+
+  const selecionarAba = (aba: AbaControle) => {
+    setAbaAtiva(aba)
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', aba)
+    setSearchParams(next, { replace: true })
+  }
 
   useEffect(() => {
     const handleError = () => {
@@ -102,7 +129,7 @@ export default function ControlePage() {
   const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
     queryKey: ['receitas-despesas', user, filtroMes, filtroAno],
     queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),
-    enabled: !!user,
+    enabled: !!user && abaAtiva === 'financeiro',
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 1 * 60 * 1000, // 1 minuto
@@ -111,7 +138,7 @@ export default function ControlePage() {
   const { data: saldo } = useQuery<{ saldo: number }>({
     queryKey: ['saldo', user, filtroMes, filtroAno],
     queryFn: () => controleService.getSaldo(filtroMes, filtroAno),
-    enabled: !!user,
+    enabled: !!user && abaAtiva === 'financeiro',
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 1 * 60 * 1000, // 1 minuto
@@ -120,7 +147,7 @@ export default function ControlePage() {
   const { data: dadosGraficoEvolucao } = useQuery<EvolucaoFinanceira[]>({
     queryKey: ['evolucao-financeira', user, filtroMes, filtroAno, periodoEvolucao],
     queryFn: () => controleService.getEvolucaoFinanceira(filtroMes, filtroAno),
-    enabled: !!user,
+    enabled: !!user && abaAtiva === 'financeiro',
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
@@ -134,17 +161,17 @@ export default function ControlePage() {
       const mesAnteriorStr = mesAnterior === 0 ? '12' : mesAnterior.toString().padStart(2, '0')
       return controleService.getEvolucaoFinanceira(mesAnteriorStr, anoAnterior.toString())
     },
-    enabled: !!user,
+    enabled: !!user && abaAtiva === 'financeiro' && carregarComparacao,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
   })
 
-  // Dados das abas específicas - sempre carregam
+  // Dados de abas específicas: sob demanda, com preload leve na aba financeiro.
   const { data: outros } = useQuery({
     queryKey: ['outros', user, filtroMes, filtroAno],
     queryFn: () => controleService.getOutros(filtroMes, filtroAno),
-    enabled: !!user,
+    enabled: !!user && (abaAtiva === 'despesas' || (abaAtiva === 'financeiro' && carregarDadosSecundarios)),
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 2 * 60 * 1000, // 2 minutos
@@ -153,7 +180,7 @@ export default function ControlePage() {
   const { data: cartoes } = useQuery({
     queryKey: ['cartoes-cadastrados', user, filtroMes, filtroAno],
     queryFn: () => cartaoService.getCartoesCadastrados(),
-    enabled: !!user,
+    enabled: !!user && (abaAtiva === 'cartoes' || (abaAtiva === 'financeiro' && carregarDadosSecundarios)),
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutos
@@ -162,7 +189,7 @@ export default function ControlePage() {
   const { data: marmitas } = useQuery({
     queryKey: ['marmitas', user, filtroMes, filtroAno],
     queryFn: () => marmitasService.getMarmitas(parseInt(filtroMes), parseInt(filtroAno)),
-    enabled: !!user,
+    enabled: !!user && (abaAtiva === 'alimentacao' || (abaAtiva === 'financeiro' && carregarDadosSecundarios)),
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 2 * 60 * 1000, // 2 minutos
@@ -378,7 +405,7 @@ export default function ControlePage() {
         {/* Abas */}
         <div className="flex flex-wrap gap-2 mb-8">
         <button
-          onClick={() => setAbaAtiva('financeiro')}
+          onClick={() => selecionarAba('financeiro')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
             abaAtiva === 'financeiro'
                 ? 'bg-primary text-primary-foreground'
@@ -389,7 +416,7 @@ export default function ControlePage() {
           Financeiro
         </button>
           <button
-            onClick={() => setAbaAtiva('receitas')}
+            onClick={() => selecionarAba('receitas')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'receitas'
                 ? 'bg-primary text-primary-foreground'
@@ -400,7 +427,7 @@ export default function ControlePage() {
             Receitas
           </button>
           <button
-            onClick={() => setAbaAtiva('despesas')}
+            onClick={() => selecionarAba('despesas')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'despesas'
                 ? 'bg-primary text-primary-foreground'
@@ -411,7 +438,7 @@ export default function ControlePage() {
             Despesas
           </button>
           <button
-            onClick={() => setAbaAtiva('cartoes')}
+            onClick={() => selecionarAba('cartoes')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
               abaAtiva === 'cartoes'
                 ? 'bg-primary text-primary-foreground'
@@ -422,7 +449,7 @@ export default function ControlePage() {
             Cartões
         </button>
         <button
-          onClick={() => setAbaAtiva('alimentacao')}
+          onClick={() => selecionarAba('alimentacao')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm ${
             abaAtiva === 'alimentacao'
                 ? 'bg-primary text-primary-foreground'
@@ -449,7 +476,7 @@ export default function ControlePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
                 className="bg-card border border-border rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
-                onClick={() => setAbaAtiva('receitas')}
+                onClick={() => selecionarAba('receitas')}
         >
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-primary/10">
@@ -469,7 +496,7 @@ export default function ControlePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
                 className="bg-card border border-border rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
-                onClick={() => setAbaAtiva('despesas')}
+                onClick={() => selecionarAba('despesas')}
         >
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-destructive/10">
@@ -489,7 +516,7 @@ export default function ControlePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
                 className="bg-card border border-border rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
-                onClick={() => setAbaAtiva('cartoes')}
+                onClick={() => selecionarAba('cartoes')}
         >
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-primary/10">
@@ -509,7 +536,7 @@ export default function ControlePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
                 className="bg-card border border-border rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
-                onClick={() => setAbaAtiva('alimentacao')}
+                onClick={() => selecionarAba('alimentacao')}
         >
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-primary/10">
@@ -559,7 +586,7 @@ export default function ControlePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                onClick={() => setAbaAtiva('receitas')}
+                onClick={() => selecionarAba('receitas')}
                 className="bg-card border border-border rounded-2xl p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center gap-3 group"
               >
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -575,7 +602,7 @@ export default function ControlePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 }}
-                onClick={() => setAbaAtiva('despesas')}
+                onClick={() => selecionarAba('despesas')}
                 className="bg-card border border-border rounded-2xl p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center gap-3 group"
               >
                 <div className="p-2 rounded-lg bg-destructive/10">
@@ -591,7 +618,7 @@ export default function ControlePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7 }}
-                onClick={() => setAbaAtiva('cartoes')}
+                onClick={() => selecionarAba('cartoes')}
                 className="bg-card border border-border rounded-2xl p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center gap-3 group"
               >
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -607,7 +634,7 @@ export default function ControlePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.8 }}
-                onClick={() => setAbaAtiva('alimentacao')}
+                onClick={() => selecionarAba('alimentacao')}
                 className="bg-card border border-border rounded-2xl p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center gap-3 group"
               >
                 <div className="p-2 rounded-lg bg-primary/10">

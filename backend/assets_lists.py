@@ -338,6 +338,7 @@ LISTA_ACOES = [
     "RANI3.sa",
     "RAPT3.sa",
     "RAPT4.sa",
+    "RIAA3.sa",
     "RCSL3.sa",
     "RCSL4.sa",
     "RDNI3.sa",

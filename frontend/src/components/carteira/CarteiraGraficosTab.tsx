@@ -1036,6 +1036,7 @@ export default function CarteiraGraficosTab({
                           data: d,
                           carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
                           carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
+                          carteira_pct: typeof carteiraRetornoSeries?.[i] === 'number' ? Number(carteiraRetornoSeries[i]) - 100 : null,
                         }
                         if (indiceRef === 'todos' && typeof indiceValorSeries === 'object' && !Array.isArray(indiceValorSeries)) {
                           const seriesObj = indiceValorSeries as Record<string, Array<number | null>>
@@ -1051,9 +1052,17 @@ export default function CarteiraGraficosTab({
                           dataPoint.ipca_idx = (historicoCarteira?.ipca?.[i] ?? null) as number | null
                           dataPoint.cdi_idx = (historicoCarteira?.cdi?.[i] ?? null) as number | null
                           dataPoint.btc_idx = (historicoCarteira?.btc?.[i] ?? null) as number | null
+                          dataPoint.ibov_pct = typeof historicoCarteira?.ibov?.[i] === 'number' ? Number(historicoCarteira.ibov[i]) - 100 : null
+                          dataPoint.ivvb11_pct = typeof historicoCarteira?.ivvb11?.[i] === 'number' ? Number(historicoCarteira.ivvb11[i]) - 100 : null
+                          dataPoint.ifix_pct = typeof historicoCarteira?.ifix?.[i] === 'number' ? Number(historicoCarteira.ifix[i]) - 100 : null
+                          dataPoint.ipca_pct = typeof historicoCarteira?.ipca?.[i] === 'number' ? Number(historicoCarteira.ipca[i]) - 100 : null
+                          dataPoint.cdi_pct = typeof historicoCarteira?.cdi?.[i] === 'number' ? Number(historicoCarteira.cdi[i]) - 100 : null
+                          dataPoint.btc_pct = typeof historicoCarteira?.btc?.[i] === 'number' ? Number(historicoCarteira.btc[i]) - 100 : null
                         } else {
                           dataPoint.indice_valor = Array.isArray(indiceValorSeries) ? (indiceValorSeries[i] ?? null) : null
                           dataPoint.indice_idx = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
+                          const idxValue = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
+                          dataPoint.indice_pct = typeof idxValue === 'number' ? Number(idxValue) - 100 : null
                         }
                         return dataPoint
                       })}
@@ -1142,7 +1151,7 @@ export default function CarteiraGraficosTab({
                           stroke="hsl(var(--muted-foreground))"
                           tick={{ fontSize: 11 }}
                           width={56}
-                          tickFormatter={(value) => vistaGraficoComparativo === 'rs' ? formatCurrency(value, '') : (typeof value === 'number' ? `${(value - 100).toFixed(0)}%` : '')}
+                          tickFormatter={(value) => vistaGraficoComparativo === 'rs' ? formatCurrency(value, '') : (typeof value === 'number' ? `${value.toFixed(0)}%` : '')}
                           domain={['auto', 'auto']}
                           allowDataOverflow={false}
                         />
@@ -1160,13 +1169,13 @@ export default function CarteiraGraficosTab({
                               'indice_valor': `${indiceLabel} simulado`,
                               'ibov_valor': 'IBOV', 'ivvb11_valor': 'IVVB11', 'ifix_valor': 'IFIX', 'ipca_valor': 'IPCA', 'cdi_valor': 'CDI', 'btc_valor': 'Bitcoin',
                             }
-                            const labelMapIdx: Record<string, string> = {
-                              'carteira_idx': 'Carteira (preço)',
-                              'indice_idx': `${indiceLabel} (índice)`,
-                              'ibov_idx': 'IBOV', 'ivvb11_idx': 'IVVB11', 'ifix_idx': 'IFIX', 'ipca_idx': 'IPCA', 'cdi_idx': 'CDI', 'btc_idx': 'Bitcoin',
+                            const labelMapPct: Record<string, string> = {
+                              'carteira_pct': 'Carteira (preço)',
+                              'indice_pct': `${indiceLabel} (variação)`,
+                              'ibov_pct': 'IBOV', 'ivvb11_pct': 'IVVB11', 'ifix_pct': 'IFIX', 'ipca_pct': 'IPCA', 'cdi_pct': 'CDI', 'btc_pct': 'Bitcoin',
                             }
-                            const labelMap = vistaGraficoComparativo === 'rs' ? labelMapValor : labelMapIdx
-                            const formatted = vistaGraficoComparativo === 'rs' ? formatCurrency(value) : `${typeof value === 'number' ? (value - 100).toFixed(2) : '0'}%`
+                            const labelMap = vistaGraficoComparativo === 'rs' ? labelMapValor : labelMapPct
+                            const formatted = vistaGraficoComparativo === 'rs' ? formatCurrency(value) : `${typeof value === 'number' ? value.toFixed(2) : '0'}%`
                             return [formatted, labelMap[name] || name]
                           }}
                           labelFormatter={(label) => (label ? `Data: ${label}` : '')}
@@ -1190,18 +1199,18 @@ export default function CarteiraGraficosTab({
                           </>
                         ) : (
                           <>
-                            <Area type="monotone" dataKey="carteira_idx" stroke="#3b82f6" fill="url(#cgEvolCarteiraIdx)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                            <Area type="monotone" dataKey="carteira_pct" stroke="#3b82f6" fill="url(#cgEvolCarteiraIdx)" strokeWidth={2.5} name="Carteira (preço)" isAnimationActive animationDuration={800} animationEasing="ease-out" />
                             {indiceRef === 'todos' ? (
                               <>
-                                <Area type="monotone" dataKey="ibov_idx" stroke="#ef4444" fill="url(#cgEvolIbovIdx)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
-                                <Area type="monotone" dataKey="ivvb11_idx" stroke="#f59e0b" fill="url(#cgEvolIvvbIdx)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
-                                <Area type="monotone" dataKey="ifix_idx" stroke="#8b5cf6" fill="url(#cgEvolIfixIdx)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
-                                <Area type="monotone" dataKey="ipca_idx" stroke="#ec4899" fill="url(#cgEvolIpcaIdx)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
-                                <Area type="monotone" dataKey="cdi_idx" stroke="#10b981" fill="url(#cgEvolCdiIdx)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
-                                <Area type="monotone" dataKey="btc_idx" stroke="#f7931a" fill="url(#cgEvolBtcIdx)" strokeWidth={1.8} name="Bitcoin" isAnimationActive animationDuration={1350} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ibov_pct" stroke="#ef4444" fill="url(#cgEvolIbovIdx)" strokeWidth={2} name="IBOV" isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ivvb11_pct" stroke="#f59e0b" fill="url(#cgEvolIvvbIdx)" strokeWidth={2} name="IVVB11" isAnimationActive animationDuration={1000} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ifix_pct" stroke="#8b5cf6" fill="url(#cgEvolIfixIdx)" strokeWidth={2} name="IFIX" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="ipca_pct" stroke="#ec4899" fill="url(#cgEvolIpcaIdx)" strokeWidth={1.8} name="IPCA" isAnimationActive animationDuration={1200} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="cdi_pct" stroke="#10b981" fill="url(#cgEvolCdiIdx)" strokeWidth={1.8} name="CDI" isAnimationActive animationDuration={1300} animationEasing="ease-out" />
+                                <Area type="monotone" dataKey="btc_pct" stroke="#f7931a" fill="url(#cgEvolBtcIdx)" strokeWidth={1.8} name="Bitcoin" isAnimationActive animationDuration={1350} animationEasing="ease-out" />
                               </>
                             ) : (
-                              <Area type="monotone" dataKey="indice_idx" stroke={indiceRef === 'btc' ? '#f7931a' : '#22c55e'} fill={indiceRef === 'btc' ? 'url(#cgEvolBtcIdx)' : 'url(#cgEvolIndiceIdx)'} strokeWidth={2.5} name={`${indiceLabel} (índice)`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                              <Area type="monotone" dataKey="indice_pct" stroke={indiceRef === 'btc' ? '#f7931a' : '#22c55e'} fill={indiceRef === 'btc' ? 'url(#cgEvolBtcIdx)' : 'url(#cgEvolIndiceIdx)'} strokeWidth={2.5} name={`${indiceLabel} (variação)`} isAnimationActive animationDuration={900} animationEasing="ease-out" />
                             )}
                           </>
                         )}

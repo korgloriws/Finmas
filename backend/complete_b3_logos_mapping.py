@@ -888,6 +888,7 @@ COMPLETE_B3_LOGOS_MAPPING = {
     "RPMG3.sa": "https://img.logo.dev/ticker/RPMG3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "RSID3.sa": "https://img.logo.dev/ticker/RSID3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "RSUL4.sa": "https://img.logo.dev/ticker/RSUL4.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
+    "RIAA3.sa": "https://img.logo.dev/riachuelo.com?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
 
     # S - S
     "SANB11.sa": "https://img.logo.dev/ticker/SANB11.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
