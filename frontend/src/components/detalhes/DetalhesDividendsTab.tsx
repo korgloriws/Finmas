@@ -58,6 +58,13 @@ export default function DetalhesDividendsTab({
   dividendData,
   magicNumberData
 }: DetalhesDividendsTabProps) {
+  const showPerEventCard = Boolean(
+    magicNumberData &&
+    magicNumberData.sharesPerEvent != null &&
+    magicNumberData.sharesPerMonth != null &&
+    magicNumberData.sharesPerEvent !== magicNumberData.sharesPerMonth
+  )
+
   return (
     <motion.div
       key="dividends"
@@ -96,16 +103,18 @@ export default function DetalhesDividendsTab({
       <InfoSection title="Número Mágico dos Proventos" icon={TrendingUp}>
         {magicNumberData ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-lg border border-border p-4 bg-muted/20">
-                <p className="text-sm text-muted-foreground">Para 1 cota por evento</p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {magicNumberData.sharesPerEvent != null ? `${magicNumberData.sharesPerEvent} cotas` : '-'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Base: provento medio por pagamento ({magicNumberData.periodLabel})
-                </p>
-              </div>
+            <div className={`grid grid-cols-1 ${showPerEventCard ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+              {showPerEventCard && (
+                <div className="rounded-lg border border-border p-4 bg-muted/20">
+                  <p className="text-sm text-muted-foreground">Para 1 cota por evento</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {magicNumberData.sharesPerEvent != null ? `${magicNumberData.sharesPerEvent} cotas` : '-'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Base: provento medio por pagamento ({magicNumberData.periodLabel})
+                  </p>
+                </div>
+              )}
               <div className="rounded-lg border border-border p-4 bg-muted/20">
                 <p className="text-sm text-muted-foreground">Para 1 cota por mes</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
@@ -131,6 +140,9 @@ export default function DetalhesDividendsTab({
               <p>Provento medio por evento: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.averagePerEvent)}</span> ({magicNumberData.eventsCount} pagamentos)</p>
               <p>Provento medio mensal: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.averagePerMonth)}</span></p>
               <p>Provento medio anual por cota: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.totalPerShare)}</span></p>
+              {!showPerEventCard && (
+                <p>Observacao: neste ativo, o calculo por evento e por mes ficou igual no período analisado.</p>
+              )}
             </div>
           </div>
         ) : (
