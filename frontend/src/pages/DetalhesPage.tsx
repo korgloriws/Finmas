@@ -828,6 +828,63 @@ export default function DetalhesPage() {
       .sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
   }, [historico, detalhes])
 
+  const magicNumberData = useMemo(() => {
+    const currentPrice = Number(info?.currentPrice ?? info?.regularMarketPrice ?? 0)
+    if (!isFinite(currentPrice) || currentPrice <= 0) return null
+
+    const entries = Object.entries(detalhes?.dividends || {})
+      .map(([date, dividend]) => ({
+        date: new Date(date),
+        value: Number(dividend || 0),
+      }))
+      .filter(item => isFinite(item.value) && item.value > 0 && !isNaN(item.date.getTime()))
+
+    if (entries.length === 0) return null
+
+    const sorted = [...entries].sort((a, b) => a.date.getTime() - b.date.getTime())
+    const firstDate = sorted[0].date
+    const lastDate = sorted[sorted.length - 1].date
+    const diffMonths = Math.max(
+      1,
+      Math.round((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375))
+    )
+    const yearsCovered = Math.max(1 / 12, diffMonths / 12)
+
+    const cutoff12m = new Date()
+    cutoff12m.setFullYear(cutoff12m.getFullYear() - 1)
+    const last12m = sorted.filter(item => item.date >= cutoff12m)
+    const has12mWindow = last12m.length > 0
+
+    const sum12m = last12m.reduce((sum, item) => sum + item.value, 0)
+    const sumHistory = sorted.reduce((sum, item) => sum + item.value, 0)
+
+    // Prioridade: usar soma real dos últimos 12 meses; fallback: anualizar histórico disponível
+    const annualAveragePerShare = has12mWindow ? sum12m : (sumHistory / yearsCovered)
+    if (!isFinite(annualAveragePerShare) || annualAveragePerShare <= 0) return null
+
+    const averagePerEvent = (has12mWindow ? sum12m : sumHistory) / (has12mWindow ? last12m.length : sorted.length)
+    const averagePerMonth = annualAveragePerShare / 12
+    const periodLabel = has12mWindow
+      ? '12 meses'
+      : `histórico anualizado (${diffMonths} meses)`
+
+    const sharesPerEvent = averagePerEvent > 0 ? Math.ceil(currentPrice / averagePerEvent) : null
+    const sharesPerMonth = averagePerMonth > 0 ? Math.ceil(currentPrice / averagePerMonth) : null
+    const sharesPerYear = annualAveragePerShare > 0 ? Math.ceil(currentPrice / annualAveragePerShare) : null
+
+    return {
+      periodLabel,
+      currentPrice,
+      averagePerEvent,
+      averagePerMonth,
+      totalPerShare: annualAveragePerShare,
+      eventsCount: has12mWindow ? last12m.length : sorted.length,
+      sharesPerEvent,
+      sharesPerMonth,
+      sharesPerYear,
+    }
+  }, [detalhes?.dividends, info])
+
   
   const comparisonData = useMemo(() => {
     if (!comparacao || comparacao.length === 0) return []
@@ -1060,6 +1117,7 @@ export default function DetalhesPage() {
                 periodoDividendos={periodoDividendos}
                 handlePeriodoDividendosChange={handlePeriodoDividendosChange}
                 dividendData={dividendData}
+                magicNumberData={magicNumberData}
               />
             )}
 

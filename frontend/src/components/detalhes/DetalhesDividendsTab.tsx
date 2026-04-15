@@ -39,12 +39,24 @@ interface DetalhesDividendsTabProps {
   periodoDividendos: string
   handlePeriodoDividendosChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
   dividendData: Array<{ Date: string; Dividend: number }>
+  magicNumberData: {
+    periodLabel: string
+    currentPrice: number
+    averagePerEvent: number
+    averagePerMonth: number
+    totalPerShare: number
+    eventsCount: number
+    sharesPerEvent: number | null
+    sharesPerMonth: number | null
+    sharesPerYear: number | null
+  } | null
 }
 
 export default function DetalhesDividendsTab({
   periodoDividendos,
   handlePeriodoDividendosChange,
-  dividendData
+  dividendData,
+  magicNumberData
 }: DetalhesDividendsTabProps) {
   return (
     <motion.div
@@ -80,6 +92,54 @@ export default function DetalhesDividendsTab({
           </select>
         </div>
       </div>
+
+      <InfoSection title="Número Mágico dos Proventos" icon={TrendingUp}>
+        {magicNumberData ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-lg border border-border p-4 bg-muted/20">
+                <p className="text-sm text-muted-foreground">Para 1 cota por evento</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {magicNumberData.sharesPerEvent != null ? `${magicNumberData.sharesPerEvent} cotas` : '-'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Base: provento medio por pagamento ({magicNumberData.periodLabel})
+                </p>
+              </div>
+              <div className="rounded-lg border border-border p-4 bg-muted/20">
+                <p className="text-sm text-muted-foreground">Para 1 cota por mes</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {magicNumberData.sharesPerMonth != null ? `${magicNumberData.sharesPerMonth} cotas` : '-'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Base: dividendo medio anual/12 ({magicNumberData.periodLabel})
+                </p>
+              </div>
+              <div className="rounded-lg border border-border p-4 bg-muted/20">
+                <p className="text-sm text-muted-foreground">Para 1 cota por ano</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {magicNumberData.sharesPerYear != null ? `${magicNumberData.sharesPerYear} cotas` : '-'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Base: provento total anual por cota ({magicNumberData.periodLabel})
+                </p>
+              </div>
+            </div>
+
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>Preco atual da cota: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.currentPrice)}</span></p>
+              <p>Provento medio por evento: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.averagePerEvent)}</span> ({magicNumberData.eventsCount} pagamentos)</p>
+              <p>Provento medio mensal: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.averagePerMonth)}</span></p>
+              <p>Provento medio anual por cota: <span className="font-medium text-foreground">{formatCurrency(magicNumberData.totalPerShare)}</span></p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>Sem dados suficientes para calcular o Numero Magico.</p>
+          </div>
+        )}
+      </InfoSection>
 
       {/* Tabela de Proventos */}
       <InfoSection title="Histórico de Proventos" icon={DollarSign}>
