@@ -2,14 +2,14 @@ import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 
-import { 
-  Trash2, DollarSign, TrendingDown, BarChart3, 
+import {
+  Trash2, DollarSign, TrendingDown, BarChart3,
   TrendingUp, Edit, Save, X, Plus, Calendar,
-  ShoppingCart, Home, Baby, Zap, Heart, Utensils, Receipt
 } from 'lucide-react'
 import { controleService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
+import { CATEGORIAS_DESPESAS } from '../../utils/categoriasDespesas'
 
 // Função para formatar data sem problemas de timezone
 const formatDate = (dateString: string) => {
@@ -31,21 +31,6 @@ interface ControleDespesaTabProps {
   ocultarValores: boolean
 }
 
-// Categorias de despesas com ícones
-const CATEGORIAS_DESPESAS = [
-  { value: 'farmacia', label: 'Farmácia', icon: Heart, color: '#ef4444' },
-  { value: 'supermercado', label: 'Supermercado', icon: ShoppingCart, color: '#10b981' },
-  { value: 'contas_casa', label: 'Contas da Casa', icon: Home, color: '#3b82f6' },
-  { value: 'contas_filhos', label: 'Contas dos Filhos', icon: Baby, color: '#f59e0b' },
-  { value: 'despesas_fixas', label: 'Despesas Fixas', icon: Zap, color: '#8b5cf6' },
-  { value: 'saude', label: 'Saúde', icon: Heart, color: '#ec4899' },
-  { value: 'alimentacao', label: 'Alimentação', icon: Utensils, color: '#f97316' },
-  { value: 'transporte', label: 'Transporte', icon: Receipt, color: '#06b6d4' },
-  { value: 'lazer', label: 'Lazer', icon: Receipt, color: '#84cc16' },
-  { value: 'outros', label: 'Outros', icon: Receipt, color: '#6b7280' },
-  { value: 'cartao', label: 'Cartão', icon: Receipt, color: '#6b7283' },
-  { value: 'investimentos', label: 'investimentos', icon: Receipt, color: '#6b7286' }
-]
 
 export default function ControleDespesaTab({ 
   filtroMes, 

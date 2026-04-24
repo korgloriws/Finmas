@@ -21,6 +21,7 @@ const ControleReceitaTab = lazy(() => import('../components/controle/ControleRec
 const ControleDespesaTab = lazy(() => import('../components/controle/ControleDespesaTab'))
 const ControleCartaoTab = lazy(() => import('../components/controle/ControleCartaoTab'))
 import { formatCurrency } from '../utils/formatters'
+import { CATEGORIAS_DESPESAS } from '../utils/categoriasDespesas'
 import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
 // Lazy loading de gráficos pesados
 import { 
@@ -38,20 +39,6 @@ import {
   Legend
 } from '../components/LazyChart'
 import DistribuicaoCarteiraECharts from '../components/home/DistribuicaoCarteiraECharts'
-
-// Categorias de despesas com ícones (copiado da ControleDespesaTab)
-const CATEGORIAS_DESPESAS = [
-  { value: 'farmacia', label: 'Farmácia', icon: '', color: '#ef4444' },
-  { value: 'supermercado', label: 'Supermercado', icon: '', color: '#10b981' },
-  { value: 'contas_casa', label: 'Contas da Casa', icon: '', color: '#3b82f6' },
-  { value: 'contas_filhos', label: 'Contas dos Filhos', icon: '', color: '#f59e0b' },
-  { value: 'despesas_fixas', label: 'Despesas Fixas', icon: '', color: '#8b5cf6' },
-  { value: 'saude', label: 'Saúde', icon: '', color: '#ec4899' },
-  { value: 'alimentacao', label: 'Alimentação', icon: '', color: '#06b6d4' },
-  { value: 'transporte', label: 'Transporte', icon: '', color: '#84cc16' },
-  { value: 'lazer', label: 'Lazer', icon: '', color: '#f97316' },
-  { value: 'outros', label: 'Outros', icon: '', color: '#6b7280' }
-]
 
 export default function ControlePage() {
   const { user } = useAuth()

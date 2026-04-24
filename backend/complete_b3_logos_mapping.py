@@ -655,6 +655,7 @@ COMPLETE_B3_LOGOS_MAPPING = {
     "CVCB3.sa": "https://img.logo.dev/ticker/CVCB3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CXSE3.sa": "https://img.logo.dev/ticker/CXSE3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
     "CYRE3.sa": "https://img.logo.dev/ticker/CYRE3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
+    "CYRE4.sa": "https://img.logo.dev/ticker/CYRE4.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
 
     # D - D
     "DASA3.sa": "https://img.logo.dev/ticker/DASA3.SA?token=pk_Dhx4NNGHRFe5mo7gEtJaWA&retina=true",
