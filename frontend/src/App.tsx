@@ -31,6 +31,7 @@ import VendasPage from './pages/VendasPage'
 import ConhecerPage from './pages/ConhecerPage'
 import TermosDeUsoPage from './pages/TermosDeUsoPage'
 import PoliticaPrivacidadePage from './pages/PoliticaPrivacidadePage'
+import HomePage from './pages/HomePage'
 
 function App() {
   return (
@@ -59,8 +60,16 @@ function App() {
           <Route path="/correcao-monetaria" element={<SecurityCheck><Layout><CorrecaoMonetariaPage /></Layout></SecurityCheck>} />
           <Route path="/detalhes" element={<SecurityCheck><Layout><DetalhesPage /></Layout></SecurityCheck>} />
           
-          {/* /home redireciona para / (entrada oficial é finmas.com.br) */}
-          <Route path="/home" element={<Navigate to="/" replace />} />
+          {/* /home: entrada autenticada estável (evita race com landing em "/") */}
+          <Route path="/home" element={
+            <ProtectedRoute>
+              <SecurityCheck>
+                <Layout>
+                  <HomePage />
+                </Layout>
+              </SecurityCheck>
+            </ProtectedRoute>
+          } />
           
           <Route path="/analise" element={
             <ProtectedRoute>
