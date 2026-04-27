@@ -5,6 +5,7 @@ import { analiseService, carteiraService, ativoService } from '../../services/ap
 import { AtivoAnalise, FiltrosAnalise } from '../../types'
 import { useAnalise } from '../../contexts/AnaliseContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTabNavigationGuard } from '../../hooks/useTabNavigationGuard'
 import TickerWithLogo from '../TickerWithLogo'
 import { formatNumber, formatCurrency } from '../../utils/formatters'
 import { ExternalLink } from 'lucide-react'
@@ -1189,6 +1190,11 @@ function TabelaDebentures() {
 export default function AnaliseListaTab() {
   const { user } = useAuth()
   const [activeSubTab, setActiveSubTab] = useState<'acoes' | 'bdrs' | 'fiis' | 'cris' | 'cras' | 'debentures' | 'tesouro'>('acoes')
+
+  // Cancela requests pendentes ao trocar de sub-aba. O endpoint /api/analise/ativos
+  // pode levar dezenas de segundos paralelizando yfinance — se o usuário
+  // troca de "Ações" para "FIIs" no meio, queremos liberar o slot do backend.
+  useTabNavigationGuard(activeSubTab)
   
 
   const { 

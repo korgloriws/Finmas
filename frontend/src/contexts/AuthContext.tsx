@@ -113,7 +113,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUserRole(null)
         setAllowedScreens(null)
       }
-    } catch (error) {
+    } catch (error: any) {
+      // IMPORTANTE: Se a request foi abortada (ex.: NavigationGuard cancelou
+      // ao mudar de rota durante o callback do Google), NÃO devemos tratar
+      // como "não logado" — caso contrário o RootOrRedirect cai na LandingPage
+      // e o usuário aparenta ter sido deslogado. Apenas saímos silenciosamente
+      // e deixamos o próximo checkCurrentUser confirmar o estado real.
+      const isAbort =
+        error?.code === 'ERR_CANCELED' ||
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError'
+      if (isAbort) return
+
       setUser(null)
       setUserRole(null)
       setAllowedScreens(null)
@@ -127,7 +138,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const response = await api.get('/auth/usuario-atual')
       setAllowedScreens(response.data.allowed_screens ?? null)
-    } catch {
+    } catch (error: any) {
+      // Mesma lógica do checkCurrentUser: aborts não devem zerar o estado.
+      const isAbort =
+        error?.code === 'ERR_CANCELED' ||
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError'
+      if (isAbort) return
       setAllowedScreens(null)
     }
   }, [user])

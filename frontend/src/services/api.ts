@@ -100,6 +100,10 @@ function shouldThrottle(config: any): boolean {
   if (method !== 'get') return false
   const priority = config?.headers?.['X-Priority'] || config?.headers?.['x-priority']
   if (priority && String(priority).toLowerCase() === 'high') return false
+  // Rotas críticas de auth/sessão não devem ficar presas na fila do limitador.
+  // Se a fila estiver cheia com 3 GETs pesados em voo, /auth/usuario-atual
+  // não pode esperar — é o que decide se o usuário continua logado.
+  if (isProtectedRoute(config?.url)) return false
   return true
 }
 
@@ -107,8 +111,24 @@ function shouldThrottle(config: any): boolean {
 // cancelar GETs ao mudar de rota mas preservar mutations em andamento.
 interface InflightMeta {
   isMutation: boolean
+  /** Rotas críticas (auth, sessão) que NUNCA devem ser canceladas mesmo sendo GET.
+   *  Cancelar /auth/usuario-atual no meio da navegação faz o AuthContext
+   *  interpretar AbortError como "não logado" e derrubar o usuário para a
+   *  LandingPage — bug observado no fluxo de login Google. */
+  isProtected: boolean
 }
 const inflightControllers = new Map<AbortController, InflightMeta>()
+
+/**
+ * Marca rotas que devem escapar do cancelamento por navegação. São rotas
+ * críticas para a operação básica do sistema (autenticação, sessão).
+ * Mantenha esta lista pequena: o objetivo do guard é justamente cancelar
+ * data fetching pesada que ficou em voo.
+ */
+function isProtectedRoute(url: string | undefined): boolean {
+  if (!url) return false
+  return url.startsWith('/auth/') || url.startsWith('auth/')
+}
 
 /**
  * Cancela apenas as requisições GET em voo (+ esvazia a fila do limitador).
@@ -121,11 +141,11 @@ const inflightControllers = new Map<AbortController, InflightMeta>()
 export function cancelInflightRequests(): number {
   let count = 0
   inflightControllers.forEach((meta, ctrl) => {
-    if (!meta.isMutation) {
-      try { ctrl.abort() } catch { /* ignore */ }
-      inflightControllers.delete(ctrl)
-      count += 1
-    }
+    // Preservar mutations (POST/PUT/DELETE/PATCH) e rotas protegidas (auth)
+    if (meta.isMutation || meta.isProtected) return
+    try { ctrl.abort() } catch { /* ignore */ }
+    inflightControllers.delete(ctrl)
+    count += 1
   })
   // Limpa a fila do limitador (que só contém GETs, já que mutations
   // não passam pelo throttle): rejeita os waiters pendentes
@@ -177,7 +197,8 @@ api.interceptors.request.use(
 
     const method = (config?.method || 'get').toLowerCase()
     const isMutation = method !== 'get'
-    inflightControllers.set(ctrl, { isMutation })
+    const isProtected = isProtectedRoute(config.url)
+    inflightControllers.set(ctrl, { isMutation, isProtected })
 
     // Aplica o limitador ANTES de soltar o request na rede (só GETs)
     if (shouldThrottle(config)) {

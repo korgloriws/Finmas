@@ -34,6 +34,7 @@ import { AtivoCarteira, Movimentacao } from '../types'
 import { formatCurrency } from '../utils/formatters'
 import HelpTips from '../components/HelpTips'
 import { normalizeTicker, getDisplayTicker } from '../utils/tickerUtils'
+import { useTabNavigationGuard } from '../hooks/useTabNavigationGuard'
 
 // Importações diretas (sem lazy loading para evitar crashes)
 import CarteiraAtivosTab from '../components/carteira/CarteiraAtivosTab'
@@ -85,6 +86,12 @@ export default function CarteiraPage() {
     const validTabs = ['ativos', 'graficos', 'ranking', 'proventos', 'insights', 'rebalance', 'movimentacoes', 'relatorios', 'projecao', 'simulador', 'impostos']
     return validTabs.includes(tabFromUrl || '') ? tabFromUrl! : 'ativos'
   })
+
+  // Cancela requests pendentes ao trocar de aba (evita "zombies" no backend
+  // quando uma query pesada — ex: proventos-recebidos — fica em voo após o
+  // usuário sair da aba que a disparou). Mutations são preservadas.
+  useTabNavigationGuard(activeTab)
+
   const [manageTipoOpen, setManageTipoOpen] = useState<{open: boolean; tipo?: string}>({open: false})
   const [renameTipoValue, setRenameTipoValue] = useState('')
   // Carregamento sob demanda - insights (só na aba insights e se tiver acesso)

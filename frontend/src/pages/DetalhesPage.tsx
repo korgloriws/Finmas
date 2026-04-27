@@ -22,6 +22,7 @@ import { normalizeTicker, getDisplayTicker, removeTickerExtension } from '../uti
 import { useAnalise } from '../contexts/AnaliseContext'
 import { verificarEstrategia } from '../utils/strategyChecker'
 import { useAuth } from '../contexts/AuthContext'
+import { useTabNavigationGuard } from '../hooks/useTabNavigationGuard'
 import DetalhesVisaoGeralTab from '../components/detalhes/DetalhesVisaoGeralTab'
 import DetalhesFundamentalsTab from '../components/detalhes/DetalhesFundamentalsTab'
 import DetalhesChartsTab from '../components/detalhes/DetalhesChartsTab'
@@ -47,6 +48,13 @@ export default function DetalhesPage() {
   const { filtrosAcoes, filtrosBdrs, filtrosFiis } = useAnalise()
 
   const ticker = searchParams.get('ticker') || ''
+
+  // Cancela requests pendentes ao trocar de aba OU de ticker dentro da página.
+  // Combinamos os dois numa só chave para cobrir os dois cenários comuns:
+  // (1) usuário troca de aba enquanto charts/dividends estavam carregando;
+  // (2) usuário troca o ticker (PETR4 → VALE3) enquanto yfinance ainda processa
+  // o anterior. Assim a fila do axios e os slots do backend são liberados.
+  useTabNavigationGuard(`${ticker}|${activeTab}`)
   const { user, canAccessScreen } = useAuth()
   const podeVerConceitos = canAccessScreen('conceitos')
   const podeVerRadarDividendos = canAccessScreen('radar-dividendos')
