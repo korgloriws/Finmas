@@ -12,8 +12,29 @@ import HomePage from '../pages/HomePage'
  * Caso contrário, exibe a landing page pública.
  */
 export default function RootOrRedirect() {
-  const { user, loading, checkCurrentUser } = useAuth()
+  const { user, loading, checkCurrentUser, setUserFromToken } = useAuth()
   const [oauthRechecking, setOauthRechecking] = useState(false)
+
+  useEffect(() => {
+    if (loading || user) return
+
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    const username = params.get('username')
+    const role = params.get('role')
+
+    // Compatibilidade: se algum ambiente redirecionar OAuth direto para "/"
+    // com token na query, promove o usuário imediatamente.
+    if (!token || !username) return
+
+    setUserFromToken(username, role || 'usuario')
+    params.delete('token')
+    params.delete('username')
+    params.delete('role')
+    const query = params.toString()
+    const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`
+    window.history.replaceState({}, '', cleanUrl)
+  }, [loading, user, setUserFromToken])
 
   useEffect(() => {
     const isOAuthReturn = (() => {

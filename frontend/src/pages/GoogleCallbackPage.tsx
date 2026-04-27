@@ -28,7 +28,7 @@ const GoogleCallbackPage = () => {
     // Compatibilidade com callback antigo (token na URL).
     if (token && username) {
       setUserFromToken(username, role || 'usuario')
-      window.location.replace('/')
+      navigate('/', { replace: true })
       return
     }
 
@@ -39,7 +39,7 @@ const GoogleCallbackPage = () => {
       for (let i = 0; i < 8; i += 1) {
         const authenticated = await checkCurrentUser()
         if (authenticated) {
-          window.location.replace('/')
+          navigate('/', { replace: true })
           return
         }
         await new Promise((resolve) => setTimeout(resolve, 300))
