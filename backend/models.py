@@ -166,7 +166,7 @@ def _ensure_rebalance_schema():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             try:
@@ -219,7 +219,7 @@ def _ensure_asset_types_schema():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('''
@@ -248,7 +248,7 @@ def list_asset_types():
         finally:
             conn.close()
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('SELECT nome FROM asset_types ORDER BY nome ASC')
@@ -311,7 +311,7 @@ def _ensure_indexador_schema():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             try:
@@ -376,7 +376,7 @@ def create_asset_type(nome: str):
             conn.close()
         return {"success": True}
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         try:
@@ -406,7 +406,7 @@ def rename_asset_type(old: str, new: str):
             conn.close()
         return {"success": True}
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('UPDATE asset_types SET nome=? WHERE nome=?', (new.strip(), old))
@@ -547,7 +547,7 @@ def _ensure_rf_catalog_schema():
                 pass
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
           
@@ -665,7 +665,7 @@ def rf_catalog_list():
                 pass
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('''
@@ -788,7 +788,7 @@ def rf_catalog_create(item: dict):
                 pass
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -870,7 +870,7 @@ def rf_catalog_update(id_: int, item: dict):
                 pass
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -931,7 +931,7 @@ def rf_catalog_delete(id_: int):
                 pass
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             print(f"rf_catalog_delete: Removendo item {id_} SQLite para usuário {usuario}")
@@ -970,7 +970,7 @@ def delete_asset_type(nome: str):
             conn.close()
         return {"success": True}
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('SELECT COUNT(1) FROM carteira WHERE tipo=?', (nome,))
@@ -1006,7 +1006,7 @@ def _create_sessions_table_if_needed():
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             c.execute(
@@ -1034,7 +1034,7 @@ def criar_sessao(username: str, duracao_segundos: int = 3600) -> str:
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             c.execute('INSERT OR REPLACE INTO sessoes (token, username, expira_em) VALUES (?, ?, ?)', (token, username, expira_em))
@@ -1053,7 +1053,7 @@ def invalidar_sessao(token: str) -> None:
             finally:
                 conn.close()
         else:
-            conn = sqlite3.connect(USUARIOS_DB_PATH)
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
             c = conn.cursor()
             c.execute('DELETE FROM sessoes WHERE token = ?', (token,))
             conn.commit()
@@ -1077,7 +1077,7 @@ def invalidar_todas_sessoes() -> None:
             finally:
                 conn.close()
         else:
-            conn = sqlite3.connect(USUARIOS_DB_PATH)
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
             c = conn.cursor()
             c.execute('DELETE FROM sessoes')
             conn.commit()
@@ -1173,7 +1173,7 @@ def get_usuario_atual():
                 except Exception:
                     pass
         else:
-            conn = sqlite3.connect(USUARIOS_DB_PATH)
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
             try:
                 c = conn.cursor()
                 c.execute('SELECT username, expira_em FROM sessoes WHERE token = ?', (token,))
@@ -1334,7 +1334,7 @@ def limpar_sessoes_expiradas():
             finally:
                 conn.close()
         else:
-            conn = sqlite3.connect(USUARIOS_DB_PATH)
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
             c = conn.cursor()
             c.execute('DELETE FROM sessoes WHERE expira_em < ?', (agora,))
             conn.commit()
@@ -1392,7 +1392,68 @@ carregamento_em_andamento = False
 lock = threading.Lock()  
 
 
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+_CACHE_DIR = os.getenv('FLASK_CACHE_DIR') or os.path.abspath(os.path.join(_base_dir, '..', 'cache'))
+try:
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+except Exception:
+    pass
+
+cache = Cache(config={
+    'CACHE_TYPE': 'FileSystemCache',
+    'CACHE_DIR': _CACHE_DIR,
+    'CACHE_DEFAULT_TIMEOUT': 300,
+    'CACHE_THRESHOLD': 5000,
+})
+
+_SQLITE_STARTUP_PRAGMAS = (
+    "PRAGMA journal_mode=WAL;",
+    "PRAGMA synchronous=NORMAL;",
+    "PRAGMA busy_timeout=30000;",
+    "PRAGMA temp_store=MEMORY;",
+)
+
+def _aplicar_pragmas_sqlite(db_path):
+    try:
+        conn = sqlite3.connect(db_path, timeout=30)
+        try:
+            cur = conn.cursor()
+            for pragma in _SQLITE_STARTUP_PRAGMAS:
+                cur.execute(pragma)
+            conn.commit()
+        finally:
+            conn.close()
+        return True
+    except Exception as e:
+        try:
+            print(f"[WAL] falha em {db_path}: {e}")
+        except Exception:
+            pass
+        return False
+
+def ativar_wal_em_todos_os_bancos():
+    contagem = 0
+    try:
+        if USUARIOS_DB_PATH and os.path.exists(USUARIOS_DB_PATH):
+            if _aplicar_pragmas_sqlite(USUARIOS_DB_PATH):
+                contagem += 1
+        bancos_dir = os.path.join(_base_dir, "bancos_usuarios")
+        if os.path.isdir(bancos_dir):
+            for root, _dirs, files in os.walk(bancos_dir):
+                for fname in files:
+                    if fname.endswith(".db"):
+                        db_path = os.path.join(root, fname)
+                        if _aplicar_pragmas_sqlite(db_path):
+                            contagem += 1
+    except Exception as e:
+        try:
+            print(f"[WAL] erro geral: {e}")
+        except Exception:
+            pass
+    try:
+        print(f"[WAL] pragmas aplicados em {contagem} arquivo(s) .db")
+    except Exception:
+        pass
+    return contagem
 
 global_state = {"df_ativos": None, "carregando": False}
 
@@ -1824,7 +1885,7 @@ def criar_tabela_usuarios():
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         c.execute('''
             CREATE TABLE IF NOT EXISTS usuarios (
@@ -1911,7 +1972,7 @@ def cadastrar_usuario(nome, username, senha, pergunta_seguranca=None, resposta_s
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -1953,7 +2014,7 @@ def buscar_usuario_por_username(username):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         # Buscar todos os campos, incluindo role, email e auth_provider
         c.execute('''
@@ -2007,7 +2068,7 @@ def buscar_usuario_por_email(email):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         c.execute('''
             SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
@@ -2066,7 +2127,7 @@ def criar_usuario_google(nome, email, google_id=None):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('''INSERT INTO usuarios (nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro, email, role, auth_provider, allowed_screens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -2111,7 +2172,7 @@ def alterar_senha_direta(username, nova_senha):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('UPDATE usuarios SET senha_hash = ? WHERE username = ?', (nova_senha_hash, username))
@@ -2139,7 +2200,7 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             resposta_hash = bcrypt.hashpw(resposta.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -2378,7 +2439,7 @@ def init_carteira_db(usuario=None):
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         # Tabela de carteira
         cursor.execute('''
@@ -3438,7 +3499,7 @@ def atualizar_precos_indicadores_carteira():
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             try:
                 cur = conn.cursor()
                 cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio FROM carteira')
@@ -3903,7 +3964,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             cursor = conn.cursor()
             
           
@@ -4047,7 +4108,7 @@ def remover_ativo_carteira(id):
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         cursor.execute('SELECT ticker, nome_completo, quantidade, preco_atual FROM carteira WHERE id = ?', (id,))
         ativo = cursor.fetchone()
@@ -4152,7 +4213,7 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('SELECT ticker, nome_completo, preco_atual, quantidade, indexador, indexador_pct FROM carteira WHERE id = ?', (id,))
@@ -4254,7 +4315,7 @@ def _ensure_goals_schema():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('''
@@ -4294,7 +4355,7 @@ def get_goals():
         finally:
             conn.close()
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('SELECT id, tipo, alvo, horizonte_meses, aporte_mensal, premissas, created_at, updated_at FROM goals ORDER BY id DESC LIMIT 1')
@@ -4337,7 +4398,7 @@ def save_goals(payload: dict):
         finally:
             conn.close()
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('DELETE FROM goals')
@@ -4439,7 +4500,7 @@ def _ensure_metas_aportes_schema():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('''
@@ -4546,7 +4607,7 @@ def get_metas_aportes():
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('''
@@ -4622,7 +4683,7 @@ def save_meta_aporte(payload: dict):
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             if meta_id:
@@ -4661,7 +4722,7 @@ def delete_meta_aporte(meta_id: int):
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('UPDATE metas_aportes SET ativo=0, updated_at=? WHERE id=?', (now, meta_id))
@@ -5058,7 +5119,7 @@ def migrar_preco_compra_existente():
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             try:
                 cursor = conn.cursor()
                 # Buscar ativos sem preco_compra
@@ -5173,7 +5234,7 @@ def obter_carteira_com_metadados_fii():
                 ativos.append(ativo)
             return ativos
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
@@ -5290,7 +5351,7 @@ def obter_carteira():
                 ativos.append(ativo)
             return ativos
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
@@ -5457,7 +5518,7 @@ def save_rebalance_config(periodo: str, targets: dict, last_rebalance_date: str 
         return {"success": True}
     # sqlite
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         c = conn.cursor()
         c.execute('SELECT id, start_date FROM rebalance_config LIMIT 1')
@@ -5499,7 +5560,7 @@ def get_rebalance_config():
         finally:
             conn.close()
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         c = conn.cursor()
         c.execute('SELECT periodo, targets_json, start_date, last_rebalance_date, updated_at FROM rebalance_config LIMIT 1')
@@ -5621,7 +5682,7 @@ def registrar_rebalance_event(date_str: str | None = None):
             conn.close()
     else:
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             cur.execute('INSERT INTO rebalance_history (data, created_at) VALUES (?, ?)', (event_date, now))
@@ -5645,7 +5706,7 @@ def get_rebalance_history():
         finally:
             conn.close()
     db_path = get_db_path(usuario, "carteira")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cur = conn.cursor()
         cur.execute('SELECT data FROM rebalance_history ORDER BY id DESC')
@@ -5708,7 +5769,7 @@ def registrar_movimentacao(data, ticker, nome_completo, quantidade, preco, tipo,
         else:
             if conn is None:
                 db_path = get_db_path(usuario, "carteira")
-                local_conn = sqlite3.connect(db_path, check_same_thread=False)
+                local_conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
                 should_close = True
             else:
                 should_close = False
@@ -5774,7 +5835,7 @@ def obter_movimentacoes(mes=None, ano=None):
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             cursor = conn.cursor()
             if mes and ano:
                 mes_int = int(mes)
@@ -5831,7 +5892,7 @@ def obter_data_primeira_compra_por_ticker():
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT ticker, MIN(data) FROM movimentacoes WHERE LOWER(TRIM(tipo)) = 'compra' GROUP BY ticker"
@@ -5867,7 +5928,7 @@ def obter_historico_carteira(periodo='mensal'):
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT data, ticker, quantidade, preco, tipo 
@@ -5980,7 +6041,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 conn.close()
         else:
             db_path = get_db_path(usuario, "carteira")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT data, ticker, quantidade, preco, tipo 
@@ -6550,7 +6611,7 @@ def init_controle_db(usuario=None):
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     
 
@@ -6743,7 +6804,7 @@ def _upgrade_controle_schema(usuario=None):
             conn.close()
     else:
         db_path = get_db_path(usuario, "controle")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cur = conn.cursor()
             tables = ['receitas','cartoes','outros_gastos']
@@ -6770,7 +6831,7 @@ def _upgrade_controle_schema(usuario=None):
             conn.close()
         
         # Criar tabelas de cartões cadastrados se não existirem
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cursor = conn.cursor()
             cursor.execute('''
@@ -6859,7 +6920,7 @@ def salvar_receita(nome, valor, data=None, categoria=None, tipo=None, recorrenci
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO receitas 
@@ -6897,7 +6958,7 @@ def atualizar_receita(id_registro, nome=None, valor=None, data=None, categoria=N
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE receitas SET 
@@ -6931,7 +6992,7 @@ def _remover_registro_generico(tabela, id_registro, banco="controle"):
             conn.close()
         return
     db_path = get_db_path(usuario, banco)
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute(f'DELETE FROM {tabela} WHERE id = ?', (id_registro,))
     conn.commit()
@@ -6975,7 +7036,7 @@ def carregar_receitas_mes_ano(mes, ano, pessoa=None):
         finally:
             conn.close()
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         try:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_receitas_data ON receitas(data)")
@@ -7019,7 +7080,7 @@ def adicionar_cartao(nome, valor, pago, data=None, categoria=None, tipo=None, re
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO cartoes 
@@ -7056,7 +7117,7 @@ def carregar_cartoes_mes_ano(mes, ano):
             conn.close()
         return df.to_dict('records')
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         query = '''
             SELECT * FROM cartoes 
@@ -7097,7 +7158,7 @@ def atualizar_cartao(id_registro, nome=None, valor=None, pago=None, data=None, c
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE cartoes SET 
@@ -7151,7 +7212,7 @@ def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, rec
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO outros_gastos 
@@ -7188,7 +7249,7 @@ def carregar_outros_mes_ano(mes, ano):
             conn.close()
         return df.to_dict('records')
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         query = '''
             SELECT * FROM outros_gastos 
@@ -7228,7 +7289,7 @@ def atualizar_outro_gasto(id_registro, nome=None, valor=None, data=None, categor
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE outros_gastos SET 
@@ -7280,7 +7341,7 @@ def init_marmitas_db(usuario=None):
             conn.close()
         return
     db_path = get_db_path(usuario, "marmitas")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS marmitas (
@@ -7327,7 +7388,7 @@ def consultar_marmitas(mes=None, ano=None):
         finally:
             conn.close()
     db_path = get_db_path(usuario, "marmitas")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     if mes and ano:
         mes_int = int(mes)
@@ -7360,7 +7421,7 @@ def adicionar_marmita(data, valor, comprou):
             conn.close()
         return
     db_path = get_db_path(usuario, "marmitas")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('INSERT INTO marmitas (data, valor, comprou) VALUES (?, ?, ?)', 
                   (data, valor, comprou))
@@ -7396,7 +7457,7 @@ def atualizar_marmita(id_registro, data=None, valor=None, comprou=None):
             conn.close()
     else:
         db_path = get_db_path(usuario, "marmitas")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         try:
             # Primeiro, buscar os dados atuais
@@ -7432,7 +7493,7 @@ def remover_marmita(id_registro):
             conn.close()
         return
     db_path = get_db_path(usuario, "marmitas")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('DELETE FROM marmitas WHERE id = ?', (id_registro,))
     conn.commit()
@@ -7469,7 +7530,7 @@ def gastos_mensais(periodo='6m'):
             conn.close()
         return df
     db_path = get_db_path(usuario, "marmitas")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     query = '''
         SELECT 
             substr(data, 1, 7) as AnoMes,
@@ -7507,7 +7568,7 @@ def verificar_e_corrigir_bancos_usuario(usuario):
         # Verificar se as tabelas do controle existem
         controle_path = os.path.join(bancos_dir, 'controle.db')
         if os.path.exists(controle_path):
-            conn = sqlite3.connect(controle_path, check_same_thread=False)
+            conn = sqlite3.connect(controle_path, check_same_thread=False, timeout=30)
             try:
                 cursor = conn.cursor()
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -7526,7 +7587,7 @@ def verificar_e_corrigir_bancos_usuario(usuario):
         # Verificar se as tabelas de marmitas existem
         marmitas_path = os.path.join(bancos_dir, 'marmitas.db')
         if os.path.exists(marmitas_path):
-            conn = sqlite3.connect(marmitas_path, check_same_thread=False)
+            conn = sqlite3.connect(marmitas_path, check_same_thread=False, timeout=30)
             try:
                 cursor = conn.cursor()
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -7595,7 +7656,7 @@ def calcular_saldo_mes_ano(mes, ano, pessoa=None):
             conn.close()
     else:
         db_path = get_db_path(usuario, "controle")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         
         df_receitas = pd.read_sql_query(
             'SELECT SUM(valor) as total FROM receitas WHERE data >= ? AND data < ?',
@@ -7635,7 +7696,7 @@ def adicionar_cartao_cadastrado(nome, bandeira, limite, vencimento, cor):
             conn.close()
         return
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO cartoes_cadastrados (nome, bandeira, limite, vencimento, cor)
@@ -7669,7 +7730,7 @@ def listar_cartoes_cadastrados():
             conn.close()
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT * FROM cartoes_cadastrados 
@@ -7706,7 +7767,7 @@ def atualizar_cartao_cadastrado(id_cartao, nome=None, bandeira=None, limite=None
         return
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE cartoes_cadastrados SET 
@@ -7738,7 +7799,7 @@ def remover_cartao_cadastrado(id_cartao):
         return
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE cartoes_cadastrados SET ativo = 0 WHERE id = ?
@@ -7769,7 +7830,7 @@ def adicionar_compra_cartao(cartao_id, nome, valor, data, categoria=None, observ
         return
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO compras_cartao (cartao_id, nome, valor, data, categoria, observacao)
@@ -7815,7 +7876,7 @@ def listar_compras_cartao(cartao_id, mes=None, ano=None):
             conn.close()
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     if mes and ano:
         mes_int = int(mes)
@@ -7866,7 +7927,7 @@ def atualizar_compra_cartao(id_compra, nome=None, valor=None, data=None, categor
         return
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE compras_cartao SET 
@@ -7896,7 +7957,7 @@ def remover_compra_cartao(id_compra):
         return
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     cursor.execute('DELETE FROM compras_cartao WHERE id = ?', (id_compra,))
     conn.commit()
@@ -7936,7 +7997,7 @@ def calcular_total_compras_cartao(cartao_id, mes=None, ano=None):
             conn.close()
     
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     cursor = conn.cursor()
     if mes and ano:
         mes_int = int(mes)
@@ -8007,7 +8068,7 @@ def marcar_cartao_como_pago(cartao_id, mes_pagamento, ano_pagamento):
             conn.close()
     else:
         db_path = get_db_path(usuario, "controle")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cursor = conn.cursor()
             
@@ -8090,7 +8151,7 @@ def desmarcar_cartao_como_pago(cartao_id):
             conn.close()
     else:
         db_path = get_db_path(usuario, "controle")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
             cursor = conn.cursor()
             
@@ -8154,7 +8215,7 @@ def resetar_status_cartoes_novo_mes():
         return
     # SQLite
     db_path = get_db_path(usuario, "controle")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -8394,7 +8455,7 @@ def atualizar_perfil_usuario(username, nome=None, email=None):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             updates = []
@@ -8431,7 +8492,7 @@ def atualizar_senha_usuario(username, nova_senha):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('UPDATE usuarios SET senha_hash = ? WHERE username = ?', (senha_hash, username))
@@ -8462,7 +8523,7 @@ def definir_role_usuario(username, novo_role):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('UPDATE usuarios SET role = ? WHERE username = ?', (novo_role, username))
@@ -8488,7 +8549,7 @@ def usuario_bloqueado(username):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             try:
@@ -8513,7 +8574,7 @@ def bloquear_usuario(username, blocked=True):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             c.execute('UPDATE usuarios SET blocked = ? WHERE username = ?', (1 if blocked else 0, username))
@@ -8546,7 +8607,7 @@ def obter_allowed_screens(username):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             try:
@@ -8576,7 +8637,7 @@ def atualizar_allowed_screens(username, screens):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             c.execute('UPDATE usuarios SET allowed_screens = ? WHERE username = ?', (val, username))
@@ -8600,7 +8661,7 @@ def atualizar_last_seen(username):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         try:
             c = conn.cursor()
             c.execute('UPDATE usuarios SET last_seen_at = ? WHERE username = ?', (now_str, username))
@@ -8676,7 +8737,7 @@ def listar_usuarios(admin_only=False):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             if admin_only:
@@ -8743,7 +8804,7 @@ def obter_carteira_para_admin(target_username):
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
@@ -8809,7 +8870,7 @@ def obter_movimentacoes_para_admin(target_username, mes=None, ano=None):
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "carteira")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         if mes and ano:
             mes_int, ano_int = int(mes), int(ano)
@@ -8852,7 +8913,7 @@ def consultar_marmitas_para_admin(target_username, mes=None, ano=None):
             finally:
                 conn.close()
         db_path = get_db_path(usuario, "marmitas")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         if mes and ano:
             mes_int, ano_int = int(mes), int(ano)
@@ -8893,7 +8954,7 @@ def obter_controle_para_admin(target_username, limite=200):
                 conn.close()
             return out
         db_path = get_db_path(usuario, "controle")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
         for tabela, chave in [("receitas", "receitas"), ("cartoes", "cartoes"), ("outros_gastos", "outros_gastos")]:
             try:
@@ -8922,7 +8983,7 @@ def excluir_conta_usuario(username):
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH)
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
         c = conn.cursor()
         try:
             c.execute('DELETE FROM usuarios WHERE username = ?', (username,))

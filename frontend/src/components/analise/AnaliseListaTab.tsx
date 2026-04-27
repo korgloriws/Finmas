@@ -14,6 +14,12 @@ function mensagemErroAnalise(err: unknown): string {
   return 'Erro ao carregar. Tente novamente.'
 }
 
+// FIIs têm apenas 3 critérios (DY min, DY max, liquidez), enquanto Ações/BDRs têm 7.
+// Como os filtros das outras abas naturalmente reduzem o resultado para ~10 itens,
+// limitamos os FIIs explicitamente ao TOP 10 (ordenado por DY desc no backend) para
+// manter a UX consistente entre as três abas.
+const MAX_FIIS_VISIVEIS = 10
+
 // Lista de setores comuns (baseado nos setores do yfinance)
 const SETORES_COMUNS = [
   'Financial Services',
@@ -574,6 +580,8 @@ function TabelaAtivos({
   }
 
   const isFiiTable = tipo === 'FIIs'
+  const ativosVisiveis = isFiiTable ? ativos.slice(0, MAX_FIIS_VISIVEIS) : ativos
+  const fiisOcultos = isFiiTable ? Math.max(0, ativos.length - MAX_FIIS_VISIVEIS) : 0
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -606,7 +614,7 @@ function TabelaAtivos({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {ativos.map((ativo) => {
+            {ativosVisiveis.map((ativo) => {
               const fiiMeta = fiiMetadataMap?.[ativo.ticker]
               
               return (
@@ -733,6 +741,15 @@ function TabelaAtivos({
           </tbody>
         </table>
       </div>
+      {fiisOcultos > 0 && (
+        <div className="px-6 py-3 bg-muted/30 border-t border-border text-center">
+          <p className="text-xs text-muted-foreground">
+            Exibindo os <span className="font-semibold text-foreground">{MAX_FIIS_VISIVEIS} FIIs</span> com maior DY.
+            Mais <span className="font-semibold text-foreground">{fiisOcultos}</span> FIIs passaram nos filtros e foram ocultados.
+            Refine os filtros para ajustar a lista.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -1223,14 +1240,17 @@ export default function AnaliseListaTab() {
   useEffect(() => {
     if (!ativosFiis || ativosFiis.length === 0) return
 
+    // Como a tabela só renderiza os primeiros MAX_FIIS_VISIVEIS, buscar metadata
+    // apenas desses tickers — evita 30+ requests desnecessárias ao FundsExplorer.
+    const fiisVisiveis = ativosFiis.slice(0, MAX_FIIS_VISIVEIS)
+
     const buscarMetadados = async () => {
       const newMetadataMap: Record<string, { tipo?: string; segmento?: string }> = {}
-      
-   
+
       const batchSize = 5
-      for (let i = 0; i < ativosFiis.length; i += batchSize) {
-        const batch = ativosFiis.slice(i, i + batchSize)
-        
+      for (let i = 0; i < fiisVisiveis.length; i += batchSize) {
+        const batch = fiisVisiveis.slice(i, i + batchSize)
+
         const promises = batch.map(async (fii) => {
           try {
             const metadata = await ativoService.getFiiMetadata(fii.ticker, false) // false = sem portfólio (otimização)
@@ -1244,14 +1264,12 @@ export default function AnaliseListaTab() {
             console.error(`Erro ao buscar metadata de ${fii.ticker}:`, error)
           }
         })
-        
+
         await Promise.all(promises)
-        
-      
+
         setFiiMetadataMap(prev => ({ ...prev, ...newMetadataMap }))
-        
-        
-        if (i + batchSize < ativosFiis.length) {
+
+        if (i + batchSize < fiisVisiveis.length) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
       }

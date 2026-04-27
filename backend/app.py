@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, make_response, send_from_directory, send_file, session, redirect, url_for
+from flask import Flask, jsonify, request, make_response, send_from_directory, send_file, session, redirect, url_for, g
 from flask_cors import CORS
 import pandas as pd
 import yfinance as yf
@@ -10,10 +10,14 @@ import shutil
 import zipfile
 import tempfile
 import re
+import threading
+import time as _time_mod
 from math import isfinite
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from authlib.integrations.flask_client import OAuth
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from connection_utils import cliente_desconectado
 
 from models import (
     global_state, carregar_ativos, obter_carteira, obter_valorizacao_periodo, adicionar_ativo_carteira, 
@@ -83,6 +87,7 @@ from models import (
     obter_cenarios_predefinidos,
     executar_monte_carlo,
     limpar_cache_usuario,
+    ativar_wal_em_todos_os_bancos,
 )
 from fii_scraper import obter_metadata_fii
 from models import cache
@@ -178,9 +183,52 @@ except Exception as e:
 
 
 try:
+    ativar_wal_em_todos_os_bancos()
+except Exception as _e_wal:
+    try:
+        print(f"[WAL] warn no startup: {_e_wal}")
+    except Exception:
+        pass
+
+
+try:
     invalidar_todas_sessoes()
 except Exception:
     pass
+
+
+ANALISE_ATIVOS_SEM = threading.Semaphore(2)
+MONTE_CARLO_SEM = threading.Semaphore(1)
+
+
+_SLOW_REQUEST_THRESHOLD_S = float(os.getenv('SLOW_REQUEST_THRESHOLD', '3.0'))
+
+
+@server.before_request
+def _finmas_before_request():
+    try:
+        g._finmas_req_inicio = _time_mod.time()
+    except Exception:
+        pass
+
+
+@server.after_request
+def _finmas_after_request(response):
+    try:
+        inicio = getattr(g, '_finmas_req_inicio', None)
+        if inicio is not None:
+            duracao = _time_mod.time() - inicio
+            if duracao >= _SLOW_REQUEST_THRESHOLD_S:
+                try:
+                    print(
+                        f"[SLOW] {request.method} {request.path} "
+                        f"status={response.status_code} duracao={round(duracao, 2)}s"
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return response
 
 
 
@@ -1092,6 +1140,15 @@ def api_analise_ativos():
     import time as _time
     _inicio = _time.time()
     tipo = "?"
+
+    aguardando = ANALISE_ATIVOS_SEM._value == 0
+    if aguardando:
+        print("[ANALISE] fila cheia, aguardando slot livre...")
+    adquirido = ANALISE_ATIVOS_SEM.acquire(timeout=540)
+    if not adquirido:
+        return jsonify({
+            "error": "Servidor ocupado processando outras análises. Tente novamente em alguns instantes."
+        }), 503
     try:
         data = request.get_json()
         tipo = data.get('tipo', 'acoes')  
@@ -1159,6 +1216,11 @@ def api_analise_ativos():
         _duracao = round(_time.time() - _inicio, 1)
         print(f"[ANALISE] Erro /api/analise/ativos tipo={tipo} duracao={_duracao}s err={e}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            ANALISE_ATIVOS_SEM.release()
+        except Exception:
+            pass
 
 @server.route("/api/listas/ativos", methods=["GET"])
 def api_listas_ativos():
@@ -2378,7 +2440,7 @@ def validar_usuario_autenticado(expected_user=None, validar_token=True):
                     finally:
                         conn.close()
                 else:
-                    conn = sqlite3.connect(USUARIOS_DB_PATH)
+                    conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
                     try:
                         c = conn.cursor()
                         c.execute('SELECT username, expira_em FROM sessoes WHERE token = ?', (token,))
@@ -2878,14 +2940,22 @@ def api_batch():
                         # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
                         resultado = []
                         max_workers = min(len(carteira), 200)  # Até 200 workers simultâneos
-                        
-                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        client_gone_batch = False
+
+                        executor_batch = ThreadPoolExecutor(max_workers=max_workers)
+                        try:
                             future_to_ativo = {
-                                executor.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo 
+                                executor_batch.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo
                                 for ativo in carteira
                             }
-                            
+
                             for future in as_completed(future_to_ativo):
+                                if cliente_desconectado():
+                                    client_gone_batch = True
+                                    print(f"[ABORT] /batch (proventos): cliente desconectou. "
+                                          f"Processados {len(resultado)}/{len(future_to_ativo)} ativos.")
+                                    break
+
                                 try:
                                     resultado_ativo = future.result()
                                     if resultado_ativo:
@@ -2893,7 +2963,15 @@ def api_batch():
                                 except Exception as e:
                                     print(f"Erro ao buscar proventos: {e}")
                                     continue
-                        
+                        finally:
+                            if client_gone_batch:
+                                try:
+                                    executor_batch.shutdown(wait=False, cancel_futures=True)
+                                except TypeError:
+                                    executor_batch.shutdown(wait=False)
+                            else:
+                                executor_batch.shutdown(wait=True)
+
                         results[endpoint] = resultado
                 
                 elif endpoint == '/carteira/historico' and method == 'GET':
@@ -4148,15 +4226,22 @@ def api_get_proventos():
         
         # OTIMIZAÇÃO: Reduzido de 10 para 5 workers para evitar sobrecarga de RAM no Render
         max_workers = min(len(tickers), 200)  # Até 200 workers simultâneos
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submete todas as tarefas
+        client_gone = False
+
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        try:
             future_to_ticker = {
-                executor.submit(_buscar_proventos_ticker, ticker): ticker 
+                executor.submit(_buscar_proventos_ticker, ticker): ticker
                 for ticker in tickers
             }
-            
-            # Coleta resultados conforme terminam
+
             for future in as_completed(future_to_ticker):
+                if cliente_desconectado():
+                    client_gone = True
+                    print(f"[ABORT] /carteira/proventos: cliente desconectou. "
+                          f"Processados {len(resultado)}/{len(future_to_ticker)} tickers.")
+                    break
+
                 try:
                     resultado_ativo = future.result()
                     resultado.append(resultado_ativo)
@@ -4168,7 +4253,18 @@ def api_get_proventos():
                         'proventos': [],
                         'erro': f'Erro ao processar: {str(e)}'
                     })
-        
+        finally:
+            if client_gone:
+                try:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    executor.shutdown(wait=False)
+            else:
+                executor.shutdown(wait=True)
+
+        if client_gone:
+            return jsonify(resultado), 499
+
         return jsonify(resultado)
         
     except Exception as e:
@@ -4283,17 +4379,30 @@ def api_get_proventos_recebidos():
        
         resultado = []
     
-        max_workers = min(len(carteira), 5)  
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
- 
+        max_workers = min(len(carteira), 5)
+        client_gone = False
+
+        # Não usamos `with ThreadPoolExecutor(...)` porque o context-manager
+        # chama shutdown(wait=True) e bloquearia o response esperando todas
+        # as tasks. Quando detectamos disconnect, queremos sair imediatamente
+        # com cancel_futures (Python 3.9+). Os futures que JÁ começaram
+        # continuam até terminar (não dá pra interromper yfinance), mas isso
+        # não bloqueia o worker do Gunicorn, que fica livre para a próxima
+        # request — exatamente o ganho que precisamos.
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        try:
             future_to_ativo = {
-                executor.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo 
+                executor.submit(_buscar_proventos_ativo, ativo, data_inicio): ativo
                 for ativo in carteira
             }
-            
-            # Coleta resultados conforme terminam
+
             for future in as_completed(future_to_ativo):
+                if cliente_desconectado():
+                    client_gone = True
+                    print(f"[ABORT] /proventos-recebidos: cliente desconectou. "
+                          f"Processados {len(resultado)}/{len(future_to_ativo)} ativos antes de abortar.")
+                    break
+
                 try:
                     resultado_ativo = future.result()
                     if resultado_ativo is not None:
@@ -4301,8 +4410,22 @@ def api_get_proventos_recebidos():
                 except Exception as e:
                     ativo = future_to_ativo[future]
                     print(f"Erro ao processar proventos para {ativo.get('ticker', 'desconhecido')}: {str(e)}")
-                continue
-        
+        finally:
+            if client_gone:
+                try:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    # Python < 3.9 não suporta cancel_futures
+                    executor.shutdown(wait=False)
+            else:
+                executor.shutdown(wait=True)
+
+        if client_gone:
+            # Cliente já fechou TCP; o response será descartado de qualquer forma.
+            # Retorna lista parcial com status 499 (Client Closed Request) para
+            # ficar visível nos logs e métricas.
+            return jsonify(resultado), 499
+
         return jsonify(resultado)
         
     except Exception as e:
@@ -5273,6 +5396,11 @@ def api_simulador_cenarios():
 @server.route("/api/simulador/monte-carlo", methods=["POST"])
 def api_simulador_monte_carlo():
     """Endpoint para executar simulação Monte Carlo"""
+    adquirido = MONTE_CARLO_SEM.acquire(timeout=540)
+    if not adquirido:
+        return jsonify({
+            "error": "Servidor ocupado executando outra simulação Monte Carlo. Tente novamente em alguns instantes."
+        }), 503
     try:
         data = request.get_json()
         n_simulacoes = data.get('nSimulacoes', 10000)
@@ -5288,6 +5416,11 @@ def api_simulador_monte_carlo():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            MONTE_CARLO_SEM.release()
+        except Exception:
+            pass
 
 
 # ==================== API MERCADOS B3 ====================

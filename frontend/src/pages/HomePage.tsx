@@ -1,5 +1,8 @@
 import  { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLazyData } from '../hooks/useLazyData'
+import { batchService } from '../services/api'
+import type { AtivoCarteira } from '../types'
 
 import { Link } from 'react-router-dom'
 
@@ -117,42 +120,69 @@ export default function HomePage() {
 
   
   
-  const { data: carteira, isLoading: loadingCarteiraRaw, isFetching: isFetchingCarteiraRaw } = useQuery({
-    queryKey: ['carteira', user],
-    queryFn: async () => await carteiraService.getCarteira(),
+  // ============================================================================
+  // HERO BATCH: carteira + indicadores + home-resumo numa única chamada HTTP
+  // ----------------------------------------------------------------------------
+  // Antes: 3 useQuery disparavam em paralelo no mount, cada uma abrindo conexão
+  // com o backend (SQLite + yfinance). Agora vai tudo em 1 POST /api/batch
+  // — backend processa internamente em paralelo e devolve tudo junto.
+  //
+  // Fallback: se /api/batch falhar (rede, 500, 404 num deploy antigo), caímos
+  // para chamadas individuais (ainda com o limitador global serializando).
+  // ============================================================================
+  const { data: heroData, isLoading: loadingHeroRaw, isFetching: isFetchingHeroRaw } = useQuery({
+    queryKey: ['home-hero', user, mesAtual, anoAtual],
+    queryFn: async ({ signal }) => {
+      try {
+        const results = await batchService.batch([
+          { endpoint: '/carteira', method: 'GET' },
+          { endpoint: '/indicadores', method: 'GET' },
+          { endpoint: '/home/resumo', method: 'GET', params: { mes: String(mesAtual), ano: String(anoAtual) } },
+        ], { signal })
+        return {
+          carteira: (results['/carteira'] as AtivoCarteira[]) || [],
+          indicadores: results['/indicadores'] || {},
+          resumoHome: results['/home/resumo'] || null,
+        }
+      } catch (err: any) {
+        // Se foi cancelamento (usuário mudou de rota), propaga sem fallback —
+        // disparar Promise.all aqui geraria 3 requests "fantasma" para uma tela
+        // que o usuário já abandonou.
+        const isAbort =
+          signal?.aborted ||
+          err?.code === 'ERR_CANCELED' ||
+          err?.name === 'CanceledError' ||
+          err?.name === 'AbortError'
+        if (isAbort) throw err
+
+        // Fallback real: backend sem /api/batch ou erro 500 → carrega individualmente
+        console.warn('[HomePage] batch indisponível, caindo para chamadas individuais', err)
+        const [carteiraData, indicadoresData, resumoData] = await Promise.all([
+          carteiraService.getCarteira(),
+          carteiraService.getIndicadores(),
+          homeService.getResumo(String(mesAtual), String(anoAtual)),
+        ])
+        return {
+          carteira: carteiraData || [],
+          indicadores: indicadoresData || {},
+          resumoHome: resumoData,
+        }
+      }
+    },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000, 
+    gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, 
-  })
-
-
-  useQuery({
-    queryKey: ['indicadores'],
-    queryFn: carteiraService.getIndicadores,
-    staleTime: 10 * 60 * 1000, 
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, 
-  })
-
-  
-  const { data: resumoHome, isLoading: loadingResumoRaw } = useQuery({
-    queryKey: ['home-resumo', user, mesAtual, anoAtual],
-    queryFn: () => homeService.getResumo(mesAtual.toString(), anoAtual.toString()),
-    enabled: !!user,
+    refetchOnMount: false,
     retry: 3,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, 
-    staleTime: 5 * 60 * 1000, 
-    gcTime: 15 * 60 * 1000,
   })
-  
 
-  const loadingCarteira = loadingCarteiraRaw && !carteira
-  const isFetchingCarteira = isFetchingCarteiraRaw && !carteira
-  const loadingResumo = loadingResumoRaw && !resumoHome
+  const carteira = heroData?.carteira as AtivoCarteira[] | undefined
+  const resumoHome = heroData?.resumoHome as any
+  const loadingCarteira = loadingHeroRaw && !carteira
+  const isFetchingCarteira = isFetchingHeroRaw && !carteira
+  const loadingResumo = loadingHeroRaw && !resumoHome
 
 
   const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')
@@ -528,14 +558,12 @@ export default function HomePage() {
     }).length || 0
 
 
-    const proventosRecebidos = useQuery({
-      queryKey: ['proventos-recebidos-status', user],
-      queryFn: () => carteiraService.getProventosRecebidos('3m'), 
-      staleTime: 10 * 60 * 1000, 
-      refetchOnMount: false, 
-      refetchOnWindowFocus: false,
-      enabled: !!user
-    }).data
+    // Lazy: só dispara quando o card entra na viewport (~50px de margem)
+    const { data: proventosRecebidos, ref: statusCardRef } = useLazyData(
+      ['proventos-recebidos-status', user ?? ''],
+      () => carteiraService.getProventosRecebidos('3m'),
+      { staleTime: 10 * 60 * 1000, enabled: !!user }
+    )
 
     const proventosEstimados = proventosRecebidos?.reduce((total: number, p: any) => 
       total + (p.total_recebido || 0), 0) || 0
@@ -599,6 +627,7 @@ export default function HomePage() {
 
     return (
       <motion.div 
+        ref={statusCardRef as any}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
@@ -680,14 +709,12 @@ export default function HomePage() {
   
   const UpcomingEventsCard = ({ delay = 0 }: { delay?: number }) => {
 
-    const { data: proventosRecebidos } = useQuery({
-      queryKey: ['proventos-recebidos', user],
-      queryFn: () => carteiraService.getProventosRecebidos('6m'), 
-      staleTime: 10 * 60 * 1000, 
-      refetchOnMount: false, 
-      refetchOnWindowFocus: false,
-      enabled: !!user
-    })
+    // Lazy: só dispara quando o card entra na viewport
+    const { data: proventosRecebidos, ref: upcomingCardRef } = useLazyData(
+      ['proventos-recebidos', user ?? ''],
+      () => carteiraService.getProventosRecebidos('6m'),
+      { staleTime: 10 * 60 * 1000, enabled: !!user }
+    )
 
    
     const totalProventos = proventosRecebidos?.reduce((total: number, p: any) => 
@@ -716,6 +743,7 @@ export default function HomePage() {
 
     return (
       <motion.div 
+        ref={upcomingCardRef as any}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
@@ -964,22 +992,22 @@ export default function HomePage() {
  
   const OportunidadesRebalanceamentoCard = ({ delay = 0 }: { delay?: number }) => {
 
-    const { data: rbConfig } = useQuery({
-      queryKey: ['rebalance-config', user],
-      queryFn: carteiraService.getRebalanceConfig,
-      enabled: !!user,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false, 
-      staleTime: 10 * 60 * 1000, 
-    })
+    // Lazy: só dispara quando o card entra na viewport.
+    // O isVisible serve de gatilho para a segunda query (rebalance-status), que
+    // só faz sentido carregar se o config já foi buscado (mesmo card visível).
+    const { data: rbConfig, ref: rebalanceCardRef, isVisible: rbVisible } = useLazyData(
+      ['rebalance-config', user ?? ''],
+      carteiraService.getRebalanceConfig,
+      { staleTime: 10 * 60 * 1000, enabled: !!user }
+    )
 
     const { data: rbStatus } = useQuery({
       queryKey: ['rebalance-status', user],
       queryFn: carteiraService.getRebalanceStatus,
-      enabled: !!user,
+      enabled: !!user && rbVisible,
       refetchOnWindowFocus: false,
-      refetchOnMount: false, 
-      staleTime: 5 * 60 * 1000, 
+      refetchOnMount: false,
+      staleTime: 5 * 60 * 1000,
     })
 
  
@@ -1047,6 +1075,7 @@ export default function HomePage() {
 
     return (
       <motion.div 
+        ref={rebalanceCardRef as any}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}

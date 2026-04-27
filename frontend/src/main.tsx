@@ -44,7 +44,18 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 document.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('loaded')
-}) 
+})
+
+// Splash inicial: só remove depois que o React pintou de verdade.
+// Dois rAFs garantem que pelo menos um commit/paint aconteceu antes de disparar o fade.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    document.body.classList.add('app-ready')
+    window.setTimeout(() => {
+      document.getElementById('initial-splash')?.remove()
+    }, 400)
+  })
+})
 
 
 if ('serviceWorker' in navigator) {

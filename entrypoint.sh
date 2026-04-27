@@ -26,9 +26,24 @@ if [ "$ENABLE_STARTUP_BACKUP" = "true" ]; then
     if [ -d "$DATA_DIR" ] && [ "$(ls -A $DATA_DIR 2>/dev/null)" ]; then
         BACKUP_FILE="$BACKUP_DIR/finmas_backup_$DATE.tar.gz"
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] Criando backup antes de iniciar..."
-        
-        # Fazer backup de todos os bancos SQLite
-        tar -czf "$BACKUP_FILE" -C "$DATA_DIR" . 2>/dev/null || {
+
+        # Checkpoint WAL antes do backup: garante que tudo do .db-wal foi escrito
+        # no arquivo .db principal, deixando o tar-gz consistente sem copiar WAL/SHM soltos.
+        if command -v sqlite3 >/dev/null 2>&1; then
+            echo "[$(date +'%Y-%m-%d %H:%M:%S')] Executando PRAGMA wal_checkpoint(FULL) em todos os .db..."
+            CHECKPOINT_COUNT=0
+            while IFS= read -r -d '' DBFILE; do
+                sqlite3 "$DBFILE" "PRAGMA wal_checkpoint(FULL);" >/dev/null 2>&1 && \
+                    CHECKPOINT_COUNT=$((CHECKPOINT_COUNT + 1)) || true
+            done < <(find "$DATA_DIR" -type f -name "*.db" -print0 2>/dev/null)
+            echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Checkpoint aplicado em $CHECKPOINT_COUNT arquivo(s)"
+        else
+            echo "[$(date +'%Y-%m-%d %H:%M:%S')] AVISO: sqlite3 CLI indisponível, pulando checkpoint WAL"
+        fi
+
+        # Fazer backup de todos os bancos SQLite (exclui arquivos auxiliares WAL/SHM
+        # para evitar inconsistência — após o checkpoint acima, o .db já contém tudo)
+        tar --exclude='*.db-wal' --exclude='*.db-shm' -czf "$BACKUP_FILE" -C "$DATA_DIR" . 2>/dev/null || {
             echo "[$(date +'%Y-%m-%d %H:%M:%S')] AVISO: Não foi possível criar backup completo, continuando..."
         }
         

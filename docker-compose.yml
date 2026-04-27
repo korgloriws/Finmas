@@ -13,6 +13,8 @@ services:
       - ./backups:/app/backups
       # Logs
       - ./logs:/app/logs
+      # Cache filesystem compartilhado entre workers Gunicorn (sobrevive a restart)
+      - ./cache:/app/cache
     environment:
       - ENVIRONMENT=production
       - PORT=8080

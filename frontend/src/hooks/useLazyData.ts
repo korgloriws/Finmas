@@ -6,6 +6,11 @@ interface LazyDataOptions {
   staleTime?: number
   retry?: number
   refetchOnWindowFocus?: boolean
+  /** Atraso (ms) entre o card aparecer e a query disparar. Default: 300ms.
+   *  Se o componente desmontar (user navegou) ou sair do viewport antes do
+   *  delay completar, a query NUNCA é disparada — economia real no backend.
+   *  Para desativar, passe 0. */
+  visibilityDelayMs?: number
 }
 
 
@@ -16,15 +21,31 @@ export function useLazyData<T>(
 ) {
   const [isVisible, setIsVisible] = useState(false)
   const [ref, setRef] = useState<HTMLElement | null>(null)
+  const visibilityDelayMs = options.visibilityDelayMs ?? 300
 
   useEffect(() => {
     if (!ref) return
 
+    let pendingTimer: number | null = null
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setIsVisible(true)
-          observer.disconnect()
+          // Período de "carência": só dispara se o card ficar visível por
+          // visibilityDelayMs ms contínuos. Se o user navegar antes ou
+          // o card sair do viewport, cancela e a request nem chega ao backend.
+          if (pendingTimer !== null) return
+          pendingTimer = window.setTimeout(() => {
+            setIsVisible(true)
+            observer.disconnect()
+            pendingTimer = null
+          }, visibilityDelayMs)
+        } else {
+          // Saiu do viewport antes do delay terminar: cancela
+          if (pendingTimer !== null) {
+            window.clearTimeout(pendingTimer)
+            pendingTimer = null
+          }
         }
       },
       { threshold: 0.1, rootMargin: '50px' }
@@ -32,8 +53,11 @@ export function useLazyData<T>(
 
     observer.observe(ref)
 
-    return () => observer.disconnect()
-  }, [ref])
+    return () => {
+      if (pendingTimer !== null) window.clearTimeout(pendingTimer)
+      observer.disconnect()
+    }
+  }, [ref, visibilityDelayMs])
 
   const query = useQuery({
     queryKey,

@@ -12,9 +12,133 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// ============================================================================
+// LIMITADOR GLOBAL DE CONCORRÊNCIA + CANCELAMENTO POR NAVEGAÇÃO
+// ----------------------------------------------------------------------------
+// Duas funções nesta seção:
+//
+// 1) Limitador: impede que o frontend dispare muitas requisições GET
+//    simultâneas quando uma tela monta. O backend não satura.
+//    - Só enfileira métodos de leitura (GET). Mutations passam direto.
+//    - Requests com X-Priority: high também passam direto (escape hatch).
+//    - O slot é sempre liberado na resposta ou no erro.
+//
+// 2) Cancelamento global: cada request recebe um AbortController interno e
+//    fica registrada em `inflightControllers`. Quando o usuário navega para
+//    outra tela, o NavigationGuard chama `cancelInflightRequests()`, que
+//    aborta TUDO que está em voo ou na fila. Resultado: a tela nova começa
+//    com a fila limpa e a anterior é descartada — o backend libera os
+//    slots imediatamente, sem esperar respostas que ninguém mais quer ver.
+// ============================================================================
+const MAX_CONCURRENT_GETS = 3
+let inflightGets = 0
+
+interface SlotWaiter {
+  resolve: () => void
+  reject: (err: unknown) => void
+}
+
+const waitingQueue: SlotWaiter[] = []
+
+function acquireSlot(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
+
+    if (inflightGets < MAX_CONCURRENT_GETS) {
+      inflightGets += 1
+      resolve()
+      return
+    }
+
+    // Sem slot disponível: entra na fila
+    const waiter: SlotWaiter = {
+      resolve: () => {
+        // Antes de resolver, checa se foi abortado enquanto esperava
+        if (signal?.aborted) {
+          // O slot foi "passado" para esta entry, mas a request já foi
+          // cancelada. Repassa o slot para o próximo da fila.
+          const next = waitingQueue.shift()
+          if (next) next.resolve()
+          else inflightGets = Math.max(0, inflightGets - 1)
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        resolve()
+      },
+      reject,
+    }
+    waitingQueue.push(waiter)
+
+    if (signal) {
+      const onAbort = () => {
+        const idx = waitingQueue.indexOf(waiter)
+        if (idx >= 0) {
+          waitingQueue.splice(idx, 1)
+          waiter.reject(new DOMException('Aborted', 'AbortError'))
+        }
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+  })
+}
+
+function releaseSlot(): void {
+  const next = waitingQueue.shift()
+  if (next) {
+    // Mantém o inflight constante: passa o slot direto para o próximo
+    next.resolve()
+  } else {
+    inflightGets = Math.max(0, inflightGets - 1)
+  }
+}
+
+function shouldThrottle(config: any): boolean {
+  const method = (config?.method || 'get').toLowerCase()
+  if (method !== 'get') return false
+  const priority = config?.headers?.['X-Priority'] || config?.headers?.['x-priority']
+  if (priority && String(priority).toLowerCase() === 'high') return false
+  return true
+}
+
+// Map global de controllers de requests em voo, com metadata. Permite
+// cancelar GETs ao mudar de rota mas preservar mutations em andamento.
+interface InflightMeta {
+  isMutation: boolean
+}
+const inflightControllers = new Map<AbortController, InflightMeta>()
+
+/**
+ * Cancela apenas as requisições GET em voo (+ esvazia a fila do limitador).
+ * Mutations (POST/PUT/DELETE/PATCH) NUNCA são canceladas: o usuário pode ter
+ * clicado "Salvar" e mudado de tela rápido — não queremos perder o trabalho
+ * dele. Mutations que ainda não voltaram seguem até completar.
+ *
+ * Chamado pelo NavigationGuard ao mudar de rota.
+ */
+export function cancelInflightRequests(): number {
+  let count = 0
+  inflightControllers.forEach((meta, ctrl) => {
+    if (!meta.isMutation) {
+      try { ctrl.abort() } catch { /* ignore */ }
+      inflightControllers.delete(ctrl)
+      count += 1
+    }
+  })
+  // Limpa a fila do limitador (que só contém GETs, já que mutations
+  // não passam pelo throttle): rejeita os waiters pendentes
+  while (waitingQueue.length > 0) {
+    const w = waitingQueue.shift()
+    if (w) w.reject(new DOMException('Aborted', 'AbortError'))
+  }
+  return count
+}
+
 
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     try {
       const expectedUser = typeof window !== 'undefined'
         ? (window.localStorage.getItem('finmas_user') || '')
@@ -35,6 +159,38 @@ api.interceptors.request.use(
     } catch {
       /* ignore */
     }
+
+    // Cria AbortController próprio encadeado com qualquer signal pré-existente.
+    // Assim conseguimos cancelar globalmente sem perder o cancelamento que o
+    // React Query ou o caller eventualmente já tenham enviado.
+    const ctrl = new AbortController()
+    const externalSignal = config.signal as AbortSignal | undefined
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        ctrl.abort()
+      } else {
+        externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true })
+      }
+    }
+    config.signal = ctrl.signal as any
+    ;(config as any).__ctrl = ctrl
+
+    const method = (config?.method || 'get').toLowerCase()
+    const isMutation = method !== 'get'
+    inflightControllers.set(ctrl, { isMutation })
+
+    // Aplica o limitador ANTES de soltar o request na rede (só GETs)
+    if (shouldThrottle(config)) {
+      try {
+        await acquireSlot(ctrl.signal)
+        ;(config as any).__slotHeld = true
+      } catch (err) {
+        // Cancelado durante a espera na fila: limpa controller e propaga
+        inflightControllers.delete(ctrl)
+        throw err
+      }
+    }
+
     return config
   },
   (error) => {
@@ -44,9 +200,25 @@ api.interceptors.request.use(
 
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const ctrl = (response.config as any)?.__ctrl
+    if (ctrl) inflightControllers.delete(ctrl)
+    if ((response.config as any)?.__slotHeld) releaseSlot()
+    return response
+  },
   (error) => {
-    console.error('API Error:', error)
+    const ctrl = (error?.config as any)?.__ctrl
+    if (ctrl) inflightControllers.delete(ctrl)
+    if ((error?.config as any)?.__slotHeld) releaseSlot()
+
+    // Aborts não são erros de API — não poluir o console
+    const isAbort =
+      error?.code === 'ERR_CANCELED' ||
+      error?.name === 'CanceledError' ||
+      error?.name === 'AbortError'
+    if (!isAbort) {
+      console.error('API Error:', error)
+    }
     return Promise.reject(error)
   }
 )
@@ -987,13 +1159,16 @@ export const batchService = {
    *   { endpoint: '/home/resumo', method: 'GET', params: { mes: '12', ano: '2024' } }
    * ])
    */
-  batch: async (requests: Array<{
-    endpoint: string
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-    params?: Record<string, any>
-    body?: Record<string, any>
-  }>): Promise<Record<string, any>> => {
-    const response = await api.post('/batch', { requests })
+  batch: async (
+    requests: Array<{
+      endpoint: string
+      method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+      params?: Record<string, any>
+      body?: Record<string, any>
+    }>,
+    options?: { signal?: AbortSignal }
+  ): Promise<Record<string, any>> => {
+    const response = await api.post('/batch', { requests }, { signal: options?.signal })
     return response.data
   }
 }

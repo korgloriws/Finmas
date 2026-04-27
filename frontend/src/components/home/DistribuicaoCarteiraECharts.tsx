@@ -146,18 +146,29 @@ export default function DistribuicaoCarteiraECharts({
         }
       },
       legend: {
+        type: 'scroll',
         orient: 'horizontal',
         bottom: isMobile ? 4 : 8,
         left: 'center',
         top: undefined,
         itemGap: isMobile ? 6 : 8,
-        textStyle: { color: textColor, fontSize: isMobile ? 10 : 11 }
+        textStyle: {
+          color: textColor,
+          fontSize: isMobile ? 10 : 11,
+          overflow: 'truncate',
+
+          width: isMobile ? 80 : 110,
+        },
+        pageTextStyle: { color: textColor, fontSize: isMobile ? 10 : 11 },
+        pageIconColor: textColor,
+        pageIconInactiveColor: isDark ? '#475569' : '#cbd5e1',
+        pageButtonItemGap: 4,
       },
       series: [
         {
           type: 'pie',
-          radius: isMobile ? ['25%', '52%'] : ['35%', '68%'],
-          center: ['50%', isMobile ? '40%' : '45%'],
+          radius: isMobile ? ['22%', '48%'] : ['30%', '60%'],
+          center: ['50%', isMobile ? '38%' : '42%'],
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
@@ -211,13 +222,14 @@ export default function DistribuicaoCarteiraECharts({
   if (!option) return null
 
   return (
-    <div className="w-full h-full min-h-[260px] sm:min-h-[300px] md:min-h-[320px] overflow-visible">
+    <div className="w-full h-full overflow-hidden">
       <ReactECharts
         ref={chartRef}
         option={option}
-        style={{ width: '100%', height: '100%', minHeight: 260 }}
+        style={{ width: '100%', height: '100%' }}
         opts={{ renderer: 'canvas' }}
         notMerge
+        lazyUpdate
       />
     </div>
   )

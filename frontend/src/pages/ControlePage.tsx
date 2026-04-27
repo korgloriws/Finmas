@@ -112,7 +112,9 @@ export default function ControlePage() {
 
 
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
-  // Dados sempre carregam (são rápidos, estão no mesmo servidor)
+  // Os 3 endpoints abaixo são rápidos (SQLite local + cache em memória), então
+  // não há ganho de batch — o limitador global de 3 GETs paralelos já cobre.
+  // O cancelamento por NavigationGuard funciona normalmente em cada um.
   const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
     queryKey: ['receitas-despesas', user, filtroMes, filtroAno],
     queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),

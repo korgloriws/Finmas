@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import SecurityCheck from './components/SecurityCheck'
 import RootOrRedirect from './components/RootOrRedirect'
 import ErrorBoundary from './components/ErrorBoundary'
+import NavigationGuard from './components/NavigationGuard'
 // PERFORMANCE: Importar páginas diretamente (sem lazy) para navegação instantânea
 // As páginas agora são carregadas no bundle inicial, mas a navegação é instantânea
 import LoginPage from './pages/LoginPage'
@@ -24,7 +25,6 @@ import AgendaDividendosPage from './pages/AgendaDividendosPage'
 import RankingsPage from './pages/RankingsPage'
 import ConfiguracoesPage from './pages/ConfiguracoesPage'
 import GoogleCallbackPage from './pages/GoogleCallbackPage'
-import HomePage from './pages/HomePage'
 import NoticiasPage from './pages/NoticiasPage'
 import AcessoNegadoPage from './pages/AcessoNegadoPage'
 import VendasPage from './pages/VendasPage'
@@ -39,6 +39,7 @@ function App() {
         <AuthProvider>
           <ThemeProvider>
             <AnaliseProvider>
+              <NavigationGuard />
               <Routes>
           {/* Rotas públicas */}
           <Route path="/" element={<RootOrRedirect />} />
