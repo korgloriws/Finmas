@@ -52,6 +52,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const oauthGraceUntilRef = useRef<number>(0)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   
   const isAdmin = userRole === 'admin'
 
@@ -115,11 +117,55 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     // Verificar no backend em background (não bloqueia)
     try {
-      const response = await api.get('/auth/usuario-atual')
+      // No retorno imediato do OAuth alguns navegadores podem atrasar o envio
+      // do cookie de sessão no primeiríssimo request. Quando houver ?oauth=1,
+      // fazemos pequenos retries antes de concluir "não autenticado".
+      const isOAuthReturn = (() => {
+        try {
+          const params = new URLSearchParams(window.location.search)
+          return params.get('oauth') === '1'
+        } catch {
+          return false
+        }
+      })()
+
+      let response: any = null
+      let lastErr: any = null
+      const attempts = isOAuthReturn ? 4 : 1
+      for (let i = 0; i < attempts; i += 1) {
+        try {
+          response = await api.get('/auth/usuario-atual')
+          lastErr = null
+          break
+        } catch (err: any) {
+          lastErr = err
+          const status = err?.response?.status
+          const isAuthErr = status === 401 || status === 403
+          if (!isOAuthReturn || !isAuthErr || i === attempts - 1) {
+            throw err
+          }
+          await sleep(250)
+        }
+      }
+
+      if (!response && lastErr) throw lastErr
+
       if (response.data.username) {
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
         setAllowedScreens(response.data.allowed_screens ?? null)
+        // Limpar marcador oauth da URL após confirmar sessão com sucesso.
+        try {
+          const params = new URLSearchParams(window.location.search)
+          if (params.get('oauth') === '1') {
+            params.delete('oauth')
+            const q = params.toString()
+            const clean = `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash || ''}`
+            window.history.replaceState({}, '', clean)
+          }
+        } catch {
+          /* ignore */
+        }
       } else {
         setUser(null)
         setUserRole(null)
