@@ -46,6 +46,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userRole, setUserRole] = useState<'usuario' | 'admin' | null>(null)
   const [allowedScreens, setAllowedScreens] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const userRef = useRef<string | null>(null)
   // Janela temporária após OAuth para evitar falso negativo de sessão
   // quando o primeiro /auth/usuario-atual responde 401 transitório.
   const oauthGraceUntilRef = useRef<number>(0)
@@ -64,6 +65,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const id = TELAS_APP.find(t => t.path === pathOrId || t.path === `/${normalized}` || t.id === pathOrId || t.id === normalized)?.id ?? normalized
     return allowedScreens.includes(id)
   }, [user, isAdmin, allowedScreens])
+
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   
   useEffect(() => {
@@ -134,10 +139,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       const status = error?.response?.status
       const inOauthGraceWindow = Date.now() < oauthGraceUntilRef.current
+      const hasUserInMemory = !!userRef.current
+      const hasUserInStorage = (() => {
+        try {
+          return !!window.localStorage.getItem('finmas_user')
+        } catch {
+          return false
+        }
+      })()
       // Evita loop LandingPage logo após callback do Google.
       // Se acabamos de receber token/username da URL, preservamos o usuário
       // temporário e deixamos o próximo check confirmar o estado real.
-      if (inOauthGraceWindow && (status === 401 || status === 403 || !status)) {
+      if (
+        (inOauthGraceWindow || hasUserInMemory || hasUserInStorage) &&
+        (status === 401 || status === 403 || !status)
+      ) {
         return
       }
 
