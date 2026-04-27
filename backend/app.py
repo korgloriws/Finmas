@@ -342,12 +342,19 @@ def api_login():
                 cookie_secure = True
 
             
+            cookie_domain = None
+            if is_production:
+                # Em produção, compartilhar sessão entre finmas.com.br e www.finmas.com.br
+                # evita perda de sessão no retorno do OAuth por variação de host.
+                cookie_domain = os.getenv('COOKIE_DOMAIN', '.finmas.com.br')
+
             response.set_cookie(
                 'session_token',
                 session_token,
                 httponly=True,
                 samesite=cookie_samesite,
-                secure=cookie_secure
+                secure=cookie_secure,
+                domain=cookie_domain
             )
             
             return response
@@ -565,12 +572,19 @@ def api_google_callback():
         print(f"[GOOGLE OAUTH] Login bem-sucedido para {username} ({email})")
         
         response = redirect(redirect_url)
+        cookie_domain = None
+        if is_production:
+            # Em produção, compartilhar sessão entre finmas.com.br e www.finmas.com.br
+            # evita perda de sessão no retorno do OAuth por variação de host.
+            cookie_domain = os.getenv('COOKIE_DOMAIN', '.finmas.com.br')
+
         response.set_cookie(
             'session_token',
             session_token,
             httponly=True,
             samesite=cookie_samesite,
-            secure=cookie_secure
+            secure=cookie_secure,
+            domain=cookie_domain
         )
         
         return response
