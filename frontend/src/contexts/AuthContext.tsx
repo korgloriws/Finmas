@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import api, { TELAS_APP } from '../services/api'
@@ -46,6 +46,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userRole, setUserRole] = useState<'usuario' | 'admin' | null>(null)
   const [allowedScreens, setAllowedScreens] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
+  // Janela temporária após OAuth para evitar falso negativo de sessão
+  // quando o primeiro /auth/usuario-atual responde 401 transitório.
+  const oauthGraceUntilRef = useRef<number>(0)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   
@@ -128,6 +131,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         error?.name === 'CanceledError' ||
         error?.name === 'AbortError'
       if (isAbort) return
+
+      const status = error?.response?.status
+      const inOauthGraceWindow = Date.now() < oauthGraceUntilRef.current
+      // Evita loop LandingPage logo após callback do Google.
+      // Se acabamos de receber token/username da URL, preservamos o usuário
+      // temporário e deixamos o próximo check confirmar o estado real.
+      if (inOauthGraceWindow && (status === 401 || status === 403 || !status)) {
+        return
+      }
 
       setUser(null)
       setUserRole(null)
@@ -417,6 +429,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUserRole(role as 'usuario' | 'admin')
     setAllowedScreens(null)
     setLoading(false)
+    // Após callback OAuth, tolerar uma falha transitória do primeiro check.
+    oauthGraceUntilRef.current = Date.now() + 10_000
 
     // Limpar localStorage e definir novo usuário
     try {

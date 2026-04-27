@@ -13,7 +13,10 @@ import HomePage from '../pages/HomePage'
 export default function RootOrRedirect() {
   const { user, loading } = useAuth()
 
+  console.log('[FINMAS-ROOT-DEBUG] render: user=', user, '| loading=', loading)
+
   if (loading) {
+    console.log('[FINMAS-ROOT-DEBUG] -> SPINNER (loading=true)')
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" aria-hidden />
@@ -22,6 +25,7 @@ export default function RootOrRedirect() {
   }
 
   if (user) {
+    console.log('[FINMAS-ROOT-DEBUG] -> HomePage (user OK)')
     return (
       <ProtectedRoute>
         <SecurityCheck>
@@ -33,5 +37,6 @@ export default function RootOrRedirect() {
     )
   }
 
+  console.warn('[FINMAS-ROOT-DEBUG] -> LandingPage (user=null, loading=false)')
   return <LandingPage />
 }
