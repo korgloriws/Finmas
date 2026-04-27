@@ -556,7 +556,9 @@ def api_google_callback():
         else:
             cookie_samesite = 'Lax'
         
-        # Redirecionar para o frontend com token na URL (será capturado pelo frontend)
+        # Redirecionar para o frontend já autenticado por cookie de sessão.
+        # Evita depender de token na URL/query string e elimina race no callback
+        # do React que estava exigindo F5 em alguns navegadores.
         is_production = os.getenv('ENVIRONMENT') == 'production'
         if is_production:
             frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br')
@@ -566,7 +568,7 @@ def api_google_callback():
             frontend_url = 'http://localhost:3000'
             print(f"[GOOGLE OAUTH] Desenvolvimento detectado - forçando porta 3000")
         
-        redirect_url = f"{frontend_url}/auth/google/callback?token={session_token}&username={username}&role={role}"
+        redirect_url = f"{frontend_url}/"
         print(f"[GOOGLE OAUTH] ========================================")
         print(f"[GOOGLE OAUTH] Redirecionando para frontend: {redirect_url}")
         print(f"[GOOGLE OAUTH] Frontend URL final: {frontend_url}")
