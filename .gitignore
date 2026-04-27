@@ -175,4 +175,19 @@ frontend/build/
 
 # Backups automáticos
 backups/
-*.tar.gz 
+*.tar.gz
+
+# Flask FileSystemCache (gerado em runtime — NUNCA versionar)
+# Misturar cache de dev com produção causa OAuth/sessões instáveis e
+# respostas erradas de yfinance/cotações. Cada ambiente cuida do seu.
+cache/
+
+# SQLite WAL/SHM (gerados em runtime ao redor de *.db)
+# Já cobrimos *.db acima, mas o WAL/SHM são arquivos auxiliares do journal
+# que ficam ao lado e mudam constantemente.
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Bancos por usuário (cada servidor mantém os seus)
+backend/bancos_usuarios/
