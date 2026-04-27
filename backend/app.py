@@ -570,7 +570,7 @@ def api_google_callback():
         
         # Marca fluxo recém-vindo do OAuth para o frontend aplicar
         # uma checagem de sessão com pequeno retry antes de concluir "deslogado".
-        redirect_url = f"{frontend_url}/?oauth=1"
+        redirect_url = f"{frontend_url}/auth/google/callback?oauth=1"
         print(f"[GOOGLE OAUTH] ========================================")
         print(f"[GOOGLE OAUTH] Redirecionando para frontend: {redirect_url}")
         print(f"[GOOGLE OAUTH] Frontend URL final: {frontend_url}")

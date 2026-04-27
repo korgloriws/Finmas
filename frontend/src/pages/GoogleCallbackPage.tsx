@@ -32,15 +32,22 @@ const GoogleCallbackPage = () => {
       return
     }
 
-    // Fluxo novo (server-driven): backend já setou cookie e redirecionou.
-    // Se alguém cair aqui sem token, tentamos confirmar sessão e seguir.
-    checkCurrentUser()
-      .then(() => {
-        window.location.replace('/')
-      })
-      .catch(() => {
-        navigate('/login?error=invalid_callback', { replace: true })
-      })
+    // Fluxo server-driven: backend já setou cookie e redirecionou para esta rota.
+    // Alguns navegadores/proxies podem atrasar o primeiro request autenticado;
+    // por isso, fazemos retries curtos antes de concluir falha.
+    const run = async () => {
+      for (let i = 0; i < 8; i += 1) {
+        const authenticated = await checkCurrentUser()
+        if (authenticated) {
+          window.location.replace('/')
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+      navigate('/login?error=google_auth_failed', { replace: true })
+    }
+
+    run()
   }, [searchParams, navigate, setUserFromToken, checkCurrentUser])
 
   return (
