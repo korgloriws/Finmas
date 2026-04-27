@@ -31,11 +31,11 @@ const GoogleCallbackPage = () => {
     }
 
     // Define o usuário a partir dos params da URL (síncrono).
-    // O AuthProvider já dispara checkCurrentUser() na montagem para confirmar
-    // com o backend; chamar aqui de novo causava 2 requests concorrentes que
-    // competiam com este setUserFromToken e podiam zerar o user numa race.
     setUserFromToken(username, role || 'usuario')
-    navigate('/', { replace: true })
+    // IMPORTANTE: usar reload real aqui replica exatamente o cenário do F5,
+    // que você confirmou funcionar. Isso elimina qualquer race de estado
+    // no ciclo atual de render e garante que o app reinicie já autenticado.
+    window.location.replace('/')
   }, [searchParams, navigate, setUserFromToken])
 
   return (
