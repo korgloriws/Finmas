@@ -58,8 +58,19 @@ requestAnimationFrame(() => {
 })
 
 
+// Hotfix produção: desabilita SW para evitar cache antigo de index/app shell
+// interferindo em fluxos críticos de autenticação (ex.: callback Google).
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((reg) => reg.unregister())))
+      .then(async () => {
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          const keys = await window.caches.keys()
+          await Promise.all(keys.map((k) => window.caches.delete(k)))
+        }
+      })
+      .catch(() => {})
   })
 }
