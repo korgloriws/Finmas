@@ -30,22 +30,14 @@ export default function RootOrRedirect() {
     let cancelled = false
     setOauthRechecking(true)
 
-    const hasUserHint = () => {
-      try {
-        return !!window.localStorage.getItem('finmas_user')
-      } catch {
-        return false
-      }
-    }
-
     const run = async () => {
       // Revalida sessão ao cair em "/" após callback Google.
       // Evita decidir Landing cedo demais no primeiro ciclo pós-OAuth.
-      for (let i = 0; i < 6; i += 1) {
-        await checkCurrentUser()
+      for (let i = 0; i < 8; i += 1) {
+        const authenticated = await checkCurrentUser()
         if (cancelled) return
-        if (hasUserHint()) break
-        await new Promise((resolve) => setTimeout(resolve, 250))
+        if (authenticated) break
+        await new Promise((resolve) => setTimeout(resolve, 300))
       }
       if (!cancelled) setOauthRechecking(false)
     }
@@ -55,6 +47,12 @@ export default function RootOrRedirect() {
       cancelled = true
     }
   }, [loading, user, checkCurrentUser])
+
+  useEffect(() => {
+    if (oauthRechecking && user) {
+      setOauthRechecking(false)
+    }
+  }, [oauthRechecking, user])
 
   console.log('[FINMAS-ROOT-DEBUG] render: user=', user, '| loading=', loading)
 

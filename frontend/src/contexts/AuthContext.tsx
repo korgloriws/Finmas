@@ -23,7 +23,7 @@ interface AuthContextType {
   /** Atualiza allowedScreens no estado (ex.: após admin alterar telas do usuário atual) */
   refreshAllowedScreens: () => Promise<void>
   /** Recarrega user, role e allowed_screens do backend (útil após login com Google) */
-  checkCurrentUser: () => Promise<void>
+  checkCurrentUser: () => Promise<boolean>
   loading: boolean
 }
 
@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // re-runs em loop em useEffects que dependem dela (ex.: SecurityCheck e
   // GoogleCallbackPage). setStates do React são tratados separadamente — não
   // precisam estar nas deps.
-  const checkCurrentUser = useCallback(async () => {
+  const checkCurrentUser = useCallback(async (): Promise<boolean> => {
     // Verificar cache local primeiro (se houver user no localStorage, assumir que está logado)
     try {
       const cachedUser = window.localStorage.getItem('finmas_user')
@@ -166,10 +166,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         } catch {
           /* ignore */
         }
+        return true
       } else {
         setUser(null)
         setUserRole(null)
         setAllowedScreens(null)
+        return false
       }
     } catch (error: any) {
       // IMPORTANTE: Se a request foi abortada (ex.: NavigationGuard cancelou
@@ -181,7 +183,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         error?.code === 'ERR_CANCELED' ||
         error?.name === 'CanceledError' ||
         error?.name === 'AbortError'
-      if (isAbort) return
+      if (isAbort) return false
 
       const status = error?.response?.status
       const inOauthGraceWindow = Date.now() < oauthGraceUntilRef.current
@@ -200,12 +202,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         (inOauthGraceWindow || hasUserInMemory || hasUserInStorage) &&
         (status === 401 || status === 403 || !status)
       ) {
-        return
+        return !!(hasUserInMemory || hasUserInStorage)
       }
 
       setUser(null)
       setUserRole(null)
       setAllowedScreens(null)
+      return false
     } finally {
       setLoading(false)
     }
