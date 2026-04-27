@@ -86,16 +86,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [user])
 
   // PERFORMANCE: Verificar cache local primeiro antes de fazer chamada API
-  const checkCurrentUser = async () => {
+  // useCallback com deps vazias: a função fica estável entre renders, evitando
+  // re-runs em loop em useEffects que dependem dela (ex.: SecurityCheck e
+  // GoogleCallbackPage). setStates do React são tratados separadamente — não
+  // precisam estar nas deps.
+  const checkCurrentUser = useCallback(async () => {
     // Verificar cache local primeiro (se houver user no localStorage, assumir que está logado)
     try {
       const cachedUser = window.localStorage.getItem('finmas_user')
-      if (cachedUser && !user) {
-        // Se há cache mas não há user no estado, definir temporariamente
-        // Isso permite renderização imediata enquanto verifica no backend
+      if (cachedUser) {
+        // Se há cache, definir temporariamente para renderização imediata
+        // (setState é idempotente — não re-renderiza se o valor não mudou).
         setUser(cachedUser)
-        setUserRole('usuario') // Assumir role padrão temporariamente
-        setLoading(false) // Não bloquear enquanto verifica
+        setUserRole('usuario')
+        setLoading(false)
       }
     } catch {
       // Ignorar erros de localStorage
@@ -131,7 +135,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const refreshAllowedScreens = useCallback(async () => {
     if (!user) return
@@ -262,7 +266,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
-  const verificarPergunta = async (username: string) => {
+  // useCallback: SecurityCheck usa esta função em useEffect deps. Sem memoização
+  // o effect re-rodaria a cada render do AuthProvider.
+  const verificarPergunta = useCallback(async (username: string) => {
     try {
       const response = await api.post('/auth/verificar-pergunta', { username })
       return response.data
@@ -272,7 +278,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       throw new Error('Erro ao verificar pergunta de segurança')
     }
-  }
+  }, [])
 
   const logout = async () => {
     //  SEGURANÇA: Salvar username ANTES de limpar estado
@@ -394,7 +400,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
-  const setUserFromToken = (username: string, role: string) => {
+  // useCallback: GoogleCallbackPage usa esta função em useEffect deps. Sem
+  // memoização o effect re-rodaria em loop, causando race condition entre
+  // setUserFromToken e checkCurrentUser que podia zerar o usuário recém-logado.
+  const setUserFromToken = useCallback((username: string, role: string) => {
     //  SEGURANÇA: Limpar cache antes de definir novo usuário
     // Isso garante que dados de usuários anteriores não sejam mantidos
     try {
@@ -402,22 +411,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch {
       /* ignore */
     }
-    
+
     // Definir novo usuário (allowed_screens será carregado no próximo checkCurrentUser)
     setUser(username)
     setUserRole(role as 'usuario' | 'admin')
     setAllowedScreens(null)
     setLoading(false)
-    
+
     // Limpar localStorage e definir novo usuário
     try {
       window.localStorage.setItem('finmas_user', username)
     } catch {
       /* ignore */
     }
-    
+
     console.log(`[SEGURANÇA] Usuário definido via token: ${username}, cache limpo`)
-  }
+  }, [queryClient])
 
   const value = {
     user,

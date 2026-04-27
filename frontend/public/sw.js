@@ -1,4 +1,7 @@
-const CACHE_NAME = 'finmas-cache-2025-01-15-01'
+// Bump deste valor a CADA deploy invalida o cache do PWA em todos os clientes.
+// Sintoma de cache preso: SPA antiga servida após deploy, fluxos novos quebrados
+// (ex.: login Google caindo em LandingPage), enquanto F5 forçado funciona.
+const CACHE_NAME = 'finmas-cache-2026-04-27-01'
 const ASSETS = ['/']
 
 self.addEventListener('install', (event) => {
