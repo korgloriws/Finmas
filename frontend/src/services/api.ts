@@ -127,7 +127,37 @@ const inflightControllers = new Map<AbortController, InflightMeta>()
  */
 function isProtectedRoute(url: string | undefined): boolean {
   if (!url) return false
-  return url.startsWith('/auth/') || url.startsWith('auth/')
+
+  // Aceitar vários formatos de URL que o axios pode receber:
+  // - "/auth/usuario-atual"
+  // - "auth/usuario-atual"
+  // - "/api/auth/usuario-atual"
+  // - "https://finmas.com.br/api/auth/usuario-atual"
+  // Se esta detecção falhar, o NavigationGuard pode abortar requests críticas
+  // de sessão e derrubar o usuário para a LandingPage (bug do login Google).
+  const raw = String(url).trim().toLowerCase()
+  if (!raw) return false
+
+  let path = raw
+  try {
+    // URL absoluta
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      path = new URL(raw).pathname.toLowerCase()
+    } else if (raw.startsWith('//')) {
+      // URL sem esquema
+      path = new URL(`https:${raw}`).pathname.toLowerCase()
+    }
+  } catch {
+    // fallback para string raw
+    path = raw
+  }
+
+  return (
+    path.startsWith('/auth/') ||
+    path.startsWith('auth/') ||
+    path.startsWith('/api/auth/') ||
+    path.includes('/auth/')
+  )
 }
 
 /**

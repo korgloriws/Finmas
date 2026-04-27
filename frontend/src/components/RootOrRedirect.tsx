@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import LandingPage from '../pages/LandingPage'
 import ProtectedRoute from './ProtectedRoute'
@@ -11,11 +12,53 @@ import HomePage from '../pages/HomePage'
  * Caso contrário, exibe a landing page pública.
  */
 export default function RootOrRedirect() {
-  const { user, loading } = useAuth()
+  const { user, loading, checkCurrentUser } = useAuth()
+  const [oauthRechecking, setOauthRechecking] = useState(false)
+
+  useEffect(() => {
+    const isOAuthReturn = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search)
+        return params.get('oauth') === '1'
+      } catch {
+        return false
+      }
+    })()
+
+    if (!isOAuthReturn || loading || user) return
+
+    let cancelled = false
+    setOauthRechecking(true)
+
+    const hasUserHint = () => {
+      try {
+        return !!window.localStorage.getItem('finmas_user')
+      } catch {
+        return false
+      }
+    }
+
+    const run = async () => {
+      // Revalida sessão ao cair em "/" após callback Google.
+      // Evita decidir Landing cedo demais no primeiro ciclo pós-OAuth.
+      for (let i = 0; i < 6; i += 1) {
+        await checkCurrentUser()
+        if (cancelled) return
+        if (hasUserHint()) break
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+      if (!cancelled) setOauthRechecking(false)
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, checkCurrentUser])
 
   console.log('[FINMAS-ROOT-DEBUG] render: user=', user, '| loading=', loading)
 
-  if (loading) {
+  if (loading || oauthRechecking) {
     console.log('[FINMAS-ROOT-DEBUG] -> SPINNER (loading=true)')
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
