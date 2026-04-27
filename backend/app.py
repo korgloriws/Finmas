@@ -547,10 +547,14 @@ def api_google_callback():
             req_origin = ''
             host_url = ''
         is_cross_site = bool(req_origin and (req_origin not in host_url))
-        cookie_samesite = 'None' if (is_production and is_cross_site) else 'Lax'
-        
-        if cookie_samesite == 'None' and not cookie_secure:
+        # OAuth callback vem de um provedor externo (Google). Em alguns navegadores,
+        # manter Lax aqui pode atrasar/disputar o envio da sessão no primeiro ciclo.
+        # Para fluxo OAuth em produção, forçamos SameSite=None + Secure.
+        if is_production:
+            cookie_samesite = 'None'
             cookie_secure = True
+        else:
+            cookie_samesite = 'Lax'
         
         # Redirecionar para o frontend com token na URL (será capturado pelo frontend)
         is_production = os.getenv('ENVIRONMENT') == 'production'
@@ -600,8 +604,22 @@ def api_google_callback():
 def api_usuario_atual():
     """Retorna informações do usuário atual, incluindo role"""
     try:
+        try:
+            host_hdr = request.host
+            origin_hdr = request.headers.get('Origin')
+            referer_hdr = request.headers.get('Referer')
+            token_cookie = request.cookies.get('session_token')
+            print(
+                f"[AUTH DEBUG] /api/auth/usuario-atual host={host_hdr} "
+                f"origin={origin_hdr} referer={referer_hdr} "
+                f"cookie_present={bool(token_cookie)}"
+            )
+        except Exception:
+            pass
+
         usuario = get_usuario_atual()
         if usuario:
+            print(f"[AUTH DEBUG] /api/auth/usuario-atual usuario={usuario}")
             perfil = obter_perfil_usuario(usuario)
             allowed = obter_allowed_screens(usuario)
             payload = {
@@ -613,6 +631,7 @@ def api_usuario_atual():
             }
             return jsonify(payload), 200
         else:
+            print("[AUTH DEBUG] /api/auth/usuario-atual usuario=None (401)")
             return jsonify({"error": "Nenhum usuário logado"}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
