@@ -24,7 +24,6 @@ import CorrecaoMonetariaPage from './pages/CorrecaoMonetariaPage'
 import AgendaDividendosPage from './pages/AgendaDividendosPage'
 import RankingsPage from './pages/RankingsPage'
 import ConfiguracoesPage from './pages/ConfiguracoesPage'
-import GoogleCallbackPage from './pages/GoogleCallbackPage'
 import NoticiasPage from './pages/NoticiasPage'
 import AcessoNegadoPage from './pages/AcessoNegadoPage'
 import VendasPage from './pages/VendasPage'
@@ -45,7 +44,6 @@ function App() {
           {/* Rotas públicas */}
           <Route path="/" element={<RootOrRedirect />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
           <Route path="/recuperar-senha" element={<RecuperacaoSenhaPage />} />
           <Route path="/configurar-seguranca" element={<ConfigurarSegurancaPage />} />
           <Route path="/vendas" element={<VendasPage />} />

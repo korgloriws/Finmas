@@ -1392,8 +1392,7 @@ carregamento_em_andamento = False
 lock = threading.Lock()  
 
 
-_is_production_env = os.getenv('ENVIRONMENT') == 'production' or bool(os.getenv('FLY_APP_NAME'))
-_default_cache_dir = '/tmp/finmas-cache' if _is_production_env else os.path.abspath(os.path.join(_base_dir, '..', 'cache'))
+_default_cache_dir = '/tmp/finmas-cache' if os.name != 'nt' else os.path.abspath(os.path.join(_base_dir, '..', 'cache'))
 _CACHE_DIR = os.getenv('FLASK_CACHE_DIR') or _default_cache_dir
 try:
     os.makedirs(_CACHE_DIR, exist_ok=True)
