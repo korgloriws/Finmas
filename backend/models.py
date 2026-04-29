@@ -2628,6 +2628,7 @@ def obter_taxas_indexadores():
     try:
         import requests
         from datetime import datetime, timedelta
+        from math import pow
         
         def sgs_last(series_id, use_range=False):
             try:
@@ -2650,23 +2651,34 @@ def obter_taxas_indexadores():
             except Exception:
                 return None
         
-        # SELIC (série 432) - taxa anual
+        # SELIC (série 432)
         selic = sgs_last(432, use_range=True)
-        # CDI (série 12) - taxa anual
+        # CDI (série 12)
         cdi = sgs_last(12, use_range=True)
         # IPCA (série 433) - taxa mensal
         ipca = sgs_last(433)
         
         print(f"DEBUG: Taxas obtidas - SELIC: {selic}%, CDI: {cdi}%, IPCA: {ipca}%")
         
-        # CORREÇÃO: Se as taxas estão muito baixas, usar valores padrão
-        if cdi and cdi < 1.0:  # Se CDI < 1%, provavelmente está em decimal
-            cdi = cdi * 100  # Converter para percentual
-            print(f"DEBUG: CDI convertido de {cdi/100}% para {cdi}%")
-        
-        if selic and selic < 1.0:  # Se SELIC < 1%, provavelmente está em decimal
-            selic = selic * 100  # Converter para percentual
-            print(f"DEBUG: SELIC convertido de {selic/100}% para {selic}%")
+        # Normalização robusta:
+        # - <= 0.2: taxa diária em %, anualiza por 252 dias úteis
+        # - <= 2.0: taxa mensal em %, anualiza por 12 meses
+        # - > 2.0: já anual em %
+        def normalizar_para_anual(taxa, nome):
+            if taxa is None:
+                return None
+            if taxa <= 0.2:
+                anual = (pow(1 + (taxa / 100.0), 252) - 1) * 100
+                print(f"DEBUG: {nome} diário {taxa}% -> anual {anual:.4f}%")
+                return anual
+            if taxa <= 2.0:
+                anual = (pow(1 + (taxa / 100.0), 12) - 1) * 100
+                print(f"DEBUG: {nome} mensal {taxa}% -> anual {anual:.4f}%")
+                return anual
+            return taxa
+
+        cdi = normalizar_para_anual(cdi, "CDI")
+        selic = normalizar_para_anual(selic, "SELIC")
         
         # FALLBACK: Se não conseguir obter taxas, usar valores padrão
         if not cdi or cdi < 5.0:  # CDI muito baixo, usar padrão
@@ -2916,6 +2928,7 @@ def _obter_taxa_atual_indexador(indexador):
     try:
         import requests
         from datetime import datetime, timedelta
+        from math import pow
         
         # Determinar série do indexador
         if indexador == "CDI":
@@ -2941,16 +2954,24 @@ def _obter_taxa_atual_indexador(indexador):
             # Obter a taxa mais recente
             taxa = float(dados[0]['valor'])
             
-            # Para IPCA, já vem em percentual mensal
+            # Para IPCA, manter em percentual mensal (usado por cálculos mensais)
             if indexador == "IPCA":
                 print(f"DEBUG: IPCA atual: {taxa}% mensal")
                 return taxa
-            
-            # Para CDI/SELIC, verificar se está em decimal
-            if taxa < 1.0:  # Se está em decimal, converter para percentual
-                taxa = taxa * 100
-                print(f"DEBUG: {indexador} convertido de decimal para percentual: {taxa}%")
-            
+
+            # Para CDI/SELIC, sempre retornar taxa anual em percentual.
+            # - <= 0.2: taxa diária em %, anualizar por 252 dias úteis
+            # - <= 2.0: taxa mensal em %, anualizar por 12 meses
+            # - > 2.0: já anual
+            if taxa <= 0.2:
+                taxa_anual = (pow(1 + (taxa / 100.0), 252) - 1) * 100
+                print(f"DEBUG: {indexador} diário {taxa}% -> anual {taxa_anual:.4f}%")
+                return taxa_anual
+            if taxa <= 2.0:
+                taxa_anual = (pow(1 + (taxa / 100.0), 12) - 1) * 100
+                print(f"DEBUG: {indexador} mensal {taxa}% -> anual {taxa_anual:.4f}%")
+                return taxa_anual
+
             print(f"DEBUG: {indexador} atual: {taxa}% a.a.")
             return taxa
             
@@ -2985,8 +3006,18 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"[ERRO] Preco inicial invalido ou zero: {preco_inicial}")
             return preco_inicial if preco_inicial else None
         
-        if not indexador or indexador_pct is None:
+        if not indexador:
             print(f"[ERRO] Indexador ou percentual faltando: indexador={indexador}, pct={indexador_pct}")
+            return preco_inicial
+
+        # Compatibilidade para títulos antigos: quando o percentual vier vazio/zero
+        # em indexadores-base, assumir 100% do indexador.
+        if indexador in ["CDI", "SELIC", "IPCA"] and (indexador_pct is None or indexador_pct <= 0):
+            indexador_pct = 100.0
+            print(f"DEBUG: Percentual ausente para {indexador}; assumindo 100% do indexador.")
+
+        if indexador_pct is None:
+            print(f"[ERRO] Percentual do indexador ausente para {indexador}")
             return preco_inicial
         
         # VALIDAÇÃO CRÍTICA: indexador_pct deve ser um valor razoável (entre 0.1 e 1000)
@@ -3375,7 +3406,7 @@ def atualizar_precos_indicadores_carteira():
             conn = _pg_conn_for_user(usuario)
             try:
                 with conn.cursor() as c:
-                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio FROM carteira')
+                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao FROM carteira')
                     rows = c.fetchall()
                     
                     # Coletar todos os tickers únicos
@@ -3385,7 +3416,7 @@ def atualizar_precos_indicadores_carteira():
                             tickers_para_buscar.append(_ticker)
                     
                     # Buscar todos os preços de uma vez
-                    print(f"🔄 Buscando preços em batch para {len(tickers_para_buscar)} tickers...")
+                    print(f" Buscando preços em batch para {len(tickers_para_buscar)} tickers...")
                     precos_batch = obter_precos_batch(tickers_para_buscar)
                     
                     # Processar cada ativo com os preços já obtidos
@@ -3420,13 +3451,14 @@ def atualizar_precos_indicadores_carteira():
                         base_data = row[8] if (len(row) > 8) else None
                         _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
                         _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
+                        _data_aplicacao = row[11] if (len(row) > 11 and row[11]) else None
                         
                         if not _ticker:
                             continue
                         
                         # Determinar novo preco_atual e métricas
                         # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
-                        if _indexador and _indexador_pct:
+                        if _indexador:
                             print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
                             # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
                             # 1. indexador_base_preco (se configurado explicitamente)
@@ -3436,13 +3468,15 @@ def atualizar_precos_indicadores_carteira():
                             # NUNCA usar preco_atual como base!
                             if base_preco is not None and base_data:
                                 preco_inicial = base_preco
-                                _data_adicao = base_data
+                                data_base_calculo = base_data
                                 print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
                             elif _preco_compra is not None and _preco_compra > 0:
                                 preco_inicial = _preco_compra
+                                data_base_calculo = _data_aplicacao or _data_adicao
                                 print(f"DEBUG: Usando preco_compra: {preco_inicial}")
                             elif _preco_medio is not None and _preco_medio > 0:
                                 preco_inicial = _preco_medio
+                                data_base_calculo = _data_aplicacao or _data_adicao
                                 print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                             else:
                                 # Último recurso: buscar primeira movimentação
@@ -3450,20 +3484,21 @@ def atualizar_precos_indicadores_carteira():
                                 mov_row = c.fetchone()
                                 if mov_row and mov_row[0] and float(mov_row[0]) > 0:
                                     preco_inicial = float(mov_row[0])
+                                    data_base_calculo = _data_aplicacao or _data_adicao
                                     print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
                                 else:
                                     # Se não encontrou nada, pular este ativo (não atualizar)
                                     print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
                                     continue
                             
-                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
+                            print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data base: {data_base_calculo}")
                             
                             # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
                             if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
                                 print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
                                 continue
                             
-                            preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
+                            preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, data_base_calculo)
                             
 
                             if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
@@ -3503,7 +3538,7 @@ def atualizar_precos_indicadores_carteira():
             conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             try:
                 cur = conn.cursor()
-                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio FROM carteira')
+                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao FROM carteira')
                 rows = cur.fetchall()
                 
                 # Coletar todos os tickers únicos para SQLite também
@@ -3546,24 +3581,27 @@ def atualizar_precos_indicadores_carteira():
                     base_data = row[8] if (len(row) > 8) else None
                     _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
                     _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
+                    _data_aplicacao = row[11] if (len(row) > 11 and row[11]) else None
                     
                     if not _ticker:
                         continue
                     
                     # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
-                    if _indexador and _indexador_pct:
+                    if _indexador:
                         print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
                         
 
                         if base_preco is not None and base_data:
                             preco_inicial = base_preco
-                            _data_adicao = base_data
+                            data_base_calculo = base_data
                             print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
                         elif _preco_compra is not None and _preco_compra > 0:
                             preco_inicial = _preco_compra
+                            data_base_calculo = _data_aplicacao or _data_adicao
                             print(f"DEBUG: Usando preco_compra: {preco_inicial}")
                         elif _preco_medio is not None and _preco_medio > 0:
                             preco_inicial = _preco_medio
+                            data_base_calculo = _data_aplicacao or _data_adicao
                             print(f"DEBUG: Usando preco_medio: {preco_inicial}")
                         else:
                             # Último recurso: buscar primeira movimentação
@@ -3571,20 +3609,21 @@ def atualizar_precos_indicadores_carteira():
                             mov_row = cur.fetchone()
                             if mov_row and mov_row[0] and float(mov_row[0]) > 0:
                                 preco_inicial = float(mov_row[0])
+                                data_base_calculo = _data_aplicacao or _data_adicao
                                 print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
                             else:
                                 # Se não encontrou nada, pular este ativo (não atualizar)
                                 print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
                                 continue
                         
-                        print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data: {_data_adicao}")
+                        print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data base: {data_base_calculo}")
                         
                         # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
                         if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
                             print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
                             continue
                         
-                        preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, _data_adicao)
+                        preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, data_base_calculo)
                         
 
                         if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:

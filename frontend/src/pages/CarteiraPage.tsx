@@ -208,7 +208,7 @@ export default function CarteiraPage() {
   // Atualizar preços em background quando abrir a aba "Ativos"
   // Isso mantém o carregamento instantâneo (mostra cache) e atualiza preços em background
   useEffect(() => {
-    if (activeTab === 'ativos' && carteira) {
+    if (activeTab === 'ativos' && carteira && carteira.length > 0) {
       const agora = Date.now()
       const tempoDesdeUltimaAtualizacao = agora - ultimaAtualizacaoPrecos.current
       
@@ -233,7 +233,7 @@ export default function CarteiraPage() {
           })
       }
     }
-  }, [activeTab, refetchCarteira]) // Não incluir 'carteira' nas dependências para evitar loops
+  }, [activeTab, carteira?.length, refetchCarteira]) // Atualiza quando a carteira finalmente carregar na aba de ativos
 
   const { data: tiposApi } = useQuery({
     queryKey: ['tipos-ativos', user],

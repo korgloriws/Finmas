@@ -12,6 +12,11 @@ import {
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatCurrency, formatDividendYield, formatPercentage, formatNumber } from '../../utils/formatters'
+import {
+  calculateFixedIncomeAnnualRate,
+  normalizeIndexerPercent,
+  type FixedIncomeIndexer
+} from '../../utils/fixedIncomeCalculator'
 import TickerWithLogo from '../TickerWithLogo'
 import VencimentoStatus from '../VencimentoStatus'
 import B3ImportModal from './B3ImportModal'
@@ -320,28 +325,32 @@ function TabelaAtivosPorTipo({
                         <td className="px-3 py-2 text-sm font-semibold">{formatCurrency(ativo?.valor_total)}</td>
                         {tipo.toLowerCase().includes('renda fixa') && (
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {ativo?.indexador ? `${ativo.indexador} ${ativo.indexador_pct ? `${ativo.indexador_pct}%` : ''}` : '-'}
+                            {(() => {
+                              const idx = (ativo?.indexador || '') as FixedIncomeIndexer | ''
+                              if (!idx) return '-'
+                              const pct = normalizeIndexerPercent(idx, ativo?.indexador_pct ?? null)
+                              return `${idx}${pct ? ` ${pct.toFixed(2)}%` : ''}`
+                            })()}
                           </td>
                         )}
                         {tipo.toLowerCase().includes('renda fixa') && (
                           <td className="px-3 py-2 text-xs">
                             {(() => {
-                              const pct = (ativo?.indexador_pct || 0)
-                              const idx = (ativo?.indexador || '') as 'CDI'|'IPCA'|'SELIC'|''
-                              const getVal = (d:any) => {
-                                if (!d) return null
-                                const v = parseFloat(String(d.valor))
-                                return isFinite(v) ? v : null
-                              }
-                              const raw = idx === 'CDI' ? getVal(indicadores?.cdi)
-                                : idx === 'IPCA' ? getVal(indicadores?.ipca)
-                                : idx === 'SELIC' ? getVal(indicadores?.selic)
-                                : null
-                              if (!idx || raw == null || !pct) return '-'
-              
-                              const baseAnual = raw <= 2 ? ((Math.pow(1 + (raw/100), 12) - 1) * 100) : raw
-                              const anual = (pct/100) * baseAnual
-                              return `${anual.toFixed(1)}% a.a.`
+                              const idx = (ativo?.indexador || '') as FixedIncomeIndexer | ''
+                              if (!idx) return '-'
+
+                              const anual = calculateFixedIncomeAnnualRate(
+                                idx,
+                                ativo?.indexador_pct ?? null,
+                                {
+                                  cdi: indicadores?.cdi,
+                                  ipca: indicadores?.ipca,
+                                  selic: indicadores?.selic
+                                }
+                              )
+
+                              if (anual === null) return '-'
+                              return `${anual.toFixed(2)}% a.a.`
                             })()}
                           </td>
                         )}
