@@ -4537,6 +4537,11 @@ def api_get_marmitas():
 def api_adicionar_marmita():
 
     try:
+        # SEGURANCA: manter validação alinhada com GET/PUT/DELETE de marmitas
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
         data = request.get_json()
         data_marmita = data.get('data')
         valor = data.get('valor', 0)
@@ -4554,15 +4559,11 @@ def api_adicionar_marmita():
         adicionar_marmita(data_limpa, valor, 1 if comprou else 0)
         print(f"DEBUG ADICIONAR MARMITA: Marmita adicionada com sucesso")
         
-        # Invalidar cache específico de marmitas
+        # Invalidar cache de marmitas/gastos para evitar atraso visual no frontend
+        # após POST (lista e gráfico devem refletir imediatamente).
         try:
             if cache:
-                usuario = get_usuario_atual()
-                if usuario:
-                    # Invalidar cache de marmitas para o usuário
-                    cache.delete_memoized(lambda: None, f"marmitas:{usuario}")
-                    # Também limpar cache geral
-                    cache.clear()
+                cache.clear()
         except Exception:
             pass
         

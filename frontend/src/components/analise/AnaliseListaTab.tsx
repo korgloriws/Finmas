@@ -586,7 +586,85 @@ function TabelaAtivos({
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
+      {/* Mobile: cards responsivos (evita corte visual da tabela em telas pequenas) */}
+      <div className="md:hidden divide-y divide-border">
+        {ativosVisiveis.map((ativo) => {
+          const fiiMeta = fiiMetadataMap?.[ativo.ticker]
+          return (
+            <div key={ativo.ticker} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <TickerWithLogo ticker={ativo.ticker} />
+                  <p className="mt-1 text-sm font-semibold text-foreground truncate">{ativo.nome_completo}</p>
+                  <p className="text-xs text-muted-foreground truncate">{ativo.industria || 'N/A'}</p>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${
+                  ativo.tipo === 'Ação' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' :
+                  ativo.tipo === 'FII' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
+                  'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300'
+                }`}>
+                  {ativo.tipo}
+                </span>
+              </div>
+
+              {isFiiTable && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-muted/40 rounded-lg p-2">
+                    <p className="text-muted-foreground">Tipo FII</p>
+                    <p className="font-semibold text-foreground">{fiiMeta?.tipo || '-'}</p>
+                  </div>
+                  <div className="bg-muted/40 rounded-lg p-2">
+                    <p className="text-muted-foreground">Segmento</p>
+                    <p className="font-semibold text-foreground">{fiiMeta?.segmento || '-'}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">Preço</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(Number.isFinite(Number(ativo.preco_atual)) ? Number(ativo.preco_atual) : 0)}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">DY</p>
+                  <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.dividend_yield)) ? Number(ativo.dividend_yield).toFixed(2) : '0.00'}%</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">P/L</p>
+                  <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pl)) ? Number(ativo.pl).toFixed(2) : '-'}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">P/VP</p>
+                  <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pvp)) ? Number(ativo.pvp).toFixed(2) : '-'}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">ROE</p>
+                  <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.roe)) ? Number(ativo.roe).toFixed(2) : '0.00'}%</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-2">
+                  <p className="text-muted-foreground">Liquidez</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(ativo.liquidez_diaria || 0)}</p>
+                </div>
+              </div>
+
+              <div>
+                {isAtivoNaCarteira(ativo.ticker) ? (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300 rounded-full text-xs font-semibold">
+                    Na Carteira
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300 rounded-full text-xs font-semibold">
+                    Disponível
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Desktop/tablet: tabela completa */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-muted/50">
             <tr>
