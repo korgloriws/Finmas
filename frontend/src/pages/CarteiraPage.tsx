@@ -218,10 +218,13 @@ export default function CarteiraPage() {
         
         // Atualizar preços no backend primeiro (em background, não bloqueia UI)
         carteiraService.refreshCarteira()
-          .then(() => {
+          .then((result) => {
             // Após atualizar no backend, fazer refetch para buscar dados atualizados
             // Isso acontece em background, não bloqueia a UI
             refetchCarteira()
+            if (result?.success) {
+              toast.success('Valores atualizados', { id: 'carteira-valores-atualizados' })
+            }
           })
           .catch((error) => {
             // Se der erro no refresh, ainda tenta fazer refetch (pode ter dados atualizados)
