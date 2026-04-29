@@ -6,18 +6,14 @@ import LoadingSpinner from '../components/LoadingSpinner'
 const GoogleCallbackPage = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { setUserFromToken, checkCurrentUser } = useAuth()
-  // Garante execução única mesmo se o useEffect re-disparar por mudança de deps
-  // (setUserFromToken não é memoizado e causa re-runs em loop sem essa guard).
+  const { checkCurrentUser } = useAuth()
+  // Garante execução única mesmo se o useEffect re-disparar por mudança de deps.
   const hasRunRef = useRef(false)
 
   useEffect(() => {
     if (hasRunRef.current) return
     hasRunRef.current = true
 
-    const token = searchParams.get('token')
-    const username = searchParams.get('username')
-    const role = searchParams.get('role')
     const error = searchParams.get('error')
 
     if (error) {
@@ -25,16 +21,8 @@ const GoogleCallbackPage = () => {
       return
     }
 
-    // Compatibilidade com callback antigo (token na URL).
-    if (token && username) {
-      setUserFromToken(username, role || 'usuario')
-      navigate('/home', { replace: true })
-      return
-    }
-
-    // Fluxo server-driven: backend já setou cookie e redirecionou para esta rota.
-    // Alguns navegadores/proxies podem atrasar o primeiro request autenticado;
-    // por isso, fazemos retries curtos antes de concluir falha.
+    // Fluxo unificado: backend já setou cookie de sessão, igual ao login normal.
+    // Fazemos retries curtos apenas para tolerar atraso transitório no primeiro request.
     const run = async () => {
       for (let i = 0; i < 8; i += 1) {
         const authenticated = await checkCurrentUser()
@@ -48,7 +36,7 @@ const GoogleCallbackPage = () => {
     }
 
     run()
-  }, [searchParams, navigate, setUserFromToken, checkCurrentUser])
+  }, [searchParams, navigate, checkCurrentUser])
 
   return (
     <div className="min-h-screen flex items-center justify-center">

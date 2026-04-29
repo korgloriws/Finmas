@@ -568,9 +568,9 @@ def api_google_callback():
             frontend_url = 'http://localhost:3000'
             print(f"[GOOGLE OAUTH] Desenvolvimento detectado - forçando porta 3000")
         
-        # Marca fluxo recém-vindo do OAuth para o frontend aplicar
-        # uma checagem de sessão com pequeno retry antes de concluir "deslogado".
-        redirect_url = f"{frontend_url}/auth/google/callback?oauth=1"
+        # Finaliza no callback dedicado do frontend.
+        # O frontend confirma a sessão por cookie e segue para /home.
+        redirect_url = f"{frontend_url}/auth/google/callback"
         print(f"[GOOGLE OAUTH] ========================================")
         print(f"[GOOGLE OAUTH] Redirecionando para frontend: {redirect_url}")
         print(f"[GOOGLE OAUTH] Frontend URL final: {frontend_url}")
