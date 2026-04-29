@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, TrendingUp, BookOpen, DollarSign, Calendar, Trophy, Settings, Newspaper, Scale, Compass } from 'lucide-react'
+import { Moon, Sun, BarChart3, Wallet, Calculator, Home, Search, LogOut, User, Menu, X, BookOpen, Calendar, Trophy, Settings, Newspaper, Compass } from 'lucide-react'
 import FinmasLogo from './FinmasLogo'
 
 interface LayoutProps {
@@ -18,9 +18,7 @@ const menuItemsFull = [
   { path: '/analise', label: 'Análise de oportunidades', icon: BarChart3 },
   { path: '/noticias', label: 'Notícias', icon: Newspaper },
   { path: '/agenda-dividendos', label: 'Agenda de Dividendos', icon: Calendar },
-  { path: '/juros-compostos', label: 'Calculadora de Juros Compostos', icon: TrendingUp },
-  { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
-  { path: '/correcao-monetaria', label: 'Correção Monetária', icon: Scale },
+  { path: '/calculadora', label: 'Calculadoras', icon: Calculator },
   { path: '/rankings', label: 'Rankings', icon: Trophy },
 ]
 
@@ -29,9 +27,7 @@ const menuItemsPublic = [
   { path: '/conhecer', label: 'Conhecer sistema completo', icon: Compass },
   { path: '/detalhes', label: 'Detalhes dos ativos', icon: Search },
   { path: '/guia', label: 'Guia do Mercado', icon: BookOpen },
-  { path: '/juros-compostos', label: 'Calculadora de Juros Compostos', icon: TrendingUp },
-  { path: '/conversor', label: 'Conversor de Moedas', icon: DollarSign },
-  { path: '/correcao-monetaria', label: 'Correção Monetária', icon: Scale },
+  { path: '/calculadora', label: 'Calculadoras', icon: Calculator },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -80,6 +76,10 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Carteira – Ativos', path: '/carteira', keywords: 'carteira ativos posicoes', params: { tab: 'ativos' } },
     { label: 'Carteira – Proventos', path: '/carteira', keywords: 'carteira proventos dividendos', params: { tab: 'proventos' } },
     { label: 'Carteira – Rebalanceamento', path: '/carteira', keywords: 'carteira rebalanceamento metas', params: { tab: 'rebalance' } },
+    { label: 'Calculadora – Juros Compostos', path: '/calculadora', keywords: 'calculadora juros compostos', params: { tab: 'juros-compostos' } },
+    { label: 'Calculadora – Correção Monetária', path: '/calculadora', keywords: 'calculadora correcao monetaria ipca inpc igpm', params: { tab: 'correcao-monetaria' } },
+    { label: 'Calculadora – Conversor de Moedas', path: '/calculadora', keywords: 'calculadora conversor moedas cambio', params: { tab: 'conversor' } },
+    { label: 'Calculadora – Indicadores BCB', path: '/calculadora', keywords: 'calculadora indicadores bcb cdi selic ipca', params: { tab: 'indicadores' } },
     { label: 'Rankings', path: '/rankings', keywords: 'rankings mercado acoes fiis bdrs', params: {} },
     { label: 'Notícias', path: '/noticias', keywords: 'noticias mercado financeiro valor infomoney', params: {} },
   ]

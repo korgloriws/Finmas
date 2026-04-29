@@ -17,10 +17,8 @@ import DetalhesPage from './pages/DetalhesPage'
 import AnalisePage from './pages/AnalisePage'
 import CarteiraPage from './pages/CarteiraPage'
 import ControlePage from './pages/ControlePage'
-import JurosCompostosPage from './pages/JurosCompostosPage'
 import GuiaMercadoPage from './pages/GuiaMercadoPage'
-import ConversorMoedasPage from './pages/ConversorMoedasPage'
-import CorrecaoMonetariaPage from './pages/CorrecaoMonetariaPage'
+import CalculadoraPage from './pages/CalculadoraPage'
 import AgendaDividendosPage from './pages/AgendaDividendosPage'
 import RankingsPage from './pages/RankingsPage'
 import ConfiguracoesPage from './pages/ConfiguracoesPage'
@@ -53,9 +51,10 @@ function App() {
           {/* Rotas públicas com Layout (gostinho: sem login) */}
           <Route path="/conhecer" element={<SecurityCheck><Layout><ConhecerPage /></Layout></SecurityCheck>} />
           <Route path="/guia" element={<SecurityCheck><Layout><GuiaMercadoPage /></Layout></SecurityCheck>} />
-          <Route path="/juros-compostos" element={<SecurityCheck><Layout><JurosCompostosPage /></Layout></SecurityCheck>} />
-          <Route path="/conversor" element={<SecurityCheck><Layout><ConversorMoedasPage /></Layout></SecurityCheck>} />
-          <Route path="/correcao-monetaria" element={<SecurityCheck><Layout><CorrecaoMonetariaPage /></Layout></SecurityCheck>} />
+          <Route path="/calculadora" element={<SecurityCheck><Layout><CalculadoraPage /></Layout></SecurityCheck>} />
+          <Route path="/juros-compostos" element={<Navigate to="/calculadora?tab=juros-compostos" replace />} />
+          <Route path="/conversor" element={<Navigate to="/calculadora?tab=conversor" replace />} />
+          <Route path="/correcao-monetaria" element={<Navigate to="/calculadora?tab=correcao-monetaria" replace />} />
           <Route path="/detalhes" element={<SecurityCheck><Layout><DetalhesPage /></Layout></SecurityCheck>} />
           
           {/* /home: entrada autenticada estável (evita race com landing em "/") */}
