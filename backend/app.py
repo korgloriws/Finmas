@@ -191,10 +191,21 @@ except Exception as _e_wal:
         pass
 
 
-try:
-    invalidar_todas_sessoes()
-except Exception:
-    pass
+_FORCE_LOGIN_ON_START = os.getenv('FINMAS_FORCE_LOGIN_ON_START', '1').strip().lower() not in ('0', 'false', 'no')
+if _FORCE_LOGIN_ON_START:
+    try:
+        invalidar_todas_sessoes()
+        print("[AUTH] Sessões invalidadas no startup (modo sessão estrita ativo)")
+    except Exception as e:
+        try:
+            print(f"[AUTH] Falha ao invalidar sessões no startup: {e}")
+        except Exception:
+            pass
+else:
+    try:
+        print("[AUTH] Modo sessão estrita desativado por FINMAS_FORCE_LOGIN_ON_START")
+    except Exception:
+        pass
 
 
 ANALISE_ATIVOS_SEM = threading.Semaphore(2)

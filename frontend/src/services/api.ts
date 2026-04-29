@@ -189,25 +189,13 @@ export function cancelInflightRequests(): number {
 
 api.interceptors.request.use(
   async (config) => {
-    try {
-      const expectedUser = typeof window !== 'undefined'
-        ? (window.localStorage.getItem('finmas_user') || '')
-        : ''
-      if (expectedUser) {
-        config.headers = config.headers || {}
-        config.headers['X-User-Expected'] = expectedUser
-      }
-
-      if (config.url?.includes('/admin/usuarios') && config.method === 'delete') {
-        console.log('[API Interceptor] DELETE Request:', {
-          url: config.url,
-          fullURL: `${config.baseURL}${config.url}`,
-          method: config.method,
-          params: config.params
-        })
-      }
-    } catch {
-      /* ignore */
+    if (config.url?.includes('/admin/usuarios') && config.method === 'delete') {
+      console.log('[API Interceptor] DELETE Request:', {
+        url: config.url,
+        fullURL: `${config.baseURL}${config.url}`,
+        method: config.method,
+        params: config.params
+      })
     }
 
     // Cria AbortController próprio encadeado com qualquer signal pré-existente.

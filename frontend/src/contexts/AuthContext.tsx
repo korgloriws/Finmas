@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import api, { TELAS_APP } from '../services/api'
@@ -46,14 +46,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userRole, setUserRole] = useState<'usuario' | 'admin' | null>(null)
   const [allowedScreens, setAllowedScreens] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
-  const userRef = useRef<string | null>(null)
-  // Janela temporária após OAuth para evitar falso negativo de sessão
-  // quando o primeiro /auth/usuario-atual responde 401 transitório.
-  const oauthGraceUntilRef = useRef<number>(0)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   
   const isAdmin = userRole === 'admin'
 
@@ -69,74 +63,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [user, isAdmin, allowedScreens])
 
   useEffect(() => {
-    userRef.current = user
-  }, [user])
-
-  
-  useEffect(() => {
+    // Segurança: não manter username autenticado em storage persistente.
+    try {
+      window.localStorage.removeItem('finmas_user')
+    } catch {
+      /* ignore */
+    }
     checkCurrentUser()
   }, [])
 
-  // PERFORMANCE: Reduzir verificações desnecessárias
-  // Sincronizar entre abas apenas (não verificar em focus/visibility)
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'finmas_user') {
-        // Só verificar se o valor mudou (outra aba fez login/logout)
-        const newUser = e.newValue
-        if (newUser !== user) {
-          checkCurrentUser()
-        }
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => {
-      window.removeEventListener('storage', onStorage)
-    }
-  }, [user])
-
-  // PERFORMANCE: Verificar cache local primeiro antes de fazer chamada API
-  // useCallback com deps vazias: a função fica estável entre renders, evitando
-  // re-runs em loop em useEffects que dependem dela (ex.: SecurityCheck e
-  // GoogleCallbackPage). setStates do React são tratados separadamente — não
-  // precisam estar nas deps.
   const checkCurrentUser = useCallback(async (): Promise<boolean> => {
-    // Verificar cache local primeiro (se houver user no localStorage, assumir que está logado)
     try {
-      const cachedUser = window.localStorage.getItem('finmas_user')
-      if (cachedUser) {
-        // Se há cache, definir temporariamente para renderização imediata
-        // (setState é idempotente — não re-renderiza se o valor não mudou).
-        setUser(cachedUser)
-        setUserRole('usuario')
-        setLoading(false)
-      }
-    } catch {
-      // Ignorar erros de localStorage
-    }
-
-    // Verificar no backend em background (não bloqueia)
-    try {
-      let response: any = null
-      let lastErr: any = null
-      const attempts = 1
-      for (let i = 0; i < attempts; i += 1) {
-        try {
-          response = await api.get('/auth/usuario-atual')
-          lastErr = null
-          break
-        } catch (err: any) {
-          lastErr = err
-          const status = err?.response?.status
-          const isAuthErr = status === 401 || status === 403
-          if (!isAuthErr || i === attempts - 1) {
-            throw err
-          }
-          await sleep(250)
-        }
-      }
-
-      if (!response && lastErr) throw lastErr
+      const response = await api.get('/auth/usuario-atual')
 
       if (response.data.username) {
         setUser(response.data.username)
@@ -150,37 +88,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return false
       }
     } catch (error: any) {
-      // IMPORTANTE: Se a request foi abortada (ex.: NavigationGuard cancelou
-      // ao mudar de rota durante o callback do Google), NÃO devemos tratar
-      // como "não logado" — caso contrário o RootOrRedirect cai na LandingPage
-      // e o usuário aparenta ter sido deslogado. Apenas saímos silenciosamente
-      // e deixamos o próximo checkCurrentUser confirmar o estado real.
-      const isAbort =
-        error?.code === 'ERR_CANCELED' ||
-        error?.name === 'CanceledError' ||
-        error?.name === 'AbortError'
-      if (isAbort) return false
-
-      const status = error?.response?.status
-      const inOauthGraceWindow = Date.now() < oauthGraceUntilRef.current
-      const hasUserInMemory = !!userRef.current
-      const hasUserInStorage = (() => {
-        try {
-          return !!window.localStorage.getItem('finmas_user')
-        } catch {
-          return false
-        }
-      })()
-      // Evita loop LandingPage logo após callback do Google.
-      // Se acabamos de receber token/username da URL, preservamos o usuário
-      // temporário e deixamos o próximo check confirmar o estado real.
-      if (
-        (inOauthGraceWindow || hasUserInMemory || hasUserInStorage) &&
-        (status === 401 || status === 403 || !status)
-      ) {
-        return !!(hasUserInMemory || hasUserInStorage)
-      }
-
       setUser(null)
       setUserRole(null)
       setAllowedScreens(null)
@@ -203,19 +110,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         error?.name === 'AbortError'
       if (isAbort) return
       setAllowedScreens(null)
-    }
-  }, [user])
-
-  // Sincronizar usuário esperado no localStorage para ser enviado ao backend
-  useEffect(() => {
-    try {
-      if (user) {
-        window.localStorage.setItem('finmas_user', user)
-      } else {
-        window.localStorage.removeItem('finmas_user')
-      }
-    } catch {
-      /* ignore */
     }
   }, [user])
 
@@ -403,7 +297,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       // Limpar localStorage (incluindo cache do SecurityCheck)
       try {
-        window.localStorage.removeItem('finmas_user')
         // Limpar cache do SecurityCheck para o usuário atual
         if (currentUser) {
           const cacheKey = `finmas_security_check_${currentUser}`
@@ -444,7 +337,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       queryClient.clear()
       
       try {
-        window.localStorage.removeItem('finmas_user')
+        if (currentUser) {
+          const cacheKey = `finmas_security_check_${currentUser}`
+          window.localStorage.removeItem(cacheKey)
+        }
       } catch {
         /* ignore */
       }
@@ -470,16 +366,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUserRole(role as 'usuario' | 'admin')
     setAllowedScreens(null)
     setLoading(false)
-    // Após callback OAuth, tolerar uma falha transitória do primeiro check.
-    oauthGraceUntilRef.current = Date.now() + 10_000
-
-    // Limpar localStorage e definir novo usuário
-    try {
-      window.localStorage.setItem('finmas_user', username)
-    } catch {
-      /* ignore */
-    }
-
     console.log(`[SEGURANÇA] Usuário definido via token: ${username}, cache limpo`)
   }, [queryClient])
 
