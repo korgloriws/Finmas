@@ -2987,6 +2987,26 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
     """Calcula o preço atual baseado no indexador e percentual - USANDO ABORDAGEM QUE JÁ FUNCIONA"""
     from math import isfinite
     try:
+        def _normalizar_indexador_pct(idx, pct):
+            if pct is None:
+                return None
+            try:
+                pct = float(pct)
+            except (ValueError, TypeError):
+                return None
+            if pct <= 0:
+                return None
+
+            # Indexadores-base: dados legados podem vir como fator (1.2 = 120%)
+            if idx in ["CDI", "SELIC", "IPCA"] and pct <= 3:
+                return pct * 100.0
+
+            # Taxas fixas/plus: dados legados podem vir em decimal anual (0.12 = 12%)
+            if idx in ["PREFIXADO", "CDI+", "IPCA+"] and pct <= 1:
+                return pct * 100.0
+
+            return pct
+
         # CONVERSÃO EXPLÍCITA E VALIDAÇÃO CRÍTICA DE TIPOS (fix para PostgreSQL)
         # PostgreSQL pode retornar NUMERIC como Decimal ou string, precisamos garantir float
         try:
@@ -3016,13 +3036,13 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             indexador_pct = 100.0
             print(f"DEBUG: Percentual ausente para {indexador}; assumindo 100% do indexador.")
 
+        indexador_pct = _normalizar_indexador_pct(indexador, indexador_pct)
         if indexador_pct is None:
             print(f"[ERRO] Percentual do indexador ausente para {indexador}")
             return preco_inicial
         
-        # VALIDAÇÃO CRÍTICA: indexador_pct deve ser um valor razoável (entre 0.1 e 1000)
-        # Valores muito altos ou muito baixos indicam erro de conversão
-        if indexador_pct < 0.1 or indexador_pct > 1000:
+        # VALIDAÇÃO CRÍTICA: faixa ampla para cobrir base indexador e taxas fixas anuais.
+        if indexador_pct > 1000:
             print(f"[ERRO CRITICO] Indexador_pct fora do range esperado: {indexador_pct}% (esperado: 0.1-1000%)")
             return preco_inicial
         
@@ -3438,8 +3458,8 @@ def atualizar_precos_indicadores_carteira():
                                     # Para Decimal ou outros tipos do PostgreSQL
                                     _indexador_pct = float(str(_indexador_pct_raw))
                                 
-                                # Validação: deve ser um valor razoável
-                                if _indexador_pct < 0.1 or _indexador_pct > 1000:
+                                # Validação: mantém faixa ampla e deixa normalização fina para o cálculo
+                                if _indexador_pct <= 0 or _indexador_pct > 1000:
                                     print(f"[ERRO] Indexador_pct fora do range: {_indexador_pct}% para {_ticker}. Usando None.")
                                     _indexador_pct = None
                             except (ValueError, TypeError, AttributeError) as e:
@@ -3468,7 +3488,9 @@ def atualizar_precos_indicadores_carteira():
                             # NUNCA usar preco_atual como base!
                             if base_preco is not None and base_data:
                                 preco_inicial = base_preco
-                                data_base_calculo = base_data
+                                # Preferir data_aplicacao quando existir (evita superacumulação
+                                # por base_data legado desatualizado).
+                                data_base_calculo = _data_aplicacao or base_data
                                 print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
                             elif _preco_compra is not None and _preco_compra > 0:
                                 preco_inicial = _preco_compra
@@ -3568,8 +3590,8 @@ def atualizar_precos_indicadores_carteira():
                             else:
                                 _indexador_pct = float(str(_indexador_pct_raw))
                             
-                            # Validação: deve ser um valor razoável
-                            if _indexador_pct < 0.1 or _indexador_pct > 1000:
+                            # Validação: mantém faixa ampla e deixa normalização fina para o cálculo
+                            if _indexador_pct <= 0 or _indexador_pct > 1000:
                                 print(f"[ERRO] Indexador_pct fora do range: {_indexador_pct}% para {_ticker}. Usando None.")
                                 _indexador_pct = None
                         except (ValueError, TypeError, AttributeError) as e:
@@ -3593,7 +3615,9 @@ def atualizar_precos_indicadores_carteira():
 
                         if base_preco is not None and base_data:
                             preco_inicial = base_preco
-                            data_base_calculo = base_data
+                            # Preferir data_aplicacao quando existir (evita superacumulação
+                            # por base_data legado desatualizado).
+                            data_base_calculo = _data_aplicacao or base_data
                             print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
                         elif _preco_compra is not None and _preco_compra > 0:
                             preco_inicial = _preco_compra

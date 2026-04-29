@@ -81,6 +81,12 @@ export const normalizeIndexerPercent = (
     return pct
   }
 
+  if (indexer === 'PREFIXADO' || indexer === 'CDI+' || indexer === 'IPCA+') {
+    // Compatibilidade com dados antigos/inconsistentes: 0.12 significa 12% a.a.
+    if (pct > 0 && pct <= 1) return pct * 100
+    return pct
+  }
+
   // Para indexadores de taxa fixa, manter valor informado.
   return pct
 }
