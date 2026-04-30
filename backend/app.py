@@ -3902,8 +3902,23 @@ def api_indicadores():
                 return arr[0] if arr else None
 
         selic = sgs_last(432, use_range=True)
-        cdi = sgs_last(12, use_range=True)
         ipca = sgs_last(433)
+
+        # REGRA DE NEGÓCIO: CDI atrelado à SELIC com diferença fixa de -0,10 p.p.
+        cdi = None
+        if selic and selic.get("valor") is not None:
+            try:
+                selic_valor = float(str(selic.get("valor")).replace(",", "."))
+                cdi_valor = max(selic_valor - 0.10, 0.0)
+                cdi = {
+                    "data": selic.get("data"),
+                    "valor": f"{cdi_valor:.2f}"
+                }
+            except Exception:
+                cdi = None
+        if cdi is None:
+            # fallback de segurança
+            cdi = {"data": datetime.now().strftime("%d/%m/%Y"), "valor": "13.65"}
         
         return jsonify({
             "selic": selic,

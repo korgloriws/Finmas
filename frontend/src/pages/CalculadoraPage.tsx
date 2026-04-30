@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Calculator, TrendingUp, Scale, DollarSign, Landmark } from 'lucide-react'
+import { Calculator, TrendingUp, Scale, DollarSign, Landmark, GitCompareArrows } from 'lucide-react'
 import JurosCompostosPage from './JurosCompostosPage'
 import CorrecaoMonetariaPage from './CorrecaoMonetariaPage'
 import ConversorMoedasPage from './ConversorMoedasPage'
 import IndicadoresCalculatorPage from './IndicadoresCalculatorPage'
+import ComparacaoInvestimentosPage from './ComparacaoInvestimentosPage'
 
-type CalculadoraTab = 'juros-compostos' | 'correcao-monetaria' | 'conversor' | 'indicadores'
+type CalculadoraTab = 'juros-compostos' | 'correcao-monetaria' | 'conversor' | 'indicadores' | 'comparacao-investimentos'
 
 const CALCULATOR_TABS: Array<{
   id: CalculadoraTab
@@ -18,6 +19,7 @@ const CALCULATOR_TABS: Array<{
   { id: 'correcao-monetaria', label: 'Correção Monetária', shortLabel: 'Correção', icon: Scale },
   { id: 'conversor', label: 'Conversor de Moedas', shortLabel: 'Conversor', icon: DollarSign },
   { id: 'indicadores', label: 'Indicadores BCB', shortLabel: 'Indicadores', icon: Landmark },
+  { id: 'comparacao-investimentos', label: 'Comparação de Investimentos', shortLabel: 'Comparação', icon: GitCompareArrows },
 ]
 
 export default function CalculadoraPage() {
@@ -62,6 +64,7 @@ export default function CalculadoraPage() {
       {activeTab === 'correcao-monetaria' && <CorrecaoMonetariaPage />}
       {activeTab === 'conversor' && <ConversorMoedasPage />}
       {activeTab === 'indicadores' && <IndicadoresCalculatorPage />}
+      {activeTab === 'comparacao-investimentos' && <ComparacaoInvestimentosPage />}
     </div>
   )
 }

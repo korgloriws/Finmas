@@ -79,7 +79,8 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Calculadora – Juros Compostos', path: '/calculadora', keywords: 'calculadora juros compostos', params: { tab: 'juros-compostos' } },
     { label: 'Calculadora – Correção Monetária', path: '/calculadora', keywords: 'calculadora correcao monetaria ipca inpc igpm', params: { tab: 'correcao-monetaria' } },
     { label: 'Calculadora – Conversor de Moedas', path: '/calculadora', keywords: 'calculadora conversor moedas cambio', params: { tab: 'conversor' } },
-    { label: 'Calculadora – Indicadores BCB', path: '/calculadora', keywords: 'calculadora indicadores bcb cdi selic ipca', params: { tab: 'indicadores' } },
+    { label: 'Calculadora – Indicadores BCB', path: '/calculadora', keywords: 'calculadora indicadores bcb cdi selic ipca prefixado iof ir renda fixa completa', params: { tab: 'indicadores' } },
+    { label: 'Calculadora – Comparação de Investimentos', path: '/calculadora', keywords: 'cdb tesouro lci lca comparacao investimentos retorno liquido equivalente', params: { tab: 'comparacao-investimentos' } },
     { label: 'Rankings', path: '/rankings', keywords: 'rankings mercado acoes fiis bdrs', params: {} },
     { label: 'Notícias', path: '/noticias', keywords: 'noticias mercado financeiro valor infomoney', params: {} },
   ]

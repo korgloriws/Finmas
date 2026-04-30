@@ -2651,14 +2651,12 @@ def obter_taxas_indexadores():
             except Exception:
                 return None
         
-        # SELIC (série 432)
+        # SELIC (série 432) - fonte principal
         selic = sgs_last(432, use_range=True)
-        # CDI (série 12)
-        cdi = sgs_last(12, use_range=True)
         # IPCA (série 433) - taxa mensal
         ipca = sgs_last(433)
         
-        print(f"DEBUG: Taxas obtidas - SELIC: {selic}%, CDI: {cdi}%, IPCA: {ipca}%")
+        print(f"DEBUG: Taxas obtidas - SELIC: {selic}%, IPCA: {ipca}%")
         
         # Normalização robusta:
         # - <= 0.2: taxa diária em %, anualiza por 252 dias úteis
@@ -2677,17 +2675,16 @@ def obter_taxas_indexadores():
                 return anual
             return taxa
 
-        cdi = normalizar_para_anual(cdi, "CDI")
         selic = normalizar_para_anual(selic, "SELIC")
         
-        # FALLBACK: Se não conseguir obter taxas, usar valores padrão
-        if not cdi or cdi < 5.0:  # CDI muito baixo, usar padrão
-            cdi = 13.65
-            print(f"DEBUG: CDI não obtido ou muito baixo, usando padrão: {cdi}%")
-        
+        # FALLBACK: Se não conseguir obter SELIC, usar padrão
         if not selic or selic < 5.0:  # SELIC muito baixo, usar padrão
             selic = 13.75
             print(f"DEBUG: SELIC não obtido ou muito baixo, usando padrão: {selic}%")
+
+        # REGRA DE NEGÓCIO: CDI atrelado à SELIC com diferença fixa de -0,10 p.p.
+        cdi = max(selic - 0.10, 0.0)
+        print(f"DEBUG: CDI derivado da SELIC: {selic:.4f}% - 0,10 p.p. = {cdi:.4f}%")
         
         if not ipca or ipca < 0.1:  # IPCA muito baixo, usar padrão
             ipca = 0.5  # IPCA mensal padrão
@@ -2930,10 +2927,15 @@ def _obter_taxa_atual_indexador(indexador):
         from datetime import datetime, timedelta
         from math import pow
         
-        # Determinar série do indexador
+        # REGRA DE NEGÓCIO: CDI é sempre derivado da SELIC (-0,10 p.p.)
         if indexador == "CDI":
-            serie_id = 12
-        elif indexador == "SELIC":
+            selic_atual = _obter_taxa_atual_indexador("SELIC")
+            cdi_derivado = max((selic_atual or 13.75) - 0.10, 0.0)
+            print(f"DEBUG: CDI derivado da SELIC atual: {selic_atual}% - 0,10 p.p. = {cdi_derivado}%")
+            return cdi_derivado
+
+        # Determinar série do indexador
+        if indexador == "SELIC":
             serie_id = 432
         elif indexador == "IPCA":
             serie_id = 433
