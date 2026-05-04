@@ -89,9 +89,9 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       let taxaPercentual = 100 as number | string
       let taxaFixa = 0 as number | string
       if (initialData.indexador_pct) {
-        if (indexador === 'CDI' || indexador === 'IPCA') {
+        if (indexador === 'CDI' || indexador === 'IPCA' || indexador === 'SELIC') {
           taxaPercentual = initialData.indexador_pct
-        } else if (indexador === 'CDI+' || indexador === 'IPCA+' || indexador === 'PREFIXADO' || indexador === 'SELIC') {
+        } else if (indexador === 'CDI+' || indexador === 'IPCA+' || indexador === 'PREFIXADO') {
           taxaFixa = initialData.indexador_pct
         }
       }
@@ -139,9 +139,9 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       const taxaFixaNum = Number(formData.taxa_fixa)
 
       let indexador_pct: number | undefined = undefined
-      if (formData.indexador === 'CDI' || formData.indexador === 'IPCA') {
+      if (formData.indexador === 'CDI' || formData.indexador === 'IPCA' || formData.indexador === 'SELIC') {
         indexador_pct = isNaN(taxaPercentualNum) ? undefined : taxaPercentualNum
-      } else if (formData.indexador === 'CDI+' || formData.indexador === 'IPCA+' || formData.indexador === 'PREFIXADO' || formData.indexador === 'SELIC') {
+      } else if (formData.indexador === 'CDI+' || formData.indexador === 'IPCA+' || formData.indexador === 'PREFIXADO') {
         indexador_pct = isNaN(taxaFixaNum) ? undefined : taxaFixaNum
       }
 
@@ -240,13 +240,39 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
   }
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => {
+      const next = { ...prev, [field]: value }
+
+      // LCI/LCA: padrão de mercado é % do CDI e isenção de IR.
+      if (field === 'tipo') {
+        const tipoUpper = String(value || '').toUpperCase()
+        if (tipoUpper === 'LCI' || tipoUpper === 'LCA') {
+          next.indexador = 'CDI'
+          next.isento_ir = true
+          next.taxa_fixa = 0
+          if (!next.taxa_percentual || Number(next.taxa_percentual) <= 0) {
+            next.taxa_percentual = 100
+          }
+        }
+      }
+
+      // Se tentar desmarcar isenção de IR em LCI/LCA, manter true por regra.
+      if (field === 'isento_ir') {
+        const tipoUpper = String(prev.tipo || '').toUpperCase()
+        if (tipoUpper === 'LCI' || tipoUpper === 'LCA') {
+          next.isento_ir = true
+        }
+      }
+
+      return next
+    })
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
   }
 
   const isLoading = addDirectMutation.isPending
+  const isLciLca = formData.tipo === 'LCI' || formData.tipo === 'LCA'
 
   if (!open) return null
 
@@ -383,7 +409,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                     ? 'border-destructive bg-destructive/5' 
                     : 'border-border bg-background focus:border-primary'
                 }`}
-                disabled={isLoading}
+                disabled={isLoading || isLciLca}
                 title="Selecionar indexador"
               >
                 <option value="CDI">CDI</option>
@@ -393,6 +419,11 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                 <option value="SELIC">SELIC</option>
                 <option value="PREFIXADO">PREFIXADO</option>
               </select>
+              {isLciLca && (
+                <p className="text-xs text-primary">
+                  Para {formData.tipo}, o cálculo usa N% do CDI e mantém isenção de IR.
+                </p>
+              )}
               {errors.indexador && (
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="w-4 h-4" />
@@ -427,7 +458,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Ex: 100 = 100% do indexador, 110 = 110% do indexador
+                Ex: 100 = 100% do indexador, 110 = 110% do indexador (CDI/IPCA/SELIC)
               </p>
               {errors.taxa_percentual && (
                 <p className="text-sm text-destructive flex items-center gap-1">
@@ -460,7 +491,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Ex: 2 = 2% a.a. (para CDI+ ou IPCA+)
+                Ex: 2 = 2% a.a. (para CDI+, IPCA+ ou Prefixado)
               </p>
               {errors.taxa_fixa && (
                 <p className="text-sm text-destructive flex items-center gap-1">
@@ -591,12 +622,17 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                   checked={formData.isento_ir}
                   onChange={(e) => handleInputChange('isento_ir', e.target.checked)}
                   className="w-4 h-4 text-primary border-border rounded focus:ring-primary"
-                  disabled={isLoading}
+                  disabled={isLoading || isLciLca}
                   title="Produto isento de imposto de renda"
                 />
                 <span className="text-sm font-medium text-foreground">Isento de IR</span>
               </label>
             </div>
+            {isLciLca && (
+              <p className="text-xs text-muted-foreground">
+                Regra aplicada automaticamente: {formData.tipo} é isento de IR.
+              </p>
+            )}
           </div>
 
           {/* Observações */}

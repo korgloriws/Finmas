@@ -1,4 +1,5 @@
 import { BookOpen, ExternalLink, Target, AlertCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 interface GuiaRendaFixaTabProps {
   IndexChart: () => JSX.Element | null
@@ -41,6 +42,32 @@ export default function GuiaRendaFixaTab({
     <div className="space-y-8">
       {/* Gráfico dos Índices */}
       <IndexChart />
+
+      {/* Atalho para Calculadoras */}
+      <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-5 sm:p-6 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h3 className="text-lg sm:text-xl font-semibold text-foreground">Simule antes de investir</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Use as calculadoras para comparar rentabilidade líquida entre CDB, Tesouro, LCI/LCA, IPCA+, Prefixado e outros cenários.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/calculadora?tab=indicadores"
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Calculadora de Indicadores
+            </Link>
+            <Link
+              to="/calculadora?tab=comparacao-investimentos"
+              className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+            >
+              Comparar Investimentos
+            </Link>
+          </div>
+        </div>
+      </div>
       
       {/* Conceitos Fundamentais */}
       <div className="bg-card border border-border rounded-2xl p-6 shadow-xl">
