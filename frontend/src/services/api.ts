@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { AtivoInfo, AtivoDetalhes, TickerSugestao, AtivoCarteira, Movimentacao, Marmita, GastoMensal, Receita, Cartao, OutroGasto, EvolucaoFinanceira, TotalPorPessoa, ReceitasDespesas, AtivoAnalise, ResumoAnalise, FiltrosAnalise, CartaoCadastrado, CompraCartao } from '../types'
+import { AtivoInfo, AtivoDetalhes, TickerSugestao, AtivoCarteira, Movimentacao, Marmita, GastoMensal, Receita, Cartao, OutroGasto, EvolucaoFinanceira, TotalPorPessoa, ReceitasDespesas, AtivoAnalise, ResumoAnalise, FiltrosAnalise, CartaoCadastrado, CompraCartao, ControleCategoriaGastoApi } from '../types'
 import { normalizeTicker } from '../utils/tickerUtils'
 
 const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: any })?.env?.VITE_API_BASE_URL)
@@ -633,6 +633,8 @@ export const carteiraService = {
     isento_ir?: boolean,
     liquidez_diaria?: boolean,
     sobrescrever?: boolean,
+    emissor_rf?: string,
+    tipo_renda_fixa?: string,
   ): Promise<any> => {
     const normalizedTicker = normalizeTicker(ticker)
     const response = await api.post('/carteira/adicionar', {
@@ -641,6 +643,8 @@ export const carteiraService = {
       tipo,
       preco_inicial,
       nome_personalizado,
+      emissor_rf,
+      tipo_renda_fixa,
       indexador,
       indexador_pct,
       data_aplicacao,
@@ -1134,6 +1138,33 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/receitas-despesas?${params.toString()}`)
+    return response.data
+  },
+
+  getCategoriasGasto: async (): Promise<ControleCategoriaGastoApi[]> => {
+    const response = await api.get('/controle/categorias-gasto')
+    return response.data
+  },
+
+  adicionarCategoriaGasto: async (payload: {
+    label: string
+    cor: string
+    icon_key?: string
+  }): Promise<{ success: boolean; id?: number; slug?: string; message?: string }> => {
+    const response = await api.post('/controle/categorias-gasto', payload)
+    return response.data
+  },
+
+  atualizarCategoriaGasto: async (
+    id: number,
+    payload: Partial<{ label: string; cor: string; icon_key: string | null; sort_order: number }>
+  ): Promise<{ success: boolean; message?: string }> => {
+    const response = await api.put(`/controle/categorias-gasto/${id}`, payload)
+    return response.data
+  },
+
+  removerCategoriaGasto: async (id: number): Promise<{ success: boolean; message?: string }> => {
+    const response = await api.delete(`/controle/categorias-gasto/${id}`)
     return response.data
   },
 }

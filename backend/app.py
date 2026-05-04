@@ -59,6 +59,10 @@ from models import (
     atualizar_precos_indicadores_carteira,
     obter_taxas_indexadores,
     _upgrade_controle_schema,
+    listar_controle_categorias,
+    adicionar_controle_categoria,
+    atualizar_controle_categoria,
+    remover_controle_categoria,
     LISTA_ACOES,
     LISTA_FIIS,
     LISTA_BDRS,
@@ -3702,6 +3706,8 @@ def api_adicionar_ativo():
         tipo = data.get('tipo')
         preco_inicial = data.get('preco_inicial')
         nome_personalizado = data.get('nome_personalizado')
+        emissor_rf = data.get('emissor_rf')
+        tipo_renda_fixa = data.get('tipo_renda_fixa')
         indexador = data.get('indexador')  # 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | None
         indexador_pct = data.get('indexador_pct')  # percentual (ex.: 110) ou taxa fixa (% a.a.)
         data_aplicacao = data.get('data_aplicacao')  # 'YYYY-MM-DD'
@@ -3745,7 +3751,8 @@ def api_adicionar_ativo():
 
         resultado = adicionar_ativo_carteira(
             ticker, quantidade, tipo, preco_inicial, nome_personalizado,
-            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, sobrescrever
+            indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, sobrescrever,
+            emissor_rf, tipo_renda_fixa
         )
         # invalidar cache simples
         try:
@@ -4847,6 +4854,71 @@ def api_outros():
             return jsonify(outros)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/controle/categorias-gasto", methods=["GET", "POST"])
+def api_controle_categorias_gasto():
+    try:
+        if request.method == "GET":
+            try:
+                _upgrade_controle_schema()
+            except Exception:
+                pass
+            return jsonify(listar_controle_categorias())
+        data = request.get_json() or {}
+        try:
+            _upgrade_controle_schema()
+        except Exception:
+            pass
+        res = adicionar_controle_categoria(
+            data.get('label'),
+            data.get('cor'),
+            icon_key=data.get('icon_key'),
+        )
+        if isinstance(res, dict) and not res.get('success', True):
+            return jsonify(res), 400
+        try:
+            if cache:
+                cache.clear()
+        except Exception:
+            pass
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/controle/categorias-gasto/<int:cid>", methods=["PUT", "DELETE"])
+def api_controle_categorias_gasto_id(cid):
+    try:
+        try:
+            _upgrade_controle_schema()
+        except Exception:
+            pass
+        if request.method == "PUT":
+            data = request.get_json() or {}
+            kw = {}
+            if 'label' in data:
+                kw['label'] = data['label']
+            if 'cor' in data:
+                kw['cor'] = data['cor']
+            if 'icon_key' in data:
+                kw['icon_key'] = data['icon_key']
+            if 'sort_order' in data:
+                kw['sort_order'] = data['sort_order']
+            res = atualizar_controle_categoria(cid, **kw)
+        else:
+            res = remover_controle_categoria(cid)
+        if isinstance(res, dict) and not res.get('success', True):
+            return jsonify(res), 400
+        try:
+            if cache:
+                cache.clear()
+        except Exception:
+            pass
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @server.route("/api/controle/saldo", methods=["GET"])
 def api_saldo():

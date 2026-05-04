@@ -9,9 +9,10 @@ import { useAuth } from '../../contexts/AuthContext'
 interface AddAtivoModalProps {
   open: boolean
   onClose: () => void
+  carteira?: Array<{ tipo?: string; emissor_rf?: string | null }>
 }
 
-export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
+export default function AddAtivoModal({ open, onClose, carteira = [] }: AddAtivoModalProps) {
   const [step, setStep] = useState(1)
   const [nome, setNome] = useState('')
   const [ticker, setTicker] = useState('')
@@ -38,6 +39,16 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
+  const emissorRfSuggestions = useMemo(() => {
+    const s = new Set<string>()
+    for (const a of carteira || []) {
+      const tl = (a?.tipo || '').toLowerCase()
+      if (!tl.includes('renda fixa')) continue
+      const v = a?.emissor_rf != null ? String(a.emissor_rf).trim() : ''
+      if (v) s.add(v)
+    }
+    return Array.from(s).sort((x, y) => x.localeCompare(y, 'pt-BR'))
+  }, [carteira])
 
   const { data: tiposApi } = useQuery({
     queryKey: ['tipos-ativos-modal'],
@@ -837,6 +848,7 @@ export default function AddAtivoModal({ open, onClose }: AddAtivoModalProps) {
           setRfFormOpen(false)
           onClose()
         }}
+        emissorSuggestions={emissorRfSuggestions}
       />
     </div>
   )

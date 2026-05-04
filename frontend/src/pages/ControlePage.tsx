@@ -21,7 +21,8 @@ const ControleReceitaTab = lazy(() => import('../components/controle/ControleRec
 const ControleDespesaTab = lazy(() => import('../components/controle/ControleDespesaTab'))
 const ControleCartaoTab = lazy(() => import('../components/controle/ControleCartaoTab'))
 import { formatCurrency } from '../utils/formatters'
-import { CATEGORIAS_DESPESAS } from '../utils/categoriasDespesas'
+import { corParaFillGrafico } from '../utils/controleCorUtils'
+import { ControleCategoriasProvider, useControleCategorias } from '../contexts/ControleCategoriasContext'
 import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
 // Lazy loading de gráficos pesados
 import { 
@@ -40,8 +41,9 @@ import {
 } from '../components/LazyChart'
 import DistribuicaoCarteiraECharts from '../components/home/DistribuicaoCarteiraECharts'
 
-export default function ControlePage() {
+function ControlePageContent() {
   const { user } = useAuth()
+  const { resolveCategoria } = useControleCategorias()
   const [searchParams, setSearchParams] = useSearchParams()
   
   const getNomeMes = (mes: number) => {
@@ -252,13 +254,13 @@ export default function ControlePage() {
       acc[categoria] = (acc[categoria] || 0) + (d.valor || 0)
     })
     return Object.entries(acc)
-      .map(([name, value]) => ({ 
-        name, 
+      .map(([name, value]) => ({
+        name,
         value,
-        categoria: CATEGORIAS_DESPESAS.find(c => c.value === name) || CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
+        categoria: resolveCategoria(name),
       }))
       .sort((a, b) => b.value - a.value)
-  }, [despesasUnificadas])
+  }, [despesasUnificadas, resolveCategoria])
 
 
   const totaisPorTipo = useMemo(() => {
@@ -863,7 +865,7 @@ export default function ControlePage() {
                        dados={totaisPorCategoria.map(({ value, categoria }) => ({
                          name: categoria.label,
                          value,
-                         fill: categoria.color,
+                         fill: corParaFillGrafico(categoria.color),
                        }))}
                        totalInvestido={totaisPorCategoria.reduce((s, d) => s + d.value, 0)}
                        formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}
@@ -1051,4 +1053,12 @@ export default function ControlePage() {
             </div>
     </div>
   )
-} 
+}
+
+export default function ControlePage() {
+  return (
+    <ControleCategoriasProvider>
+      <ControlePageContent />
+    </ControleCategoriasProvider>
+  )
+}

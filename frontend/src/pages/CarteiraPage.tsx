@@ -249,6 +249,18 @@ export default function CarteiraPage() {
     return Array.from(new Set([ ...fromApi, ...fromCarteira ]))
   }, [carteira, tiposApi])
 
+  const emissorRfSuggestions = useMemo(() => {
+    const s = new Set<string>()
+    for (const a of carteira || []) {
+      const tl = (a?.tipo || '').toLowerCase()
+      if (!tl.includes('renda fixa')) continue
+      const e = (a as AtivoCarteira & { emissor_rf?: string | null }).emissor_rf
+      const v = e != null ? String(e).trim() : ''
+      if (v) s.add(v)
+    }
+    return Array.from(s).sort((x, y) => x.localeCompare(y, 'pt-BR'))
+  }, [carteira])
+
   // Carregamento sob demanda - movimentações (só na aba movimentações)
   const { data: movimentacoes, isLoading: loadingMovimentacoes } = useQuery<Movimentacao[]>({
     queryKey: ['movimentacoes', user, filtroMes, filtroAno], 
@@ -774,25 +786,6 @@ export default function CarteiraPage() {
         )}
         {activeTab === 'ativos' && (
           <CarteiraAtivosTab
-            inputTicker={inputTicker}
-            setInputTicker={setInputTicker}
-            inputQuantidade={inputQuantidade}
-            setInputQuantidade={setInputQuantidade}
-            inputTipo={inputTipo}
-            setInputTipo={setInputTipo}
-            inputPreco={inputPreco}
-            setInputPreco={setInputPreco}
-            inputIndexador={inputIndexador}
-            setInputIndexador={(value: string) => setInputIndexador(value as "" | "CDI" | "IPCA" | "SELIC" | "PREFIXADO")}
-            inputIndexadorPct={inputIndexadorPct}
-            setInputIndexadorPct={setInputIndexadorPct}
-            inputDataAplicacao={inputDataAplicacao}
-            setInputDataAplicacao={setInputDataAplicacao}
-            inputVencimento={inputVencimento}
-            setInputVencimento={setInputVencimento}
-            inputIsentoIr={inputIsentoIr}
-            setInputIsentoIr={setInputIsentoIr}
-            handleAdicionar={handleAdicionar}
             adicionarMutation={adicionarMutation}
             carteira={carteira || []}
             loadingCarteira={loadingCarteira}
@@ -813,9 +806,6 @@ export default function CarteiraPage() {
             setRenameTipoValue={setRenameTipoValue}
             movimentacoesAll={movimentacoesAll || []}
             indicadores={indicadores}
-            tiposDisponiveisComputed={tiposDisponiveisComputed}
-            tesouroTitulos={tesouroData as any}
-            onPickTesouro={handlePickTesouro}
             topAtivos={topAtivos}
             onOpenAddAtivo={() => setAddModalOpen(true)}
           />
@@ -1171,7 +1161,7 @@ export default function CarteiraPage() {
         </div>
       )}
       {activeTab === 'ativos' && addModalOpen && (
-        <AddAtivoModal open={addModalOpen} onClose={()=>setAddModalOpen(false)} />
+        <AddAtivoModal open={addModalOpen} onClose={()=>setAddModalOpen(false)} carteira={carteira || []} />
       )}
       
       {/* Modal de editar ativo */}
@@ -1212,6 +1202,7 @@ export default function CarteiraPage() {
           }}
           initialData={ativoRendaFixaParaEditar}
           editingMode={true}
+          emissorSuggestions={emissorRfSuggestions}
         />
       )}
     </div>

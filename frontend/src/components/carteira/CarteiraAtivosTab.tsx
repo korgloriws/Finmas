@@ -27,6 +27,88 @@ import { ativoService, carteiraService } from '../../services/api'
 
 export type PeriodoValorizacao = '1m' | '3m' | '6m' | '1a' | 'ytd'
 
+type Lot = { qty: number; price: number; date: string }
+
+const buildRemainingLots = (movimentacoes: any[]): Lot[] => {
+  const lots: Lot[] = []
+  for (const m of movimentacoes) {
+    const qty = Number(m.quantidade || 0)
+    const price = Number(m.preco || 0)
+    if (m.tipo === 'compra') {
+      lots.push({ qty, price, date: m.data })
+    } else if (m.tipo === 'venda') {
+      let remaining = qty
+      while (remaining > 0 && lots.length > 0) {
+        const lot = lots[0]
+        const consume = Math.min(lot.qty, remaining)
+        lot.qty -= consume
+        remaining -= consume
+        if (lot.qty <= 0) lots.shift()
+      }
+    }
+  }
+  return lots
+}
+
+const calcularDiasCorridos = (dataBase?: string | null) => {
+  if (!dataBase) return null
+  const base = new Date(String(dataBase).slice(0, 10) + 'T00:00:00')
+  if (Number.isNaN(base.getTime())) return null
+  const hoje = new Date()
+  const dias = Math.floor((hoje.getTime() - base.getTime()) / (1000 * 60 * 60 * 24))
+  return dias >= 0 ? dias : 0
+}
+
+const calcularAliquotaIrRegressiva = (dias: number | null, isentoIr?: boolean) => {
+  if (isentoIr) return 0
+  if (dias === null) return 22.5
+  if (dias <= 365) return 22.5
+  if (dias <= 720) return 17.5
+  return 15
+}
+
+const calcularMetricasAtivo = (ativo: any, movimentacoesAll: any[], isRendaFixa: boolean) => {
+  const movsDoTicker = (movimentacoesAll || [])
+    .filter(m => m.ticker?.toUpperCase?.() === (ativo?.ticker || '').toUpperCase())
+    .sort((a, b) => String(a.data).localeCompare(String(b.data)))
+
+  const lots = buildRemainingLots(movsDoTicker)
+  const totalQtd = lots.reduce((s, l) => s + l.qty, 0)
+  const totalValor = lots.reduce((s, l) => s + l.qty * l.price, 0)
+  const precoMedioLocal = totalQtd > 0 ? (totalValor / totalQtd) : null
+  const precoBase = (ativo as any)?.preco_medio ?? ativo?.preco_compra ?? precoMedioLocal
+
+  const quantidadeAtivo = Number(ativo?.quantidade || 0)
+  const precoAtual = Number(ativo?.preco_atual || 0)
+  const quantidadeParaValorizacao = quantidadeAtivo > 0 ? quantidadeAtivo : totalQtd
+
+  const rendimentoPct = (precoBase != null && precoAtual)
+    ? ((precoAtual - precoBase) / precoBase) * 100
+    : null
+  const valorizacaoAbs = (precoBase != null && precoAtual && quantidadeParaValorizacao > 0)
+    ? (precoAtual - precoBase) * quantidadeParaValorizacao
+    : null
+
+  const valorBrutoRf = isRendaFixa ? Number(ativo?.valor_total || 0) : null
+  const valorInvestidoRf = (precoBase != null && quantidadeAtivo > 0)
+    ? Number(precoBase) * quantidadeAtivo
+    : null
+  const diasRf = calcularDiasCorridos(((ativo as any)?.data_aplicacao as string | undefined) || (ativo?.data_adicao as string | undefined))
+  const aliquotaIrRf = calcularAliquotaIrRegressiva(diasRf, Boolean((ativo as any)?.isento_ir))
+  const ganhoBrutoRf = (valorBrutoRf != null && valorInvestidoRf != null) ? Math.max(valorBrutoRf - valorInvestidoRf, 0) : null
+  const irValorRf = (ganhoBrutoRf != null) ? (ganhoBrutoRf * aliquotaIrRf / 100) : null
+  const valorLiquidoRf = (valorBrutoRf != null && irValorRf != null) ? valorBrutoRf - irValorRf : null
+
+  return {
+    precoMedioLocal,
+    precoBase,
+    rendimentoPct,
+    valorizacaoAbs,
+    valorBrutoRf,
+    valorLiquidoRf
+  }
+}
+
 function TabelaAtivosPorTipo({ 
   tipo, 
   carteira, 
@@ -101,30 +183,8 @@ function TabelaAtivosPorTipo({
     let somaValoresAtuais = 0
     let somaValoresInvestidos = 0
     for (const a of ativosDoTipo) {
-      const mlist = movs
-        .filter(m => m.ticker?.toUpperCase?.() === (a?.ticker || '').toUpperCase())
-        .sort((x, y) => String(x.data).localeCompare(String(y.data)))
-      type Lot = { qty: number; price: number; date: string }
-      const lots: Lot[] = []
-      for (const m of mlist) {
-        const q = Number(m.quantidade || 0)
-        const p = Number(m.preco || 0)
-        if (m.tipo === 'compra') lots.push({ qty: q, price: p, date: m.data })
-        else if (m.tipo === 'venda') {
-          let remaining = q
-          while (remaining > 0 && lots.length > 0) {
-            const lot = lots[0]
-            const consume = Math.min(lot.qty, remaining)
-            lot.qty -= consume
-            remaining -= consume
-            if (lot.qty <= 0) lots.shift()
-          }
-        }
-      }
-      const qtd = lots.reduce((s, l) => s + l.qty, 0)
-      const val = lots.reduce((s, l) => s + l.qty * l.price, 0)
-      const precoMed = qtd > 0 ? (val / qtd) : null
-      const precoBase = (a as any)?.preco_medio ?? a?.preco_compra ?? precoMed
+      const metrica = calcularMetricasAtivo(a, movs, isRendaFixa)
+      const precoBase = metrica.precoBase
       if (precoBase != null) {
         somaValoresInvestidos += precoBase * (a?.quantidade || 0)
         somaValoresAtuais += (a?.preco_atual || 0) * (a?.quantidade || 0)
@@ -222,6 +282,12 @@ function TabelaAtivosPorTipo({
                     {tipo.toLowerCase().includes('renda fixa') && (
                       <th className="px-3 py-2 text-left font-medium text-sm">Rentab. Estimada (anual)</th>
                     )}
+                    {tipo.toLowerCase().includes('renda fixa') && (
+                      <th className="px-3 py-2 text-left font-medium text-sm">Valor Bruto</th>
+                    )}
+                    {tipo.toLowerCase().includes('renda fixa') && (
+                      <th className="px-3 py-2 text-left font-medium text-sm">Valor Líquido (IR)</th>
+                    )}
                     <th className="px-3 py-2 text-left font-medium text-sm">Preço Médio</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Valorização</th>
                     <th className="px-3 py-2 text-left font-medium text-sm">Rendimento</th>
@@ -249,48 +315,35 @@ function TabelaAtivosPorTipo({
                 </thead>
                 <tbody>
                   {ativosDoTipo.map((ativo) => {
-                    const movsDoTicker = (movimentacoesAll || [])
-                      .filter(m => m.ticker?.toUpperCase?.() === (ativo?.ticker || '').toUpperCase())
-                      .sort((a, b) => String(a.data).localeCompare(String(b.data)))
-
-                    type Lot = { qty: number; price: number; date: string }
-                    const lots: Lot[] = []
-                    for (const m of movsDoTicker) {
-                      const qty = Number(m.quantidade || 0)
-                      const price = Number(m.preco || 0)
-                      if (m.tipo === 'compra') {
-                        lots.push({ qty, price, date: m.data })
-                      } else if (m.tipo === 'venda') {
-                        let remaining = qty
-                        while (remaining > 0 && lots.length > 0) {
-                          const lot = lots[0]
-                          const consume = Math.min(lot.qty, remaining)
-                          lot.qty -= consume
-                          remaining -= consume
-                          if (lot.qty <= 0) lots.shift()
-                        }
-                        
-                      }
-                    }
-                    const totalQtd = lots.reduce((s, l) => s + l.qty, 0)
-                    const totalValor = lots.reduce((s, l) => s + l.qty * l.price, 0)
-                    const precoMedioLocal = totalQtd > 0 ? (totalValor / totalQtd) : null
-                    // Preferir preco_medio persistido; fallback para preco_compra; senão média local
-                    const precoBase = (ativo as any)?.preco_medio ?? ativo?.preco_compra ?? precoMedioLocal
-                    
-                    const rendimentoPct = (precoBase != null && ativo?.preco_atual)
-                      ? ((ativo.preco_atual - precoBase) / precoBase) * 100
-                      : null
-                    const valorizacaoAbs = (precoBase != null && ativo?.preco_atual && ativo?.quantidade > 0)
-                      ? (ativo.preco_atual - precoBase) * ativo.quantidade
-                      : null
+                    const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
+                    const precoBase = metrica.precoBase
+                    const rendimentoPct = metrica.rendimentoPct
+                    const valorizacaoAbs = metrica.valorizacaoAbs
                     const porcentagemAtivo = valorTotal > 0 ? ((ativo?.valor_total || 0) / valorTotal * 100).toFixed(1) : '0.0'
+                    const valorBrutoRf = metrica.valorBrutoRf
+                    const valorLiquidoRf = metrica.valorLiquidoRf
                     return (
                       <tr key={ativo?.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-3 py-2 min-w-[140px]">
                           <TickerWithLogo ticker={ativo?.ticker || ''} nome={ativo?.nome_completo || ''} />
                         </td>
-                        <td className="px-3 py-2 text-sm max-w-[200px] truncate" title={ativo?.nome_completo}>{ativo?.nome_completo}</td>
+                        <td className="px-3 py-2 text-sm max-w-[240px]">
+                          <div className="truncate" title={ativo?.nome_completo}>{ativo?.nome_completo}</div>
+                          {isRendaFixa && (((ativo as any)?.tipo_renda_fixa) || ((ativo as any)?.emissor_rf)) && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {(ativo as any)?.tipo_renda_fixa && (
+                                <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-semibold">
+                                  {(ativo as any).tipo_renda_fixa}
+                                </span>
+                              )}
+                              {(ativo as any)?.emissor_rf && (
+                                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                  {(ativo as any).emissor_rf}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-sm">
                           {editingId === ativo?.id ? (
                             <input
@@ -352,6 +405,16 @@ function TabelaAtivosPorTipo({
                               if (anual === null) return '-'
                               return `${anual.toFixed(2)}% a.a.`
                             })()}
+                          </td>
+                        )}
+                        {tipo.toLowerCase().includes('renda fixa') && (
+                          <td className="px-3 py-2 text-sm font-semibold">
+                            {valorBrutoRf != null ? formatCurrency(valorBrutoRf) : '-'}
+                          </td>
+                        )}
+                        {tipo.toLowerCase().includes('renda fixa') && (
+                          <td className="px-3 py-2 text-sm font-semibold text-primary">
+                            {valorLiquidoRf != null ? formatCurrency(valorLiquidoRf) : '-'}
                           </td>
                         )}
                         <td className="px-3 py-2 text-sm">{precoBase != null ? formatCurrency(precoBase) : '-'}</td>
@@ -468,39 +531,13 @@ function TabelaAtivosPorTipo({
               {/* Mobile Card View */}
               <div className="lg:hidden space-y-3 p-3 sm:p-4">
                 {ativosDoTipo.map((ativo) => {
-                  const movsDoTicker = (movimentacoesAll || [])
-                    .filter(m => m.ticker?.toUpperCase?.() === (ativo?.ticker || '').toUpperCase())
-                    .sort((a, b) => String(a.data).localeCompare(String(b.data)))
-
-                  type Lot = { qty: number; price: number; date: string }
-                  const lots: Lot[] = []
-                  for (const m of movsDoTicker) {
-                    const qty = Number(m.quantidade || 0)
-                    const price = Number(m.preco || 0)
-                    if (m.tipo === 'compra') {
-                      lots.push({ qty, price, date: m.data })
-                    } else if (m.tipo === 'venda') {
-                      let remaining = qty
-                      while (remaining > 0 && lots.length > 0) {
-                        const lot = lots[0]
-                        const consume = Math.min(lot.qty, remaining)
-                        lot.qty -= consume
-                        remaining -= consume
-                        if (lot.qty <= 0) lots.shift()
-                      }
-                    }
-                  }
-                  const totalQtd = lots.reduce((s, l) => s + l.qty, 0)
-                  const totalValor = lots.reduce((s, l) => s + l.qty * l.price, 0)
-                  const precoMedioLocal = totalQtd > 0 ? (totalValor / totalQtd) : null
-                  const precoMedioMostrar = (ativo as any)?.preco_medio ?? ativo?.preco_compra ?? precoMedioLocal
-                  const rendimentoPct = (precoMedioMostrar != null && ativo?.preco_atual)
-                    ? ((ativo.preco_atual - precoMedioMostrar) / (precoMedioMostrar as number)) * 100
-                    : null
-                  const valorizacaoAbs = (precoMedioMostrar != null && ativo?.preco_atual && totalQtd > 0)
-                    ? (ativo.preco_atual - (precoMedioMostrar as number)) * totalQtd
-                    : null
+                  const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
+                  const precoMedioLocal = metrica.precoMedioLocal
+                  const rendimentoPct = metrica.rendimentoPct
+                  const valorizacaoAbs = metrica.valorizacaoAbs
                   const porcentagemAtivo = valorTotal > 0 ? ((ativo?.valor_total || 0) / valorTotal * 100).toFixed(1) : '0.0'
+                  const valorBrutoRf = metrica.valorBrutoRf
+                  const valorLiquidoRf = metrica.valorLiquidoRf
                   
                   return (
                     <div key={ativo?.id} className="bg-background border border-border rounded-lg p-3 sm:p-4 space-y-3">
@@ -561,6 +598,20 @@ function TabelaAtivosPorTipo({
                       <div className="text-xs sm:text-sm text-muted-foreground truncate">
                         {ativo?.nome_completo}
                       </div>
+                      {isRendaFixa && (((ativo as any)?.tipo_renda_fixa) || ((ativo as any)?.emissor_rf)) && (
+                        <div className="flex flex-wrap gap-1">
+                          {(ativo as any)?.tipo_renda_fixa && (
+                            <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-semibold">
+                              {(ativo as any).tipo_renda_fixa}
+                            </span>
+                          )}
+                          {(ativo as any)?.emissor_rf && (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                              {(ativo as any).emissor_rf}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Grid de Informações Principais */}
                       <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -669,6 +720,19 @@ function TabelaAtivosPorTipo({
                         </div>
                       )}
 
+                      {tipo.toLowerCase().includes('renda fixa') && (
+                        <div className="pt-2 sm:pt-3 border-t border-border space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Valor Bruto</span>
+                            <span className="text-xs sm:text-sm font-semibold">{valorBrutoRf != null ? formatCurrency(valorBrutoRf) : '-'}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Valor Líquido (IR)</span>
+                            <span className="text-xs sm:text-sm font-semibold text-primary">{valorLiquidoRf != null ? formatCurrency(valorLiquidoRf) : '-'}</span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Informações Adicionais (se houver) */}
                       {(ativo?.indexador || precoMedioLocal != null || valorizacaoAbs != null || rendimentoPct != null) && (
                         <div className="pt-2 sm:pt-3 border-t border-border">
@@ -721,27 +785,6 @@ function TabelaAtivosPorTipo({
 }
 
 interface CarteiraAtivosTabProps {
-
-  inputTicker: string
-  setInputTicker: (value: string) => void
-  inputQuantidade: string
-  setInputQuantidade: (value: string) => void
-  inputTipo: string
-  setInputTipo: (value: string) => void
-  inputPreco: string
-  setInputPreco: (value: string) => void
-  inputIndexador: string
-  setInputIndexador: (value: string) => void
-  inputIndexadorPct: string
-  setInputIndexadorPct: (value: string) => void
-  // Novos campos RF
-  inputDataAplicacao?: string
-  setInputDataAplicacao?: (value: string) => void
-  inputVencimento?: string
-  setInputVencimento?: (value: string) => void
-  inputIsentoIr?: boolean
-  setInputIsentoIr?: (value: boolean) => void
-  handleAdicionar: () => void
   adicionarMutation: any
   
 
@@ -771,33 +814,11 @@ interface CarteiraAtivosTabProps {
   // Dados adicionais
   movimentacoesAll: any[]
   indicadores: any
-  tiposDisponiveisComputed: string[]
-  tesouroTitulos?: { titulos: Array<any> }
-  onPickTesouro?: (item: any) => void
   /** Abre o modal de adicionar ativo (empty state) */
   onOpenAddAtivo?: () => void
 }
 
 export default function CarteiraAtivosTab({
-  inputTicker,
-  setInputTicker,
-  inputQuantidade,
-  setInputQuantidade,
-  inputTipo,
-  setInputTipo,
-  inputPreco,
-  setInputPreco,
-  inputIndexador,
-  setInputIndexador,
-  inputIndexadorPct,
-  setInputIndexadorPct,
-  inputDataAplicacao,
-  setInputDataAplicacao,
-  inputVencimento,
-  setInputVencimento,
-  inputIsentoIr,
-  setInputIsentoIr,
-  handleAdicionar,
   adicionarMutation,
   carteira,
   loadingCarteira,
@@ -819,9 +840,6 @@ export default function CarteiraAtivosTab({
   setRenameTipoValue,
   movimentacoesAll,
   indicadores,
-  tiposDisponiveisComputed,
-  tesouroTitulos,
-  onPickTesouro,
   onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)

@@ -10,6 +10,8 @@ import {
 import { controleService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
+import { useControleCategorias } from '../../contexts/ControleCategoriasContext'
+import ControleCategoriaSelect from './ControleCategoriaSelect'
 
 // Função para formatar data sem problemas de timezone
 const formatDate = (dateString: string) => {
@@ -36,6 +38,7 @@ export default function ControleReceitaTab({
   ocultarValores
 }: ControleReceitaTabProps) {
   const { user } = useAuth()
+  const { resolveCategoria } = useControleCategorias()
   const [inputNome, setInputNome] = useState('')
   const [inputValor, setInputValor] = useState('')
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
@@ -293,13 +296,13 @@ export default function ControleReceitaTab({
             <label className="block text-sm font-medium text-foreground mb-1">
               Categoria
             </label>
-            <input
-              type="text"
+            <ControleCategoriaSelect
               value={inputCategoria}
-              onChange={(e) => setInputCategoria(e.target.value)}
+              onChange={setInputCategoria}
+              allowEmpty
+              emptyLabel="Sem categoria"
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Ex: Trabalho, Investimentos..."
-              aria-label="Categoria da receita"
+              ariaLabel="Categoria da receita"
             />
           </div>
           
@@ -469,6 +472,7 @@ export default function ControleReceitaTab({
                     <th className="px-4 py-3 text-left font-medium">Nome</th>
                     <th className="px-4 py-3 text-left font-medium">Valor</th>
                     <th className="px-4 py-3 text-left font-medium">Data</th>
+                    <th className="px-4 py-3 text-left font-medium">Categoria</th>
                     <th className="px-4 py-3 text-left font-medium">Tipo</th>
                     <th className="px-4 py-3 text-left font-medium">Ações</th>
                   </tr>
@@ -487,12 +491,7 @@ export default function ControleReceitaTab({
                             aria-label="Nome da receita"
                           />
                         ) : (
-                          <div>
-                            <div className="font-medium">{receita.nome}</div>
-                            {receita.categoria && (
-                              <div className="text-xs text-muted-foreground">{receita.categoria}</div>
-                            )}
-                          </div>
+                          <div className="font-medium">{receita.nome}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 font-semibold">
@@ -522,6 +521,24 @@ export default function ControleReceitaTab({
                           />
                         ) : (
                           formatDate(receita.data)
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {editingReceitaId === receita.id ? (
+                          <ControleCategoriaSelect
+                            value={editReceitaCategoria}
+                            onChange={setEditReceitaCategoria}
+                            allowEmpty
+                            emptyLabel="Sem categoria"
+                            className="px-2 py-1 text-sm border border-border rounded bg-background max-w-[11rem]"
+                            ariaLabel="Categoria da receita"
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {(receita.categoria || '').trim()
+                              ? resolveCategoria(receita.categoria).label
+                              : '—'}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3">

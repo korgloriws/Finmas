@@ -81,6 +81,8 @@ export interface AtivoCarteira {
   roe: number | null
   indexador?: 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | 'CDI+' | 'IPCA+' | null
   indexador_pct?: number | null
+  emissor_rf?: string | null
+  tipo_renda_fixa?: string | null
   vencimento?: string | null
   status_vencimento?: {
     status: 'vence_em_dias' | 'vence_em_poucos_dias' | 'vence_hoje' | 'vencido' | 'sem_vencimento' | 'erro_calculo'
@@ -272,6 +274,16 @@ export interface CartaoComCompras extends CartaoCadastrado {
   total_compras: number
   limite_restante: number
   percentual_uso: number
+}
+
+/** Catálogo persistido em /api/controle/categorias-gasto (slug gravado em receitas/outros). */
+export interface ControleCategoriaGastoApi {
+  id: number
+  slug: string
+  label: string
+  cor: string
+  icon_key: string | null
+  sort_order: number
 }
 
 export interface BandeiraCartao {

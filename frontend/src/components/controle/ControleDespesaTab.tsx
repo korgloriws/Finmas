@@ -9,7 +9,9 @@ import {
 import { controleService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
-import { CATEGORIAS_DESPESAS } from '../../utils/categoriasDespesas'
+import { corParaFillGrafico } from '../../utils/controleCorUtils'
+import { useControleCategorias } from '../../contexts/ControleCategoriasContext'
+import ControleCategoriaSelect from './ControleCategoriaSelect'
 
 // Função para formatar data sem problemas de timezone
 const formatDate = (dateString: string) => {
@@ -38,10 +40,11 @@ export default function ControleDespesaTab({
   ocultarValores
 }: ControleDespesaTabProps) {
   const { user } = useAuth()
+  const { resolveCategoria } = useControleCategorias()
   const [inputNome, setInputNome] = useState('')
   const [inputValor, setInputValor] = useState('')
   const [inputData, setInputData] = useState(new Date().toISOString().split('T')[0])
-  const [inputCategoria, setInputCategoria] = useState('')
+  const [inputCategoria, setInputCategoria] = useState('outros')
   const [inputTipo, setInputTipo] = useState('')
   const [inputObservacao, setInputObservacao] = useState('')
   const [inputIsPrevisao, setInputIsPrevisao] = useState(false)
@@ -116,7 +119,7 @@ export default function ControleDespesaTab({
     setInputNome('')
     setInputValor('')
     setInputData(new Date().toISOString().split('T')[0])
-    setInputCategoria('')
+    setInputCategoria('outros')
     setInputTipo('')
     setInputObservacao('')
     setInputIsPrevisao(false)
@@ -148,7 +151,7 @@ export default function ControleDespesaTab({
         nome: inputNome,
         valor,
         data: dataFinal,
-        categoria: inputCategoria,
+        categoria: inputCategoria || 'outros',
         tipo: inputTipo,
         observacao: inputObservacao
       }
@@ -160,7 +163,7 @@ export default function ControleDespesaTab({
     // Se não for previsão, seguir fluxo normal
     const opts = {
       data: dataFinal,
-      categoria: inputCategoria,
+      categoria: inputCategoria || 'outros',
       tipo: inputTipo,
       pago: 'Sim',
       observacao: inputObservacao || undefined
@@ -212,7 +215,7 @@ export default function ControleDespesaTab({
     setEditDespesaNome(despesa.nome)
     setEditDespesaValor(despesa.valor.toString())
     setEditDespesaData(despesa.data)
-    setEditDespesaCategoria(despesa.categoria || '')
+    setEditDespesaCategoria(despesa.categoria || 'outros')
     setEditDespesaTipo(despesa.tipo || 'variavel')
     setEditDespesaObservacao(despesa.observacao || '')
   }, [])
@@ -222,7 +225,7 @@ export default function ControleDespesaTab({
     setEditDespesaNome('')
     setEditDespesaValor('')
     setEditDespesaData('')
-    setEditDespesaCategoria('')
+    setEditDespesaCategoria('outros')
     setEditDespesaTipo('')
     setEditDespesaObservacao('')
   }, [])
@@ -235,7 +238,7 @@ export default function ControleDespesaTab({
 
     const opts = {
       data: editDespesaData || new Date().toISOString().split('T')[0],
-      categoria: editDespesaCategoria,
+      categoria: editDespesaCategoria || 'outros',
       tipo: editDespesaTipo,
       pago: 'Sim',
       observacao: editDespesaObservacao || undefined
@@ -270,10 +273,10 @@ export default function ControleDespesaTab({
       .map(([name, value]) => ({ 
         name, 
         value,
-        categoria: CATEGORIAS_DESPESAS.find(c => c.value === name) || CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
+        categoria: resolveCategoria(name),
       }))
       .sort((a, b) => b.value - a.value)
-  }, [despesasUnificadas])
+  }, [despesasUnificadas, resolveCategoria])
 
   // Totais por tipo
   const totaisPorTipo = useMemo(() => {
@@ -354,18 +357,12 @@ export default function ControleDespesaTab({
             <label className="block text-sm font-medium text-foreground mb-1">
               Categoria
             </label>
-            <select
-              value={inputCategoria}
-              onChange={(e) => setInputCategoria(e.target.value)}
+            <ControleCategoriaSelect
+              value={inputCategoria || 'outros'}
+              onChange={setInputCategoria}
               className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Categoria da despesa"
-            >
-              {CATEGORIAS_DESPESAS.map(categoria => (
-                <option key={categoria.value} value={categoria.value}>
-                  {categoria.label}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Categoria da despesa"
+            />
           </div>
           
           <div>
@@ -495,7 +492,7 @@ export default function ControleDespesaTab({
           
           <div className="space-y-3">
             {previsoes.map((previsao) => {
-              const categoria = CATEGORIAS_DESPESAS.find(c => c.value === previsao.categoria) || CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
+              const categoria = resolveCategoria(previsao.categoria)
               const IconComponent = categoria.icon
               
               return (
@@ -562,8 +559,9 @@ export default function ControleDespesaTab({
                 </thead>
                 <tbody>
                   {despesasUnificadas.map((despesa) => {
-                    const categoria = CATEGORIAS_DESPESAS.find(c => c.value === despesa.categoria) || CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
+                    const categoria = resolveCategoria(despesa.categoria)
                     const IconComponent = categoria.icon
+                    const chipFill = corParaFillGrafico(categoria.color)
                     
                     return (
                       <tr key={despesa.id + '-' + despesa.fonte} className="hover:bg-muted/40 transition-colors">
@@ -608,22 +606,20 @@ export default function ControleDespesaTab({
                         </td>
                         <td className="px-4 py-3">
                           {editingDespesaId === despesa.id ? (
-                            <select
-                              value={editDespesaCategoria}
-                              onChange={(e) => setEditDespesaCategoria(e.target.value)}
-                              className="px-2 py-1 text-sm border border-border rounded bg-background"
-                              aria-label="Categoria da despesa"
-                            >
-                              {CATEGORIAS_DESPESAS.map(cat => (
-                                <option key={cat.value} value={cat.value}>
-                                  {cat.label}
-                                </option>
-                              ))}
-                            </select>
+                            <ControleCategoriaSelect
+                              value={editDespesaCategoria || 'outros'}
+                              onChange={setEditDespesaCategoria}
+                              className="px-2 py-1 text-sm border border-border rounded bg-background max-w-[11rem]"
+                              ariaLabel="Categoria da despesa"
+                            />
                           ) : (
                             <span 
                               className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit"
-                              style={{ backgroundColor: `${categoria.color}20`, color: categoria.color }}
+                              style={{
+                                backgroundColor:
+                                  chipFill.length === 7 ? `${chipFill}29` : chipFill,
+                                color: chipFill,
+                              }}
                             >
                               <IconComponent size={12} />
                               {categoria.label}
@@ -705,7 +701,7 @@ export default function ControleDespesaTab({
                   dados={totaisPorCategoria.map(({ value, categoria }) => ({
                     name: categoria.label,
                     value,
-                    fill: categoria.color,
+                    fill: corParaFillGrafico(categoria.color),
                   }))}
                   totalInvestido={totaisPorCategoria.reduce((s, d) => s + d.value, 0)}
                   formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}

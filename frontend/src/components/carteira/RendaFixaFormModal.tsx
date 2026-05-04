@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId, useMemo } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { X, Save, Building2, Calendar, Percent, DollarSign, AlertCircle } from 'lucide-react'
@@ -23,11 +23,23 @@ interface RendaFixaFormModalProps {
     vencimento?: string | null
     isento_ir?: boolean | null
     liquidez_diaria?: boolean | null
+    emissor_rf?: string | null
+    tipo_renda_fixa?: string | null
   }
   editingMode?: boolean
+  /** Emissores já usados na carteira (para autocomplete / reaproveitamento). */
+  emissorSuggestions?: string[]
 }
 
-export default function RendaFixaFormModal({ open, onClose, onSuccess, initialData, editingMode = false }: RendaFixaFormModalProps) {
+export default function RendaFixaFormModal({
+  open,
+  onClose,
+  onSuccess,
+  initialData,
+  editingMode = false,
+  emissorSuggestions = [],
+}: RendaFixaFormModalProps) {
+  const emissorListId = useId()
   const [formData, setFormData] = useState({
     nome: '',
     emissor: '',
@@ -55,15 +67,16 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
       // Tentar extrair nome e emissor do nome completo
       const partes = nomeCompleto.split(' - ')
       const nome = partes[0] || nomeCompleto
-      const emissor = partes.length > 1 ? partes.slice(1).join(' - ') : ''
+      const emissor = initialData.emissor_rf || (partes.length > 1 ? partes.slice(1).join(' - ') : '')
       
       // Determinar tipo baseado no tipo ou nome
-      const tipoStr = (initialData.tipo || '').toLowerCase()
+      const tipoStr = (initialData.tipo_renda_fixa || initialData.tipo || '').toLowerCase()
       let tipo = 'CDB'
       if (tipoStr.includes('lci')) tipo = 'LCI'
       else if (tipoStr.includes('lca')) tipo = 'LCA'
       else if (tipoStr.includes('debênture') || tipoStr.includes('debenture')) tipo = 'Debênture'
       else if (tipoStr.includes('tesouro')) tipo = 'Tesouro'
+      else if (tipoStr.includes('outro')) tipo = 'Outros'
       
       // Determinar indexador
       let indexador: '' | 'CDI' | 'IPCA' | 'SELIC' | 'PREFIXADO' | 'CDI+' | 'IPCA+' = 'CDI'
@@ -131,6 +144,15 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
     }
   }, [open, initialData, editingMode])
 
+  const emissorOpts = useMemo(() => {
+    const s = new Set<string>()
+    for (const raw of emissorSuggestions || []) {
+      const v = String(raw || '').trim()
+      if (v) s.add(v)
+    }
+    return Array.from(s).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [emissorSuggestions])
+
   const addDirectMutation = useMutation({
     mutationFn: async () => {
       const quantidadeNum = Number(formData.quantidade)
@@ -157,7 +179,9 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
         formData.vencimento || undefined,
         formData.isento_ir || undefined,
         formData.liquidez_diaria || undefined,
-        editingMode // sobrescrever=true quando em modo edição
+        editingMode,
+        (formData.emissor || '').trim() || undefined,
+        formData.tipo || undefined
       )
     },
     onSuccess: () => {
@@ -346,6 +370,7 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
               </label>
               <input
                 type="text"
+                list={emissorListId}
                 value={formData.emissor}
                 onChange={(e) => handleInputChange('emissor', e.target.value)}
                 placeholder="Ex: Banco X, Banco Y"
@@ -356,6 +381,11 @@ export default function RendaFixaFormModal({ open, onClose, onSuccess, initialDa
                 }`}
                 disabled={isLoading}
               />
+              <datalist id={emissorListId}>
+                {emissorOpts.map((e) => (
+                  <option key={e} value={e} />
+                ))}
+              </datalist>
               {errors.emissor && (
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="w-4 h-4" />

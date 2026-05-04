@@ -11,6 +11,7 @@ import os
 import json
 import secrets
 import re
+import unicodedata
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
@@ -307,6 +308,14 @@ def _ensure_indexador_schema():
                     c.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS preco_compra DECIMAL(10,2)')
                 except Exception:
                     pass
+                try:
+                    c.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS emissor_rf TEXT')
+                except Exception:
+                    pass
+                try:
+                    c.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS tipo_renda_fixa TEXT')
+                except Exception:
+                    pass
         finally:
             conn.close()
     else:
@@ -353,6 +362,14 @@ def _ensure_indexador_schema():
                 pass
             try:
                 cur.execute('ALTER TABLE carteira ADD COLUMN preco_compra REAL')
+            except Exception:
+                pass
+            try:
+                cur.execute('ALTER TABLE carteira ADD COLUMN emissor_rf TEXT')
+            except Exception:
+                pass
+            try:
+                cur.execute('ALTER TABLE carteira ADD COLUMN tipo_renda_fixa TEXT')
             except Exception:
                 pass
             conn.commit()
@@ -2374,6 +2391,8 @@ def init_carteira_db(usuario=None):
                     cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS vencimento TEXT')
                     cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS isento_ir BOOLEAN')
                     cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS liquidez_diaria BOOLEAN')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS emissor_rf TEXT')
+                    cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS tipo_renda_fixa TEXT')
                 except Exception as _:
                     pass
                 cursor.execute('''
@@ -3804,7 +3823,7 @@ def _determinar_preco_compra(ticker, preco_inicial, data_aplicacao, tipo):
     # 4. Fallback: 0.0 (será tratado como erro)
     print(f"DEBUG: Não foi possível determinar preço para {ticker}, usando 0.0")
     return 0.0
-def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, nome_personalizado=None, indexador=None, indexador_pct=None, data_aplicacao=None, vencimento=None, isento_ir=None, liquidez_diaria=None, sobrescrever=False):
+def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, nome_personalizado=None, indexador=None, indexador_pct=None, data_aplicacao=None, vencimento=None, isento_ir=None, liquidez_diaria=None, sobrescrever=False, emissor_rf=None, tipo_renda_fixa=None):
 
     try:
         # Determinar preço de compra usando a nova lógica
@@ -3869,6 +3888,8 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
         indexador_pct = _to_float_or_none(indexador_pct)
         isento_ir = _to_bool_or_none(isento_ir)
         liquidez_diaria = _to_bool_or_none(liquidez_diaria)
+        emissor_rf = str(emissor_rf).strip() if emissor_rf is not None and str(emissor_rf).strip() else None
+        tipo_renda_fixa = str(tipo_renda_fixa).strip() if tipo_renda_fixa is not None and str(tipo_renda_fixa).strip() else None
         data_aplicacao = data_aplicacao if (data_aplicacao and str(data_aplicacao).strip() != "") else None
         vencimento = vencimento if (vencimento and str(vencimento).strip() != "") else None
 
@@ -3897,6 +3918,8 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                         cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS isento_ir BOOLEAN')
                         cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS liquidez_diaria BOOLEAN')
                         cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS preco_medio NUMERIC')
+                        cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS emissor_rf TEXT')
+                        cursor.execute('ALTER TABLE carteira ADD COLUMN IF NOT EXISTS tipo_renda_fixa TEXT')
                     except Exception as e:
                         print(f"DEBUG: Erro ao adicionar colunas (pode ser normal se já existirem): {e}")
                     
@@ -3931,7 +3954,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                             # Modo sobrescrever: substituir completamente os dados do ativo
                             novo_valor_total = float(info["preco_atual"] or 0) * quantidade_val
                             cursor.execute(
-                                'UPDATE carteira SET quantidade = %s, valor_total = %s, preco_atual = %s, dy = %s, pl = %s, pvp = %s, roe = %s, preco_medio = %s, preco_compra = %s, indexador = %s, indexador_pct = %s, data_aplicacao = %s, vencimento = %s, isento_ir = %s, liquidez_diaria = %s WHERE id = %s',
+                                'UPDATE carteira SET quantidade = %s, valor_total = %s, preco_atual = %s, dy = %s, pl = %s, pvp = %s, roe = %s, preco_medio = %s, preco_compra = %s, indexador = %s, indexador_pct = %s, data_aplicacao = %s, vencimento = %s, isento_ir = %s, liquidez_diaria = %s, emissor_rf = %s, tipo_renda_fixa = %s WHERE id = %s',
                                 (
                                     quantidade_val,
                                     novo_valor_total,
@@ -3948,6 +3971,8 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                     vencimento,
                                     isento_ir,
                                     liquidez_diaria,
+                                    emissor_rf,
+                                    tipo_renda_fixa,
                                     id_existente,
                                 )
                             )
@@ -3999,7 +4024,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                         preco_compra = preco_compra_definitivo
                         
                         cursor.execute(
-                            'INSERT INTO carteira (ticker, nome_completo, quantidade, preco_atual, preco_compra, preco_medio, valor_total, data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+                            'INSERT INTO carteira (ticker, nome_completo, quantidade, preco_atual, preco_compra, preco_medio, valor_total, data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, emissor_rf, tipo_renda_fixa) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
                             (
                                 info["ticker"],
                                 info["nome_completo"],
@@ -4020,6 +4045,8 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                 vencimento,
                                 isento_ir,
                                 liquidez_diaria,
+                                emissor_rf,
+                                tipo_renda_fixa,
                             ) 
                         )
                         mensagem = f"Ativo {info['ticker']} adicionado com sucesso"
@@ -4065,7 +4092,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                     cursor.execute('''
                         UPDATE carteira SET quantidade = ?, valor_total = ?, preco_atual = ?, dy = ?, pl = ?, pvp = ?, roe = ?,
                             preco_medio = ?, preco_compra = ?, indexador = ?, indexador_pct = ?, data_aplicacao = ?, vencimento = ?,
-                            isento_ir = ?, liquidez_diaria = ?
+                            isento_ir = ?, liquidez_diaria = ?, emissor_rf = ?, tipo_renda_fixa = ?
                         WHERE id = ?
                     ''', (
                         quantidade_val,
@@ -4083,6 +4110,8 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                         vencimento,
                         (1 if isento_ir else 0) if isento_ir is not None else None,
                         (1 if liquidez_diaria else 0) if liquidez_diaria is not None else None,
+                        emissor_rf,
+                        tipo_renda_fixa,
                         id_existente
                     ))
                     mensagem = f"Ativo {info['ticker']} sobrescrito com sucesso (quantidade: {quantidade_val})"
@@ -4128,11 +4157,11 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                 
                 cursor.execute('''
                     INSERT INTO carteira (ticker, nome_completo, quantidade, preco_atual, preco_compra, preco_medio, valor_total, 
-                                        data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, emissor_rf, tipo_renda_fixa)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (info["ticker"], info["nome_completo"], quantidade_val, info["preco_atual"], preco_compra, preco_compra,
                       valor_total, data_adicao, info["tipo"], info.get("dy"), info.get("pl"), 
-                      info.get("pvp"), info.get("roe"), indexador, indexador_pct, data_aplicacao, vencimento, (1 if isento_ir else 0) if isento_ir is not None else None, (1 if liquidez_diaria else 0) if liquidez_diaria is not None else None))
+                      info.get("pvp"), info.get("roe"), indexador, indexador_pct, data_aplicacao, vencimento, (1 if isento_ir else 0) if isento_ir is not None else None, (1 if liquidez_diaria else 0) if liquidez_diaria is not None else None, emissor_rf, tipo_renda_fixa))
                 mensagem = f"Ativo {info['ticker']} adicionado com sucesso"
             
             conn.commit()
@@ -5259,7 +5288,7 @@ def obter_carteira_com_metadados_fii():
                 with conn.cursor() as cursor:
                     cursor.execute('''
                         SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio, emissor_rf, tipo_renda_fixa
                         FROM carteira
                         ORDER BY valor_total DESC
                     ''')
@@ -5294,7 +5323,9 @@ def obter_carteira_com_metadados_fii():
                     "indexador_pct": float(row[14]) if (len(row) > 14 and row[14] is not None) else None,
                     "vencimento": vencimento,
                     "status_vencimento": status_vencimento,
-                    "preco_medio": float(row[18]) if (len(row) > 18 and row[18] is not None) else (preco_compra if preco_compra is not None else None),
+                    "preco_medio": float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None),
+                    "emissor_rf": row[20] if (len(row) > 20 and row[20] is not None) else None,
+                    "tipo_renda_fixa": row[21] if (len(row) > 21 and row[21] is not None) else None,
                 }
                 
                 ativos.append(ativo)
@@ -5304,7 +5335,7 @@ def obter_carteira_com_metadados_fii():
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio, emissor_rf, tipo_renda_fixa
             FROM carteira
             ORDER BY valor_total DESC
         ''')
@@ -5338,7 +5369,9 @@ def obter_carteira_com_metadados_fii():
                 "indexador_pct": row[14] if row_len > 14 else row[13],
                 "vencimento": vencimento,
                 "status_vencimento": status_vencimento,
-                "preco_medio": (row[18] if row_len > 18 else None) if (row_len > 18 and row[18] is not None) else (preco_compra if preco_compra is not None else None),
+                "preco_medio": (row[19] if row_len > 19 else None) if (row_len > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None),
+                "emissor_rf": row[20] if (row_len > 20 and row[20] is not None) else None,
+                "tipo_renda_fixa": row[21] if (row_len > 21 and row[21] is not None) else None,
             }
             
             # REMOVIDO: Enriquecimento automático de FIIs (agora é sob demanda no frontend)
@@ -5371,7 +5404,7 @@ def obter_carteira():
                 with conn.cursor() as cursor:
                     cursor.execute('''
                         SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                               data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio, emissor_rf, tipo_renda_fixa
                         FROM carteira
                         ORDER BY valor_total DESC
                     ''')
@@ -5391,6 +5424,8 @@ def obter_carteira():
                 
                 preco_medio = float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None)
                 isento_ir = bool(row[17]) if (len(row) > 17 and row[17] is not None) else False
+                emissor_rf = row[20] if (len(row) > 20 and row[20] is not None) else None
+                tipo_renda_fixa = row[21] if (len(row) > 21 and row[21] is not None) else None
                 ativo = {
                     "id": row[0],
                     "ticker": row[1],
@@ -5412,6 +5447,8 @@ def obter_carteira():
                     "vencimento": vencimento,
                     "status_vencimento": status_vencimento,
                     "isento_ir": isento_ir,
+                    "emissor_rf": emissor_rf,
+                    "tipo_renda_fixa": tipo_renda_fixa,
                 }
                 
                 ativos.append(ativo)
@@ -5421,7 +5458,7 @@ def obter_carteira():
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio, emissor_rf, tipo_renda_fixa
             FROM carteira
             ORDER BY valor_total DESC
         ''')
@@ -5434,6 +5471,8 @@ def obter_carteira():
             tipo = row[8] if row_len > 8 else "Desconhecido"
             preco_medio = (float(row[19]) if (row_len > 19 and row[19] is not None) else None) or (float(preco_compra) if preco_compra is not None else None)
             isento_ir = bool(row[17]) if (row_len > 17 and row[17] is not None) else False
+            emissor_rf = row[20] if (row_len > 20 and row[20] is not None) else None
+            tipo_renda_fixa = row[21] if (row_len > 21 and row[21] is not None) else None
             
             # Calcular status de vencimento para renda fixa
             status_vencimento = None
@@ -5461,6 +5500,8 @@ def obter_carteira():
                 "vencimento": vencimento,
                 "status_vencimento": status_vencimento,
                 "isento_ir": isento_ir,
+                "emissor_rf": emissor_rf,
+                "tipo_renda_fixa": tipo_renda_fixa,
             }
             
             # REMOVIDO: Enriquecimento automático de FIIs (agora é sob demanda no frontend)
@@ -6618,6 +6659,16 @@ def init_controle_db(usuario=None):
                         observacao TEXT
                     )
                 ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS controle_categorias (
+                        id SERIAL PRIMARY KEY,
+                        slug TEXT NOT NULL UNIQUE,
+                        label TEXT NOT NULL,
+                        cor TEXT NOT NULL,
+                        icon_key TEXT,
+                        sort_order INTEGER DEFAULT 0
+                    )
+                ''')
                 
                 # ==================== ÍNDICES OTIMIZADOS PARA CONTROLE FINANCEIRO ====================
                 # OTIMIZAÇÃO: Índices criados dentro do schema do usuário (isolamento garantido)
@@ -6762,6 +6813,17 @@ def init_controle_db(usuario=None):
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS controle_categorias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL,
+            cor TEXT NOT NULL,
+            icon_key TEXT,
+            sort_order INTEGER DEFAULT 0
+        )
+    ''')
+
     try:
         cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute("PRAGMA synchronous=NORMAL;")
@@ -6865,6 +6927,17 @@ def _upgrade_controle_schema(usuario=None):
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_cadastrados_pago ON cartoes_cadastrados(pago)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_cartao_id ON compras_cartao(cartao_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_data ON compras_cartao(data)")
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS controle_categorias (
+                        id SERIAL PRIMARY KEY,
+                        slug TEXT NOT NULL UNIQUE,
+                        label TEXT NOT NULL,
+                        cor TEXT NOT NULL,
+                        icon_key TEXT,
+                        sort_order INTEGER DEFAULT 0
+                    )
+                ''')
+                _migrate_controle_categorias_columns(cursor, pg=True)
             conn.commit()
         finally:
             conn.close()
@@ -6952,9 +7025,841 @@ def _upgrade_controle_schema(usuario=None):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cartoes_cadastrados_ativo ON cartoes_cadastrados(ativo)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_cartao_id ON compras_cartao(cartao_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_cartao_data ON compras_cartao(data)")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS controle_categorias (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slug TEXT NOT NULL UNIQUE,
+                    label TEXT NOT NULL,
+                    cor TEXT NOT NULL,
+                    icon_key TEXT,
+                    sort_order INTEGER DEFAULT 0
+                )
+            ''')
+            _migrate_controle_categorias_columns(cursor, pg=False)
             conn.commit()
         finally:
             conn.close()
+
+
+# ============ Categorias de gastos/receitas (Controle) ============
+
+DEFAULT_CONTROLE_CATEGORIAS_SEED = [
+    ('farmacia', 'Farmácia', '#EF4444', 'Heart', 10),
+    ('supermercado', 'Supermercado', '#10B981', 'ShoppingCart', 20),
+    ('contas_casa', 'Contas da Casa', '#3B82F6', 'Home', 30),
+    ('contas_filhos', 'Contas dos Filhos', '#F59E0B', 'Baby', 40),
+    ('despesas_fixas', 'Despesas Fixas', '#8B5CF6', 'Zap', 50),
+    ('saude', 'Saúde', '#EC4899', 'Heart', 60),
+    ('alimentacao', 'Alimentação', '#F97316', 'Utensils', 70),
+    ('transporte', 'Transporte', '#06B6D4', 'Car', 80),
+    ('lazer', 'Lazer', '#84CC16', 'Gamepad2', 90),
+    ('cartao', 'Cartão', '#0EA5E9', 'CreditCard', 100),
+    ('investimentos', 'Investimentos', '#14B8A6', 'TrendingUp', 110),
+    ('outros', 'Outros', '#6B7280', 'Receipt', 999),
+]
+
+
+def slugify_controle_label(label):
+    if not label or not str(label).strip():
+        return 'categoria'
+    s = unicodedata.normalize('NFKD', str(label).strip()).encode('ascii', 'ignore').decode('ascii')
+    s = re.sub(r'[^a-zA-Z0-9]+', '_', s.lower())
+    s = re.sub(r'_+', '_', s).strip('_')
+    return s or 'categoria'
+
+
+def _pg_controle_categorias_columns_lower(cursor):
+    cursor.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'controle_categorias'
+        """
+    )
+    return {str(r[0]).lower() for r in cursor.fetchall()}
+
+
+def _controle_categorias_has_tipo(cursor, pg=False):
+    """Esquemas antigos tinham coluna tipo NOT NULL (ex.: gasto/receita)."""
+    if pg:
+        return 'tipo' in _pg_controle_categorias_columns_lower(cursor)
+    cursor.execute('PRAGMA table_info(controle_categorias)')
+    return any(str(r[1]).lower() == 'tipo' for r in cursor.fetchall())
+
+
+def _controle_categorias_has_nome(cursor, pg=False):
+    """Alguns esquemas antigos usam coluna nome (NOT NULL) em vez de label."""
+    if pg:
+        return 'nome' in _pg_controle_categorias_columns_lower(cursor)
+    cursor.execute('PRAGMA table_info(controle_categorias)')
+    return any(str(r[1]).lower() == 'nome' for r in cursor.fetchall())
+
+
+def _backfill_controle_categorias_tipo(cursor, pg=False):
+    if not _controle_categorias_has_tipo(cursor, pg):
+        return
+    try:
+        if pg:
+            cursor.execute(
+                "UPDATE controle_categorias SET tipo = 'despesa' WHERE tipo IS NULL OR TRIM(BOTH FROM COALESCE(tipo::text, '')) = ''"
+            )
+        else:
+            cursor.execute(
+                "UPDATE controle_categorias SET tipo = 'despesa' WHERE tipo IS NULL OR TRIM(COALESCE(tipo, '')) = ''"
+            )
+    except Exception:
+        pass
+
+
+def _backfill_controle_categorias_nome(cursor, pg=False):
+    if not _controle_categorias_has_nome(cursor, pg):
+        return
+    try:
+        if pg:
+            cursor.execute(
+                """
+                UPDATE controle_categorias
+                SET nome = COALESCE(NULLIF(TRIM(BOTH FROM COALESCE(label::text, '')), ''), slug::text, 'Categoria')
+                WHERE nome IS NULL OR TRIM(BOTH FROM COALESCE(nome::text, '')) = ''
+                """
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE controle_categorias
+                SET nome = COALESCE(NULLIF(TRIM(COALESCE(label, '')), ''), slug, 'Categoria')
+                WHERE nome IS NULL OR TRIM(COALESCE(nome, '')) = ''
+                """
+            )
+    except Exception:
+        pass
+
+
+def _sqlite_normalize_controle_categorias_rows(cursor):
+    cursor.execute('SELECT id, slug, label, cor FROM controle_categorias')
+    rows = cursor.fetchall()
+    for rid, slug, label, cor in rows:
+        lb = (label or '').strip() if label is not None else ''
+        sl = (slug or '').strip() if slug is not None else ''
+        if not lb:
+            lb = sl if sl else 'Categoria'
+        base = slugify_controle_label(lb)
+        cand = sl if sl else base
+        n = 2
+        while True:
+            cursor.execute(
+                'SELECT 1 FROM controle_categorias WHERE slug=? AND id <> ? LIMIT 1',
+                (cand, rid),
+            )
+            if cursor.fetchone() is None:
+                break
+            cand = f'{base}_{n}'
+            n += 1
+        c = (cor or '').strip() if cor is not None else ''
+        if not c:
+            c = '#6B7280'
+        cursor.execute(
+            'UPDATE controle_categorias SET slug=?, label=?, cor=? WHERE id=?',
+            (cand, lb, c, rid),
+        )
+
+
+def _pg_normalize_controle_categorias_rows(cursor):
+    cursor.execute('SELECT id, slug, label, cor FROM controle_categorias')
+    rows = cursor.fetchall()
+    for rid, slug, label, cor in rows:
+        lb = (label or '').strip() if label is not None else ''
+        sl = (slug or '').strip() if slug is not None else ''
+        if not lb:
+            lb = sl if sl else 'Categoria'
+        base = slugify_controle_label(lb)
+        cand = sl if sl else base
+        n = 2
+        while True:
+            cursor.execute(
+                'SELECT 1 FROM controle_categorias WHERE slug=%s AND id <> %s LIMIT 1',
+                (cand, rid),
+            )
+            if cursor.fetchone() is None:
+                break
+            cand = f'{base}_{n}'
+            n += 1
+        c = (cor or '').strip() if cor is not None else ''
+        if not c:
+            c = '#6B7280'
+        cursor.execute(
+            'UPDATE controle_categorias SET slug=%s, label=%s, cor=%s WHERE id=%s',
+            (cand, lb, c, rid),
+        )
+
+
+def _migrate_controle_categorias_columns(cursor, pg=False):
+    """Alinha esquema antigo: colunas ausentes, legado nome/titulo/name em vez de label."""
+    if pg:
+        for frag in (
+            'slug TEXT',
+            'label TEXT',
+            'cor TEXT',
+            'icon_key TEXT',
+            'sort_order INTEGER DEFAULT 0',
+        ):
+            try:
+                cursor.execute(
+                    f'ALTER TABLE controle_categorias ADD COLUMN IF NOT EXISTS {frag}'
+                )
+            except Exception:
+                try:
+                    cursor.execute(
+                        f'ALTER TABLE controle_categorias ADD COLUMN {frag}'
+                    )
+                except Exception:
+                    pass
+        cols = _pg_controle_categorias_columns_lower(cursor)
+        for src in ('nome', 'titulo', 'name'):
+            if src not in cols:
+                continue
+            try:
+                cursor.execute(
+                    f"""
+                    UPDATE controle_categorias SET label = {src}
+                    WHERE (label IS NULL OR TRIM(BOTH FROM COALESCE(label::text, '')) = '')
+                      AND ({src} IS NOT NULL AND TRIM(BOTH FROM COALESCE({src}::text, '')) <> '')
+                    """
+                )
+            except Exception:
+                pass
+        try:
+            cursor.execute(
+                """
+                UPDATE controle_categorias SET label = slug::text
+                WHERE label IS NULL OR TRIM(BOTH FROM COALESCE(label::text, '')) = ''
+                """
+            )
+        except Exception:
+            pass
+        try:
+            cursor.execute(
+                """
+                UPDATE controle_categorias SET cor = '#6B7280'
+                WHERE cor IS NULL OR TRIM(BOTH FROM COALESCE(cor::text, '')) = ''
+                """
+            )
+        except Exception:
+            pass
+        try:
+            cursor.execute(
+                'UPDATE controle_categorias SET sort_order = id WHERE sort_order IS NULL'
+            )
+        except Exception:
+            pass
+        try:
+            _pg_normalize_controle_categorias_rows(cursor)
+        except Exception:
+            pass
+        try:
+            _backfill_controle_categorias_tipo(cursor, pg=True)
+        except Exception:
+            pass
+        try:
+            _backfill_controle_categorias_nome(cursor, pg=True)
+        except Exception:
+            pass
+        return
+
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='controle_categorias'"
+    )
+    if not cursor.fetchone():
+        return
+
+    def table_cols():
+        cursor.execute('PRAGMA table_info(controle_categorias)')
+        return {row[1] for row in cursor.fetchall()}
+
+    existing = table_cols()
+    for col, coltype in (
+        ('slug', 'TEXT'),
+        ('label', 'TEXT'),
+        ('cor', 'TEXT'),
+        ('icon_key', 'TEXT'),
+        ('sort_order', 'INTEGER DEFAULT 0'),
+    ):
+        if col not in existing:
+            try:
+                cursor.execute(
+                    f'ALTER TABLE controle_categorias ADD COLUMN {col} {coltype}'
+                )
+            except Exception:
+                pass
+            existing = table_cols()
+
+    existing = table_cols()
+    el = {c.lower() for c in existing}
+    for src in ('nome', 'titulo', 'name'):
+        if src not in el:
+            continue
+        try:
+            cursor.execute(
+                f"""
+                UPDATE controle_categorias SET label = {src}
+                WHERE (label IS NULL OR TRIM(COALESCE(label, '')) = '')
+                  AND ({src} IS NOT NULL AND TRIM(COALESCE({src}, '')) <> '')
+                """
+            )
+        except Exception:
+            pass
+    try:
+        cursor.execute(
+            """
+            UPDATE controle_categorias SET label = slug
+            WHERE label IS NULL OR TRIM(COALESCE(label, '')) = ''
+            """
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            """
+            UPDATE controle_categorias SET cor = '#6B7280'
+            WHERE cor IS NULL OR TRIM(COALESCE(cor, '')) = ''
+            """
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            'UPDATE controle_categorias SET sort_order = id WHERE sort_order IS NULL'
+        )
+    except Exception:
+        pass
+    try:
+        _sqlite_normalize_controle_categorias_rows(cursor)
+    except Exception:
+        pass
+    try:
+        _backfill_controle_categorias_tipo(cursor, pg=False)
+    except Exception:
+        pass
+    try:
+        _backfill_controle_categorias_nome(cursor, pg=False)
+    except Exception:
+        pass
+
+
+def _ensure_controle_categorias_table(usuario):
+    """Garante a tabela mesmo se _upgrade_controle_schema falhar antes do CREATE."""
+    if not usuario:
+        return
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS controle_categorias (
+                        id SERIAL PRIMARY KEY,
+                        slug TEXT NOT NULL UNIQUE,
+                        label TEXT NOT NULL,
+                        cor TEXT NOT NULL,
+                        icon_key TEXT,
+                        sort_order INTEGER DEFAULT 0
+                    )
+                    '''
+                )
+                _migrate_controle_categorias_columns(cursor, pg=True)
+            conn.commit()
+        finally:
+            conn.close()
+        return
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS controle_categorias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                cor TEXT NOT NULL,
+                icon_key TEXT,
+                sort_order INTEGER DEFAULT 0
+            )
+            '''
+        )
+        _migrate_controle_categorias_columns(cur, pg=False)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _controle_categoria_slug_em_uso(cursor, slug, pg=False, exclude_id=None):
+    if exclude_id is not None:
+        if pg:
+            cursor.execute(
+                'SELECT 1 FROM controle_categorias WHERE slug=%s AND id <> %s LIMIT 1',
+                (slug, exclude_id),
+            )
+        else:
+            cursor.execute(
+                'SELECT 1 FROM controle_categorias WHERE slug=? AND id <> ? LIMIT 1',
+                (slug, exclude_id),
+            )
+    else:
+        if pg:
+            cursor.execute('SELECT 1 FROM controle_categorias WHERE slug=%s LIMIT 1', (slug,))
+        else:
+            cursor.execute('SELECT 1 FROM controle_categorias WHERE slug=? LIMIT 1', (slug,))
+    return cursor.fetchone() is not None
+
+
+def _insert_controle_categoria(
+    cursor, slug, label, cor, icon_key, sort_order, pg=False, mode='adicionar'
+):
+    """
+    Insere linha em controle_categorias. Esquemas legados exigem coluna tipo NOT NULL.
+    mode: 'adicionar' | 'seed_pg' | 'seed_sqlite'
+    """
+    ik = icon_key or None
+    has_t = _controle_categorias_has_tipo(cursor, pg)
+    has_n = _controle_categorias_has_nome(cursor, pg)
+    if pg:
+        if mode == 'seed_pg':
+            if has_t and has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order, tipo)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (slug) DO NOTHING''',
+                    (slug, label, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_t:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order, tipo)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (slug) DO NOTHING''',
+                    (slug, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (slug) DO NOTHING''',
+                    (slug, label, label, cor, ik, sort_order),
+                )
+            else:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (slug) DO NOTHING''',
+                    (slug, label, cor, ik, sort_order),
+                )
+        else:
+            if has_t and has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order, tipo)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                    (slug, label, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_t:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order, tipo)
+                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                    (slug, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order)
+                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                    (slug, label, label, cor, ik, sort_order),
+                )
+            else:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order)
+                       VALUES (%s, %s, %s, %s, %s) RETURNING id''',
+                    (slug, label, cor, ik, sort_order),
+                )
+    else:
+        if mode == 'seed_sqlite':
+            if has_t and has_n:
+                cursor.execute(
+                    '''INSERT OR IGNORE INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order, tipo)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                    (slug, label, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_t:
+                cursor.execute(
+                    '''INSERT OR IGNORE INTO controle_categorias (slug, label, cor, icon_key, sort_order, tipo)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (slug, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_n:
+                cursor.execute(
+                    '''INSERT OR IGNORE INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (slug, label, label, cor, ik, sort_order),
+                )
+            else:
+                cursor.execute(
+                    '''INSERT OR IGNORE INTO controle_categorias (slug, label, cor, icon_key, sort_order)
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (slug, label, cor, ik, sort_order),
+                )
+        else:
+            if has_t and has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order, tipo)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                    (slug, label, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_t:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order, tipo)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (slug, label, cor, ik, sort_order, 'despesa'),
+                )
+            elif has_n:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, nome, cor, icon_key, sort_order)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (slug, label, label, cor, ik, sort_order),
+                )
+            else:
+                cursor.execute(
+                    '''INSERT INTO controle_categorias (slug, label, cor, icon_key, sort_order)
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (slug, label, cor, ik, sort_order),
+                )
+
+
+def seed_controle_categorias_if_empty(usuario=None):
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return
+    _ensure_controle_categorias_table(usuario)
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT COUNT(*) FROM controle_categorias')
+                row = cursor.fetchone()
+                n = int(row[0]) if row and row[0] is not None else 0
+                if n > 0:
+                    return
+                for slug, label, cor, icon_key, sort_order in DEFAULT_CONTROLE_CATEGORIAS_SEED:
+                    _insert_controle_categoria(
+                        cursor,
+                        slug,
+                        label,
+                        cor,
+                        icon_key,
+                        sort_order,
+                        pg=True,
+                        mode='seed_pg',
+                    )
+            conn.commit()
+        finally:
+            conn.close()
+        return
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM controle_categorias')
+        row = cursor.fetchone()
+        n = int(row[0]) if row and row[0] is not None else 0
+        if n > 0:
+            return
+        for slug, label, cor, icon_key, sort_order in DEFAULT_CONTROLE_CATEGORIAS_SEED:
+            _insert_controle_categoria(
+                cursor,
+                slug,
+                label,
+                cor,
+                icon_key,
+                sort_order,
+                pg=False,
+                mode='seed_sqlite',
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def listar_controle_categorias(usuario=None):
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return []
+    try:
+        _upgrade_controle_schema(usuario)
+    except Exception:
+        pass
+    seed_controle_categorias_if_empty(usuario)
+
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    '''SELECT id, slug, label, cor, icon_key, sort_order FROM controle_categorias
+                       ORDER BY sort_order ASC, id ASC'''
+                )
+                rows = cursor.fetchall()
+        finally:
+            conn.close()
+        out = []
+        for r in rows:
+            out.append({
+                'id': int(r[0]),
+                'slug': r[1],
+                'label': r[2],
+                'cor': r[3],
+                'icon_key': r[4],
+                'sort_order': int(r[5] or 0),
+            })
+        return out
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            '''SELECT id, slug, label, cor, icon_key, sort_order FROM controle_categorias
+               ORDER BY sort_order ASC, id ASC'''
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                'id': int(r[0]),
+                'slug': r[1],
+                'label': r[2],
+                'cor': r[3],
+                'icon_key': r[4],
+                'sort_order': int(r[5] or 0),
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def adicionar_controle_categoria(label, cor, icon_key=None, usuario=None):
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return {'success': False, 'message': 'Usuário não autenticado'}
+    label = (label or '').strip()
+    cor = (cor or '').strip() or '#6B7280'
+    if not label:
+        return {'success': False, 'message': 'Nome da categoria é obrigatório'}
+    try:
+        _upgrade_controle_schema(usuario)
+    except Exception:
+        pass
+    seed_controle_categorias_if_empty(usuario)
+
+    base = slugify_controle_label(label)
+    slug = base
+
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                n = 2
+                while _controle_categoria_slug_em_uso(cursor, slug, pg=True):
+                    slug = f'{base}_{n}'
+                    n += 1
+                cursor.execute('SELECT COALESCE(MAX(sort_order), 0) FROM controle_categorias')
+                mx = cursor.fetchone()[0] or 0
+                sort_order = int(mx) + 10
+                _insert_controle_categoria(
+                    cursor,
+                    slug,
+                    label,
+                    cor,
+                    icon_key,
+                    sort_order,
+                    pg=True,
+                    mode='adicionar',
+                )
+                new_id = cursor.fetchone()[0]
+            conn.commit()
+        finally:
+            conn.close()
+        return {'success': True, 'id': int(new_id), 'slug': slug}
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cursor = conn.cursor()
+        n = 2
+        while _controle_categoria_slug_em_uso(cursor, slug, pg=False):
+            slug = f'{base}_{n}'
+            n += 1
+        cursor.execute('SELECT COALESCE(MAX(sort_order), 0) FROM controle_categorias')
+        mx = cursor.fetchone()[0] or 0
+        sort_order = int(mx) + 10
+        _insert_controle_categoria(
+            cursor,
+            slug,
+            label,
+            cor,
+            icon_key,
+            sort_order,
+            pg=False,
+            mode='adicionar',
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+        return {'success': True, 'id': int(new_id), 'slug': slug}
+    finally:
+        conn.close()
+
+
+def atualizar_controle_categoria(cid, usuario=None, **updates):
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return {'success': False, 'message': 'Usuário não autenticado'}
+    try:
+        cid = int(cid)
+    except (TypeError, ValueError):
+        return {'success': False, 'message': 'ID inválido'}
+
+    try:
+        _upgrade_controle_schema(usuario)
+    except Exception:
+        pass
+    try:
+        _ensure_controle_categorias_table(usuario)
+    except Exception:
+        pass
+
+    sets_pg = []
+    vals_pg = []
+    sets_sq = []
+    vals_sq = []
+
+    if 'label' in updates:
+        lb = str(updates['label']).strip()
+        if not lb:
+            return {'success': False, 'message': 'Nome não pode ser vazio'}
+        sets_pg.append('label=%s')
+        vals_pg.append(lb)
+        sets_sq.append('label=?')
+        vals_sq.append(lb)
+    if 'cor' in updates:
+        c = str(updates['cor']).strip() or '#6B7280'
+        sets_pg.append('cor=%s')
+        vals_pg.append(c)
+        sets_sq.append('cor=?')
+        vals_sq.append(c)
+    if 'icon_key' in updates:
+        ik = updates['icon_key']
+        if ik is not None:
+            ik = str(ik).strip() or None
+        sets_pg.append('icon_key=%s')
+        vals_pg.append(ik)
+        sets_sq.append('icon_key=?')
+        vals_sq.append(ik)
+    if 'sort_order' in updates:
+        try:
+            so = int(updates['sort_order'])
+        except (TypeError, ValueError):
+            return {'success': False, 'message': 'Ordem inválida'}
+        sets_pg.append('sort_order=%s')
+        vals_pg.append(so)
+        sets_sq.append('sort_order=?')
+        vals_sq.append(so)
+
+    if not sets_pg:
+        return {'success': False, 'message': 'Nada para atualizar'}
+
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                vals_pg.append(cid)
+                sql = f"UPDATE controle_categorias SET {', '.join(sets_pg)} WHERE id=%s"
+                cursor.execute(sql, tuple(vals_pg))
+                if cursor.rowcount == 0:
+                    return {'success': False, 'message': 'Categoria não encontrada'}
+            conn.commit()
+        finally:
+            conn.close()
+        return {'success': True}
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cursor = conn.cursor()
+        vals_sq.append(cid)
+        sql = f"UPDATE controle_categorias SET {', '.join(sets_sq)} WHERE id=?"
+        cursor.execute(sql, tuple(vals_sq))
+        if cursor.rowcount == 0:
+            return {'success': False, 'message': 'Categoria não encontrada'}
+        conn.commit()
+        return {'success': True}
+    finally:
+        conn.close()
+
+
+def remover_controle_categoria(cid, usuario=None):
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return {'success': False, 'message': 'Usuário não autenticado'}
+    try:
+        cid = int(cid)
+    except (TypeError, ValueError):
+        return {'success': False, 'message': 'ID inválido'}
+
+    try:
+        _upgrade_controle_schema(usuario)
+    except Exception:
+        pass
+    try:
+        _ensure_controle_categorias_table(usuario)
+    except Exception:
+        pass
+
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT slug FROM controle_categorias WHERE id=%s', (cid,))
+                row = cursor.fetchone()
+                if not row:
+                    return {'success': False, 'message': 'Categoria não encontrada'}
+                slug = row[0]
+                if slug == 'outros':
+                    return {'success': False, 'message': 'A categoria Outros não pode ser removida'}
+                cursor.execute('UPDATE receitas SET categoria=%s WHERE categoria=%s', ('outros', slug))
+                cursor.execute('UPDATE outros_gastos SET categoria=%s WHERE categoria=%s', ('outros', slug))
+                cursor.execute('UPDATE compras_cartao SET categoria=%s WHERE categoria=%s', ('outros', slug))
+                cursor.execute('DELETE FROM controle_categorias WHERE id=%s', (cid,))
+            conn.commit()
+        finally:
+            conn.close()
+        return {'success': True}
+
+    db_path = get_db_path(usuario, 'controle')
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT slug FROM controle_categorias WHERE id=?', (cid,))
+        row = cursor.fetchone()
+        if not row:
+            return {'success': False, 'message': 'Categoria não encontrada'}
+        slug = row[0]
+        if slug == 'outros':
+            return {'success': False, 'message': 'A categoria Outros não pode ser removida'}
+        cursor.execute('UPDATE receitas SET categoria=? WHERE categoria=?', ('outros', slug))
+        cursor.execute('UPDATE outros_gastos SET categoria=? WHERE categoria=?', ('outros', slug))
+        cursor.execute('UPDATE compras_cartao SET categoria=? WHERE categoria=?', ('outros', slug))
+        cursor.execute('DELETE FROM controle_categorias WHERE id=?', (cid,))
+        conn.commit()
+        return {'success': True}
+    finally:
+        conn.close()
+
 
 def salvar_receita(nome, valor, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
     
@@ -8850,6 +9755,8 @@ def obter_carteira_para_admin(target_username):
                         status_vencimento = _calcular_status_vencimento(vencimento)
                     preco_medio = float(row[19]) if (len(row) > 19 and row[19] is not None) else (preco_compra if preco_compra is not None else None)
                     isento_ir = bool(row[17]) if (len(row) > 17 and row[17] is not None) else False
+                    emissor_rf = row[20] if (len(row) > 20 and row[20] is not None) else None
+                    tipo_renda_fixa = row[21] if (len(row) > 21 and row[21] is not None) else None
                     ativo = {
                         "id": row[0], "ticker": row[1], "nome_completo": row[2],
                         "quantidade": float(row[3]) if row[3] is not None else 0,
@@ -8864,6 +9771,7 @@ def obter_carteira_para_admin(target_username):
                         "indexador": row[13], "indexador_pct": float(row[14]) if (len(row) > 14 and row[14] is not None) else None,
                         "data_aplicacao": row[15] if (len(row) > 15 and row[15] is not None) else None,
                         "vencimento": vencimento, "status_vencimento": status_vencimento, "isento_ir": isento_ir,
+                        "emissor_rf": emissor_rf, "tipo_renda_fixa": tipo_renda_fixa,
                     }
                     ativos.append(ativo)
                 return ativos
@@ -8874,7 +9782,7 @@ def obter_carteira_para_admin(target_username):
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, ticker, nome_completo, quantidade, preco_atual, preco_compra, valor_total,
-                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio
+                   data_adicao, tipo, dy, pl, pvp, roe, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir, liquidez_diaria, preco_medio, emissor_rf, tipo_renda_fixa
             FROM carteira
             ORDER BY valor_total DESC
         ''')
@@ -8886,6 +9794,8 @@ def obter_carteira_para_admin(target_username):
             tipo = row[8] if row_len > 8 else "Desconhecido"
             preco_medio = (float(row[19]) if (row_len > 19 and row[19] is not None) else None) or (float(preco_compra) if preco_compra is not None else None)
             isento_ir = bool(row[17]) if (row_len > 17 and row[17] is not None) else False
+            emissor_rf = row[20] if (row_len > 20 and row[20] is not None) else None
+            tipo_renda_fixa = row[21] if (row_len > 21 and row[21] is not None) else None
             status_vencimento = None
             if tipo and "renda fixa" in tipo.lower() and vencimento:
                 status_vencimento = _calcular_status_vencimento(vencimento)
@@ -8902,6 +9812,7 @@ def obter_carteira_para_admin(target_username):
                 "indexador_pct": row[14] if row_len > 14 else row[13],
                 "data_aplicacao": row[15] if row_len > 15 else None,
                 "vencimento": vencimento, "status_vencimento": status_vencimento, "isento_ir": isento_ir,
+                "emissor_rf": emissor_rf, "tipo_renda_fixa": tipo_renda_fixa,
             }
             ativos.append(ativo)
         conn.close()

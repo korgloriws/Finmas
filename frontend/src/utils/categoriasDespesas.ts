@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import type { ControleCategoriaGastoApi } from '../types'
 
 export interface CategoriaDespesa {
   value: string
@@ -38,7 +39,51 @@ export const CATEGORIAS_DESPESAS: CategoriaDespesa[] = [
 export const CATEGORIA_OUTROS: CategoriaDespesa =
   CATEGORIAS_DESPESAS.find((c) => c.value === 'outros') ?? CATEGORIAS_DESPESAS[CATEGORIAS_DESPESAS.length - 1]
 
-export function getCategoriaDespesa(value: string | null | undefined): CategoriaDespesa {
-  if (!value) return CATEGORIA_OUTROS
-  return CATEGORIAS_DESPESAS.find((c) => c.value === value) ?? CATEGORIA_OUTROS
+const ICON_REGISTRY: Record<string, LucideIcon> = {
+  Heart,
+  ShoppingCart,
+  Home,
+  Baby,
+  Zap,
+  Utensils,
+  Car,
+  Gamepad2,
+  Receipt,
+  CreditCard,
+  TrendingUp,
+}
+
+/** Ícones disponíveis ao criar/editar categoria no controle. */
+export const CONTROLE_ICONS_OPCOES = Object.keys(ICON_REGISTRY).sort() as string[]
+
+export function resolveControleCategoryIcon(key: string | null | undefined): LucideIcon {
+  if (key && ICON_REGISTRY[key]) return ICON_REGISTRY[key]
+  return Receipt
+}
+
+export function mapControleApiToCategoria(row: ControleCategoriaGastoApi): CategoriaDespesa {
+  return {
+    value: row.slug,
+    label: row.label,
+    icon: resolveControleCategoryIcon(row.icon_key),
+    color: row.cor,
+  }
+}
+
+export function getCategoriaDespesa(
+  value: string | null | undefined,
+  catalog?: CategoriaDespesa[]
+): CategoriaDespesa {
+  const base = catalog && catalog.length > 0 ? catalog : CATEGORIAS_DESPESAS
+  const fallback =
+    base.find((c) => c.value === 'outros') ?? CATEGORIA_OUTROS
+  if (!value) return fallback
+  const hit = base.find((c) => c.value === value)
+  if (hit) return hit
+  return {
+    value,
+    label: value,
+    icon: Receipt,
+    color: '#94a3b8',
+  }
 }
