@@ -3,6 +3,12 @@ import ReactECharts from 'echarts-for-react'
 import 'echarts'
 import 'echarts-gl'
 import { useTheme } from '../../contexts/ThemeContext'
+import {
+  extractHexesFromCss,
+  isCssGradientBackground,
+  normalizeHex,
+  tryParseLinearGradientTwoStops,
+} from '../../utils/controleCorUtils'
 
 const MOBILE_BREAKPOINT = 640
 
@@ -15,6 +21,43 @@ interface DistribuicaoCarteiraEChartsProps {
   /** '3d' = barras 3D, 'pie' = pizza 2D animada */
   variant?: '3d' | 'pie'
   formatCurrency: (value: number) => string
+}
+
+function toEChartsColor(fill: string) {
+  const raw = (fill || '').trim()
+  if (!raw) return '#6B7280'
+  if (!isCssGradientBackground(raw)) return normalizeHex(raw)
+
+  const parsed = tryParseLinearGradientTwoStops(raw)
+  if (parsed) {
+    return {
+      type: 'linear',
+      x: 0,
+      y: 0,
+      x2: 1,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: parsed.c1 },
+        { offset: 1, color: parsed.c2 },
+      ],
+    }
+  }
+
+  const hexes = extractHexesFromCss(raw)
+  if (hexes.length >= 2) {
+    return {
+      type: 'linear',
+      x: 0,
+      y: 0,
+      x2: 1,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: normalizeHex(hexes[0]) },
+        { offset: 1, color: normalizeHex(hexes[1]) },
+      ],
+    }
+  }
+  return hexes[0] ? normalizeHex(hexes[0]) : '#6B7280'
 }
 
 function useIsMobile() {
@@ -112,9 +155,9 @@ export default function DistribuicaoCarteiraECharts({
             type: 'bar3D',
             data: barData.map((item, idx) => ({
               value: item,
-              itemStyle: { color: dados[idx].fill },
+              itemStyle: { color: toEChartsColor(dados[idx].fill) },
               emphasis: {
-                itemStyle: { color: dados[idx].fill, opacity: 1 },
+                itemStyle: { color: toEChartsColor(dados[idx].fill), opacity: 1 },
                 label: { show: true }
               }
             })),
@@ -192,7 +235,7 @@ export default function DistribuicaoCarteiraECharts({
           data: dados.map(d => ({
             name: d.name,
             value: d.value,
-            itemStyle: { color: d.fill },
+            itemStyle: { color: toEChartsColor(d.fill) },
             percentage: d.percentage
           })),
           animation: true,

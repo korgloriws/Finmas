@@ -21,7 +21,6 @@ const ControleReceitaTab = lazy(() => import('../components/controle/ControleRec
 const ControleDespesaTab = lazy(() => import('../components/controle/ControleDespesaTab'))
 const ControleCartaoTab = lazy(() => import('../components/controle/ControleCartaoTab'))
 import { formatCurrency } from '../utils/formatters'
-import { corParaFillGrafico } from '../utils/controleCorUtils'
 import { ControleCategoriasProvider, useControleCategorias } from '../contexts/ControleCategoriasContext'
 import { EvolucaoFinanceira, ReceitasDespesas } from '../types'
 // Lazy loading de gráficos pesados
@@ -865,7 +864,7 @@ function ControlePageContent() {
                        dados={totaisPorCategoria.map(({ value, categoria }) => ({
                          name: categoria.label,
                          value,
-                         fill: corParaFillGrafico(categoria.color),
+                         fill: categoria.color,
                        }))}
                        totalInvestido={totaisPorCategoria.reduce((s, d) => s + d.value, 0)}
                        formatCurrency={(v) => (ocultarValores ? '••••••' : formatCurrency(v))}
