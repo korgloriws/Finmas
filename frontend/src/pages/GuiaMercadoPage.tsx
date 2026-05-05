@@ -9,6 +9,7 @@ import GuiaRendaVariavelTab from '../components/guia/GuiaRendaVariavelTab'
 import GuiaRendaVariavelInternacionalTab from '../components/guia/GuiaRendaVariavelInternacionalTab'
 import GuiaRendaFixaInternacionalTab from '../components/guia/GuiaRendaFixaInternacionalTab'
 import GuiaTesouroDiretoTab from '../components/guia/GuiaTesouroDiretoTab'
+import GuiaFiscalTab from '../components/guia/GuiaFiscalTab'
 import { TrendingUp, BarChart3 } from 'lucide-react'
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from '../components/LazyChart'
 
@@ -1024,7 +1025,7 @@ export default function GuiaMercadoPage() {
   const [leftKey, setLeftKey] = useState('buyhold')
   const [rightKey, setRightKey] = useState('dividends')
   const [showMarketNotes, setShowMarketNotes] = useState(true)
-  const [activeTab, setActiveTab] = useState<'geral' | 'renda-fixa' | 'renda-variavel' | 'renda-variavel-internacional' | 'renda-fixa-internacional' | 'tesouro-direto'>('geral')
+  const [activeTab, setActiveTab] = useState<'geral' | 'renda-fixa' | 'renda-variavel' | 'renda-variavel-internacional' | 'renda-fixa-internacional' | 'tesouro-direto' | 'fiscal'>('geral')
   const [chartPeriod, setChartPeriod] = useState<'6mo' | '1y' | '3y' | '5y'>('1y')
 
  
@@ -1718,6 +1719,16 @@ export default function GuiaMercadoPage() {
                 >
                   Tesouro Direto
                 </button>
+                <button
+                  onClick={() => setActiveTab('fiscal')}
+                  className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
+                    activeTab === 'fiscal'
+                      ? 'bg-primary text-primary-foreground shadow-lg'
+                      : 'bg-muted text-muted-foreground hover:bg-accent hover:shadow-md'
+                  }`}
+                >
+                  Guia Fiscal
+                </button>
               </div>
               
               {/* Checkbox de Notas de Mercado */}
@@ -1806,6 +1817,10 @@ export default function GuiaMercadoPage() {
 
             {activeTab === 'tesouro-direto' && (
               <GuiaTesouroDiretoTab />
+            )}
+
+            {activeTab === 'fiscal' && (
+              <GuiaFiscalTab />
             )}
           </div>
         </div>

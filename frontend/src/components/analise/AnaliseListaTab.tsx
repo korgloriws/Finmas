@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { analiseService, carteiraService, ativoService } from '../../services/api'
@@ -15,13 +15,97 @@ function mensagemErroAnalise(err: unknown): string {
   return 'Erro ao carregar. Tente novamente.'
 }
 
-// FIIs têm apenas 3 critérios (DY min, DY max, liquidez), enquanto Ações/BDRs têm 7.
-// Como os filtros das outras abas naturalmente reduzem o resultado para ~10 itens,
-// limitamos os FIIs explicitamente ao TOP 10 (ordenado por DY desc no backend) para
-// manter a UX consistente entre as três abas.
+function erroFoiCancelamento(err: unknown): boolean {
+  if (!err) return false
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase()
+    if (m.includes('aborted') || m.includes('abort') || m.includes('canceled') || m.includes('cancelled')) {
+      return true
+    }
+  }
+  return false
+}
+
+const FILTROS_UNIVERSO_ACOES: FiltrosAnalise = {
+  roe_min: -999999,
+  dy_min: -999999,
+  pl_min: -999999,
+  pl_max: 999999,
+  pvp_max: 999999,
+  net_debt_ebitda_max: 999999,
+  liq_min: 0,
+  setor: ''
+}
+
+const FILTROS_UNIVERSO_BDRS: FiltrosAnalise = {
+  roe_min: -999999,
+  dy_min: -999999,
+  pl_min: -999999,
+  pl_max: 999999,
+  pvp_max: 999999,
+  net_debt_ebitda_max: 999999,
+  liq_min: 0,
+  setor: ''
+}
+
+const FILTROS_UNIVERSO_FIIS: FiltrosAnalise = {
+  dy_min: -999999,
+  dy_max: 999999,
+  liq_min: 0,
+  tipo_fii: '',
+  segmento_fii: ''
+}
+
+const toFinite = (value: unknown, fallback: number) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function filtrarAcoesLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
+  const roeMin = toFinite(filtros.roe_min, 0)
+  const dyMin = toFinite(filtros.dy_min, 0)
+  const plMin = toFinite(filtros.pl_min, 0)
+  const plMax = toFinite(filtros.pl_max, Number.POSITIVE_INFINITY)
+  const pvpMax = toFinite(filtros.pvp_max, Number.POSITIVE_INFINITY)
+  const liqMin = toFinite(filtros.liq_min, 0)
+  const setor = (filtros.setor || '').trim()
+
+  return lista
+    .filter((ativo) => (
+      toFinite(ativo.roe, 0) >= roeMin &&
+      toFinite(ativo.dividend_yield, 0) > dyMin &&
+      toFinite(ativo.pl, 0) >= plMin &&
+      toFinite(ativo.pl, 0) <= plMax &&
+      toFinite(ativo.pvp, 0) <= pvpMax &&
+      toFinite(ativo.liquidez_diaria, 0) > liqMin &&
+      (!setor || (ativo.setor || '').trim() === setor)
+    ))
+    .sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
+}
+
+function filtrarBdrsLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
+  return filtrarAcoesLocalmente(lista, filtros)
+}
+
+function filtrarFiisLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
+  const dyMin = toFinite(filtros.dy_min, 0)
+  const dyMax = toFinite(filtros.dy_max, Number.POSITIVE_INFINITY)
+  const liqMin = toFinite(filtros.liq_min, 0)
+
+  return lista
+    .filter((ativo) => (
+      toFinite(ativo.dividend_yield, 0) >= dyMin &&
+      toFinite(ativo.dividend_yield, 0) <= dyMax &&
+      toFinite(ativo.liquidez_diaria, 0) > liqMin
+    ))
+    .sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
+}
+
+
 const MAX_FIIS_VISIVEIS = 10
 
-// Lista de setores comuns (baseado nos setores do yfinance)
+
 const SETORES_COMUNS = [
   'Financial Services',
   'Technology',
@@ -49,6 +133,7 @@ function FiltrosAcoes({
   onFiltroStringChange,
   onBuscar, 
   loading, 
+  onCancelar,
   autoSearch, 
   onAutoSearchChange 
 }: {
@@ -57,6 +142,7 @@ function FiltrosAcoes({
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
   onBuscar: () => void
   loading: boolean
+  onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
@@ -185,7 +271,16 @@ function FiltrosAcoes({
         </div>
       </div>
       
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-end gap-2">
+        {loading && (
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted font-medium transition-all duration-200 text-sm"
+          >
+            Cancelar busca
+          </button>
+        )}
         <button
           onClick={onBuscar}
           disabled={loading}
@@ -217,6 +312,7 @@ function FiltrosBdrs({
   onFiltroStringChange,
   onBuscar, 
   loading, 
+  onCancelar,
   autoSearch, 
   onAutoSearchChange 
 }: {
@@ -225,6 +321,7 @@ function FiltrosBdrs({
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
   onBuscar: () => void
   loading: boolean
+  onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
@@ -339,7 +436,16 @@ function FiltrosBdrs({
         </div>
       </div>
       
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-end gap-2">
+        {loading && (
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted font-medium transition-all duration-200 text-sm"
+          >
+            Cancelar busca
+          </button>
+        )}
         <button
           onClick={onBuscar}
           disabled={loading}
@@ -371,6 +477,7 @@ function FiltrosFiis({
   onFiltroStringChange,
   onBuscar, 
   loading, 
+  onCancelar,
   autoSearch, 
   onAutoSearchChange 
 }: {
@@ -379,6 +486,7 @@ function FiltrosFiis({
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
   onBuscar: () => void
   loading: boolean
+  onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
@@ -478,7 +586,16 @@ function FiltrosFiis({
         </div>
       </div>
       
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-end gap-2">
+        {loading && (
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted font-medium transition-all duration-200 text-sm"
+          >
+            Cancelar busca
+          </button>
+        )}
         <button
           onClick={onBuscar}
           disabled={loading}
@@ -1304,6 +1421,15 @@ export default function AnaliseListaTab() {
 
 
   const [fiiMetadataMap, setFiiMetadataMap] = useState<Record<string, { tipo?: string; segmento?: string }>>({})
+  const abortAcoesRef = useRef<AbortController | null>(null)
+  const abortBdrsRef = useRef<AbortController | null>(null)
+  const abortFiisRef = useRef<AbortController | null>(null)
+  const universoAcoesRef = useRef<AtivoAnalise[] | null>(null)
+  const universoBdrsRef = useRef<AtivoAnalise[] | null>(null)
+  const universoFiisRef = useRef<AtivoAnalise[] | null>(null)
+  const filtrosAcoesRef = useRef<FiltrosAnalise>(filtrosAcoes)
+  const filtrosBdrsRef = useRef<FiltrosAnalise>(filtrosBdrs)
+  const filtrosFiisRef = useRef<FiltrosAnalise>(filtrosFiis)
 
   // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
   const { data: carteira } = useQuery({
@@ -1362,85 +1488,195 @@ export default function AnaliseListaTab() {
     buscarMetadados()
   }, [ativosFiis])
 
-  const handleBuscarAcoes = useCallback(async () => {
+  const cancelarBuscaAcoes = useCallback(() => {
+    void analiseService.cancelarBusca().catch(() => undefined)
+    abortAcoesRef.current?.abort()
+    abortAcoesRef.current = null
+    setLoadingAcoes(false)
+  }, [])
+
+  const cancelarBuscaBdrs = useCallback(() => {
+    void analiseService.cancelarBusca().catch(() => undefined)
+    abortBdrsRef.current?.abort()
+    abortBdrsRef.current = null
+    setLoadingBdrs(false)
+  }, [])
+
+  const cancelarBuscaFiis = useCallback(() => {
+    void analiseService.cancelarBusca().catch(() => undefined)
+    abortFiisRef.current?.abort()
+    abortFiisRef.current = null
+    setLoadingFiis(false)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      abortAcoesRef.current?.abort()
+      abortBdrsRef.current?.abort()
+      abortFiisRef.current?.abort()
+    }
+  }, [])
+
+  useEffect(() => {
+    filtrosAcoesRef.current = filtrosAcoes
+  }, [filtrosAcoes])
+
+  useEffect(() => {
+    filtrosBdrsRef.current = filtrosBdrs
+  }, [filtrosBdrs])
+
+  useEffect(() => {
+    filtrosFiisRef.current = filtrosFiis
+  }, [filtrosFiis])
+
+  useEffect(() => {
+    if (!universoAcoesRef.current) return
+    setAtivosAcoes(filtrarAcoesLocalmente(universoAcoesRef.current, filtrosAcoes))
+  }, [filtrosAcoes, setAtivosAcoes])
+
+  useEffect(() => {
+    if (!universoBdrsRef.current) return
+    setAtivosBdrs(filtrarBdrsLocalmente(universoBdrsRef.current, filtrosBdrs))
+  }, [filtrosBdrs, setAtivosBdrs])
+
+  useEffect(() => {
+    if (!universoFiisRef.current) return
+    setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosFiis))
+  }, [filtrosFiis, setAtivosFiis])
+
+  const handleBuscarAcoes = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
+    const filtrosAtuais = filtrosOverride || filtrosAcoesRef.current
+    if (universoAcoesRef.current) {
+      setErrorAcoes(null)
+      setAtivosAcoes(filtrarAcoesLocalmente(universoAcoesRef.current, filtrosAtuais))
+      return
+    }
+    try {
+      await analiseService.cancelarBusca()
+    } catch {}
+    abortAcoesRef.current?.abort()
+    const ctrl = new AbortController()
+    abortAcoesRef.current = ctrl
     setLoadingAcoes(true)
     setErrorAcoes(null)
     try {
-      const data = await analiseService.getAtivos('acoes', filtrosAcoes)
-      setAtivosAcoes(data)
+      const universo = await analiseService.getAtivos('acoes', FILTROS_UNIVERSO_ACOES, { signal: ctrl.signal })
+      universoAcoesRef.current = universo
+      setAtivosAcoes(filtrarAcoesLocalmente(universo, filtrosAcoesRef.current))
     } catch (error) {
-      setErrorAcoes(mensagemErroAnalise(error))
+      if (!erroFoiCancelamento(error)) {
+        setErrorAcoes(mensagemErroAnalise(error))
+      }
     } finally {
       setLoadingAcoes(false)
+      if (abortAcoesRef.current === ctrl) abortAcoesRef.current = null
     }
-  }, [filtrosAcoes])
+  }, [filtrosAcoes, setAtivosAcoes])
 
-  const handleBuscarBdrs = useCallback(async () => {
+  const handleBuscarBdrs = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
+    const filtrosAtuais = filtrosOverride || filtrosBdrsRef.current
+    if (universoBdrsRef.current) {
+      setErrorBdrs(null)
+      setAtivosBdrs(filtrarBdrsLocalmente(universoBdrsRef.current, filtrosAtuais))
+      return
+    }
+    try {
+      await analiseService.cancelarBusca()
+    } catch {}
+    abortBdrsRef.current?.abort()
+    const ctrl = new AbortController()
+    abortBdrsRef.current = ctrl
     setLoadingBdrs(true)
     setErrorBdrs(null)
     try {
-      const data = await analiseService.getAtivos('bdrs', filtrosBdrs)
-      setAtivosBdrs(data)
+      const universo = await analiseService.getAtivos('bdrs', FILTROS_UNIVERSO_BDRS, { signal: ctrl.signal })
+      universoBdrsRef.current = universo
+      setAtivosBdrs(filtrarBdrsLocalmente(universo, filtrosBdrsRef.current))
     } catch (error) {
-      setErrorBdrs(mensagemErroAnalise(error))
+      if (!erroFoiCancelamento(error)) {
+        setErrorBdrs(mensagemErroAnalise(error))
+      }
     } finally {
       setLoadingBdrs(false)
+      if (abortBdrsRef.current === ctrl) abortBdrsRef.current = null
     }
-  }, [filtrosBdrs])
+  }, [filtrosBdrs, setAtivosBdrs])
 
-  const handleBuscarFiis = useCallback(async () => {
+  const handleBuscarFiis = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
+    const filtrosAtuais = filtrosOverride || filtrosFiisRef.current
+    if (universoFiisRef.current) {
+      setErrorFiis(null)
+      setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosAtuais))
+      return
+    }
+    try {
+      await analiseService.cancelarBusca()
+    } catch {}
+    abortFiisRef.current?.abort()
+    const ctrl = new AbortController()
+    abortFiisRef.current = ctrl
     setLoadingFiis(true)
     setErrorFiis(null)
     try {
-      const data = await analiseService.getAtivos('fiis', filtrosFiis)
-      setAtivosFiis(data)
+      const universo = await analiseService.getAtivos('fiis', FILTROS_UNIVERSO_FIIS, { signal: ctrl.signal })
+      universoFiisRef.current = universo
+      setAtivosFiis(filtrarFiisLocalmente(universo, filtrosFiisRef.current))
     } catch (error) {
-      setErrorFiis(mensagemErroAnalise(error))
+      if (!erroFoiCancelamento(error)) {
+        setErrorFiis(mensagemErroAnalise(error))
+      }
     } finally {
       setLoadingFiis(false)
+      if (abortFiisRef.current === ctrl) abortFiisRef.current = null
     }
-  }, [filtrosFiis])
+  }, [filtrosFiis, setAtivosFiis])
 
   // Funções de mudança de filtro
   const handleFiltroAcoesChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosAcoes({ ...filtrosAcoes, [key]: value })
+    const nextFiltros = { ...filtrosAcoes, [key]: value }
+    setFiltrosAcoes(nextFiltros)
     if (autoSearchAcoes) {
-      setTimeout(() => handleBuscarAcoes(), 500)
+      void handleBuscarAcoes(nextFiltros)
     }
   }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
 
   const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosAcoes({ ...filtrosAcoes, [key]: value })
+    const nextFiltros = { ...filtrosAcoes, [key]: value }
+    setFiltrosAcoes(nextFiltros)
     if (autoSearchAcoes) {
-      setTimeout(() => handleBuscarAcoes(), 500)
+      void handleBuscarAcoes(nextFiltros)
     }
   }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
 
   const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosBdrs({ ...filtrosBdrs, [key]: value })
+    const nextFiltros = { ...filtrosBdrs, [key]: value }
+    setFiltrosBdrs(nextFiltros)
     if (autoSearchBdrs) {
-      setTimeout(() => handleBuscarBdrs(), 500)
+      void handleBuscarBdrs(nextFiltros)
     }
   }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
 
   const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosBdrs({ ...filtrosBdrs, [key]: value })
+    const nextFiltros = { ...filtrosBdrs, [key]: value }
+    setFiltrosBdrs(nextFiltros)
     if (autoSearchBdrs) {
-      setTimeout(() => handleBuscarBdrs(), 500)
+      void handleBuscarBdrs(nextFiltros)
     }
   }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
 
   const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
-    setFiltrosFiis({ ...filtrosFiis, [key]: value })
+    const nextFiltros = { ...filtrosFiis, [key]: value }
+    setFiltrosFiis(nextFiltros)
     if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
+      void handleBuscarFiis(nextFiltros)
     }
   }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
 
   const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
-    setFiltrosFiis({ ...filtrosFiis, [key]: value })
+    const nextFiltros = { ...filtrosFiis, [key]: value }
+    setFiltrosFiis(nextFiltros)
     if (autoSearchFiis) {
-      setTimeout(() => handleBuscarFiis(), 500)
+      void handleBuscarFiis(nextFiltros)
     }
   }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
 
@@ -1573,6 +1809,7 @@ export default function AnaliseListaTab() {
               onFiltroStringChange={handleFiltroAcoesStringChange}
               onBuscar={handleBuscarAcoes}
               loading={loadingAcoes}
+              onCancelar={cancelarBuscaAcoes}
               autoSearch={autoSearchAcoes}
               onAutoSearchChange={setAutoSearchAcoes}
             />
@@ -1601,6 +1838,7 @@ export default function AnaliseListaTab() {
               onFiltroStringChange={handleFiltroBdrsStringChange}
               onBuscar={handleBuscarBdrs}
               loading={loadingBdrs}
+              onCancelar={cancelarBuscaBdrs}
               autoSearch={autoSearchBdrs}
               onAutoSearchChange={setAutoSearchBdrs}
             />
@@ -1629,6 +1867,7 @@ export default function AnaliseListaTab() {
               onFiltroStringChange={handleFiltroFiisStringChange}
               onBuscar={handleBuscarFiis}
               loading={loadingFiis}
+              onCancelar={cancelarBuscaFiis}
               autoSearch={autoSearchFiis}
               onAutoSearchChange={setAutoSearchFiis}
             />

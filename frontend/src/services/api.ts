@@ -1195,14 +1195,27 @@ export const correcaoMonetariaService = {
 
 export const analiseService = {
 
-  getAtivos: async (tipo: string, filtros: FiltrosAnalise): Promise<AtivoAnalise[]> => {
+  getAtivos: async (
+    tipo: string,
+    filtros: FiltrosAnalise,
+    options?: { signal?: AbortSignal }
+  ): Promise<AtivoAnalise[]> => {
     // Timeout longo (5 min): backend busca ativos em paralelo e pode demorar em listas grandes
-    const response = await api.post('/analise/ativos', { tipo, filtros }, { timeout: 300000 })
+    const response = await api.post(
+      '/analise/ativos',
+      { tipo, filtros },
+      { timeout: 300000, signal: options?.signal }
+    )
     return response.data
   },
 
   getResumo: async (): Promise<ResumoAnalise> => {
     const response = await api.get('/analise/resumo')
+    return response.data
+  },
+
+  cancelarBusca: async (): Promise<{ ok: boolean; generation: number }> => {
+    const response = await api.post('/analise/cancelar')
     return response.data
   },
 }

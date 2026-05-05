@@ -13,7 +13,7 @@ import secrets
 import re
 import unicodedata
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 try:
     import psycopg
 except Exception:
@@ -2232,7 +2232,18 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
         finally:
             conn.close()
 
-def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
+def processar_ativos_com_filtros_geral(
+    lista_ativos,
+    tipo_ativo,
+    roe_min,
+    dy_min,
+    pl_min,
+    pl_max,
+    pvp_max,
+    liq_min=None,
+    setor=None,
+    should_cancel=None,
+):
     """Processa lista de ativos com filtros. Requisições em paralelo ao yfinance para evitar timeout (504); retorna todos os ativos filtrados."""
     if not lista_ativos:
         return []
@@ -2240,19 +2251,35 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
     # Paralelizar para concluir em tempo hábil (evitar 504 em proxy/load balancer)
     dados = []
     max_workers = min(len(lista_ativos), 40)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    client_gone = False
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
         future_to_ticker = {
             executor.submit(obter_informacoes, ticker, tipo_ativo): ticker
             for ticker in lista_ativos
         }
-        for future in as_completed(future_to_ticker):
+        pending = set(future_to_ticker.keys())
+        while pending:
+            if callable(should_cancel) and should_cancel():
+                client_gone = True
+                break
+            done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
+            for future in done:
+                try:
+                    resultado = future.result()
+                    if resultado is not None:
+                        dados.append(resultado)
+                except Exception as e:
+                    ticker = future_to_ticker[future]
+                    print(f"Erro ao processar {ticker}: {str(e)}")
+    finally:
+        if client_gone:
             try:
-                resultado = future.result()
-                if resultado is not None:
-                    dados.append(resultado)
-            except Exception as e:
-                ticker = future_to_ticker[future]
-                print(f"Erro ao processar {ticker}: {str(e)}")
+                executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                executor.shutdown(wait=False)
+        else:
+            executor.shutdown(wait=True)
 
     filtrados = [
         ativo for ativo in dados if (
@@ -2267,17 +2294,57 @@ def processar_ativos_com_filtros_geral(lista_ativos, tipo_ativo, roe_min, dy_min
     # Retornar todos os ativos filtrados (lista completa), ordenados por dividend_yield
     return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)
 
-def processar_ativos_acoes_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
+def processar_ativos_acoes_com_filtros(
+    roe_min,
+    dy_min,
+    pl_min,
+    pl_max,
+    pvp_max,
+    liq_min=None,
+    setor=None,
+    should_cancel=None,
+):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
-    return processar_ativos_com_filtros_geral(LISTA_ACOES, 'Ação', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
+    return processar_ativos_com_filtros_geral(
+        LISTA_ACOES,
+        'Ação',
+        roe_min,
+        dy_min,
+        pl_min,
+        pl_max,
+        pvp_max,
+        liq_threshold,
+        setor,
+        should_cancel=should_cancel,
+    )
 
-def processar_ativos_bdrs_com_filtros(roe_min, dy_min, pl_min, pl_max, pvp_max, liq_min=None, setor=None):
+def processar_ativos_bdrs_com_filtros(
+    roe_min,
+    dy_min,
+    pl_min,
+    pl_max,
+    pvp_max,
+    liq_min=None,
+    setor=None,
+    should_cancel=None,
+):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
-    return processar_ativos_com_filtros_geral(LISTA_BDRS, 'BDR', roe_min, dy_min, pl_min, pl_max, pvp_max, liq_threshold, setor)
+    return processar_ativos_com_filtros_geral(
+        LISTA_BDRS,
+        'BDR',
+        roe_min,
+        dy_min,
+        pl_min,
+        pl_max,
+        pvp_max,
+        liq_threshold,
+        setor,
+        should_cancel=should_cancel,
+    )
 
-def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None):
+def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None, should_cancel=None):
     """Processa lista de FIIs com filtros. Requisições em paralelo ao yfinance; retorna todos os FIIs filtrados."""
     fiis = LISTA_FIIS
     if not fiis:
@@ -2285,19 +2352,35 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
 
     dados = []
     max_workers = min(len(fiis), 40)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    client_gone = False
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
         future_to_ticker = {
             executor.submit(obter_informacoes, ticker, 'FII'): ticker
             for ticker in fiis
         }
-        for future in as_completed(future_to_ticker):
+        pending = set(future_to_ticker.keys())
+        while pending:
+            if callable(should_cancel) and should_cancel():
+                client_gone = True
+                break
+            done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
+            for future in done:
+                try:
+                    resultado = future.result()
+                    if resultado is not None:
+                        dados.append(resultado)
+                except Exception as e:
+                    ticker = future_to_ticker[future]
+                    print(f"Erro ao processar FII {ticker}: {str(e)}")
+    finally:
+        if client_gone:
             try:
-                resultado = future.result()
-                if resultado is not None:
-                    dados.append(resultado)
-            except Exception as e:
-                ticker = future_to_ticker[future]
-                print(f"Erro ao processar FII {ticker}: {str(e)}")
+                executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                executor.shutdown(wait=False)
+        else:
+            executor.shutdown(wait=True)
 
     filtrados = [
         ativo for ativo in dados if (

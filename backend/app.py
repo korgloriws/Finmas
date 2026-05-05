@@ -214,6 +214,33 @@ else:
 
 ANALISE_ATIVOS_SEM = threading.Semaphore(2)
 MONTE_CARLO_SEM = threading.Semaphore(1)
+_ANALISE_CANCEL_LOCK = threading.Lock()
+_ANALISE_CANCEL_GEN_BY_USER = {}
+
+
+def _analise_cancel_user_key() -> str:
+    try:
+        user = get_usuario_atual()
+        if user:
+            return f"user:{str(user).strip().lower()}"
+    except Exception:
+        pass
+    try:
+        return f"ip:{request.remote_addr or 'unknown'}"
+    except Exception:
+        return "ip:unknown"
+
+
+def _analise_cancel_generation_for(user_key: str) -> int:
+    with _ANALISE_CANCEL_LOCK:
+        return int(_ANALISE_CANCEL_GEN_BY_USER.get(user_key, 0))
+
+
+def _analise_bump_cancel_generation(user_key: str) -> int:
+    with _ANALISE_CANCEL_LOCK:
+        next_gen = int(_ANALISE_CANCEL_GEN_BY_USER.get(user_key, 0)) + 1
+        _ANALISE_CANCEL_GEN_BY_USER[user_key] = next_gen
+        return next_gen
 
 
 _SLOW_REQUEST_THRESHOLD_S = float(os.getenv('SLOW_REQUEST_THRESHOLD', '3.0'))
@@ -1202,6 +1229,14 @@ def api_analise_ativos():
             "error": "Servidor ocupado processando outras análises. Tente novamente em alguns instantes."
         }), 503
     try:
+        user_key = _analise_cancel_user_key()
+        request_generation = _analise_cancel_generation_for(user_key)
+
+        def should_cancel_analise():
+            if cliente_desconectado():
+                return True
+            return _analise_cancel_generation_for(user_key) != request_generation
+
         data = request.get_json()
         tipo = data.get('tipo', 'acoes')  
         filtros = data.get('filtros', {})
@@ -1234,7 +1269,8 @@ def api_analise_ativos():
                 filtros.get('pl_max', float('inf')),
                 filtros.get('pvp_max', float('inf')),
                 filtros.get('liq_min'),
-                filtros.get('setor')
+                filtros.get('setor'),
+                should_cancel=should_cancel_analise,
             )
         elif tipo == 'bdrs':
             dados = processar_ativos_bdrs_com_filtros(
@@ -1244,7 +1280,8 @@ def api_analise_ativos():
                 filtros.get('pl_max', float('inf')),
                 filtros.get('pvp_max', float('inf')),
                 filtros.get('liq_min'),
-                filtros.get('setor')
+                filtros.get('setor'),
+                should_cancel=should_cancel_analise,
             )
         elif tipo == 'fiis':
             dados = processar_ativos_fiis_com_filtros(
@@ -1252,10 +1289,16 @@ def api_analise_ativos():
                 filtros.get('dy_max', float('inf')),
                 filtros.get('liq_min', 0),
                 filtros.get('tipo_fii'),
-                filtros.get('segmento_fii')
+                filtros.get('segmento_fii'),
+                should_cancel=should_cancel_analise,
             )
         else:
             return jsonify({"error": "Tipo inválido"}), 400
+
+        if should_cancel_analise():
+            _duracao = round(_time.time() - _inicio, 1)
+            print(f"[ANALISE] Cancelada /api/analise/ativos tipo={tipo} duracao={_duracao}s")
+            return jsonify({"cancelled": True}), 499
         
         # Armazenar no cache por 30 minutos (1800 segundos)
         cache.set(cache_key_str, dados, timeout=1800)
@@ -1273,6 +1316,16 @@ def api_analise_ativos():
             ANALISE_ATIVOS_SEM.release()
         except Exception:
             pass
+
+
+@server.route("/api/analise/cancelar", methods=["POST"])
+def api_analise_cancelar():
+    try:
+        user_key = _analise_cancel_user_key()
+        gen = _analise_bump_cancel_generation(user_key)
+        return jsonify({"ok": True, "generation": gen})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @server.route("/api/listas/ativos", methods=["GET"])
 def api_listas_ativos():

@@ -318,7 +318,7 @@ export default function VendasPage() {
                 transition={{ delay: 0.8, duration: 0.4 }}
                 className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-10"
               >
-                {['Análise', 'Dividendos', 'Impostos', 'Projeção'].map((label, i) => (
+                {['Análise', 'Dividendos', 'Impostos', 'Projeção', 'Categorias dinâmicas', 'Guia fiscal'].map((label, i) => (
                   <motion.span
                     key={label}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -442,6 +442,7 @@ export default function VendasPage() {
                     'Rankings',
                     'Conceitos e Radar de Dividendos (Detalhes)',
                     'Impostos, Insights, Projeção e Simulador (Carteira)',
+                    'Fluxos premium para gestão mais avançada da carteira após o planejamento fiscal no guia',
                   ].map((x) => (
                     <li key={x} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-primary flex-shrink-0" />
@@ -557,7 +558,7 @@ export default function VendasPage() {
         className="border-t border-border dark:border-white/20 py-8 bg-card/50 dark:bg-white/[0.02]"
       >
         <div className="container max-w-5xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© Finmas. Seu acompanhamento de investimentos em um só lugar.</p>
+          <p>© Finmas 2026 - Seu Companheiro de Investimentos.</p>
           <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
             <Link to="/termos-de-uso" className="text-primary hover:underline">Termos de Uso</Link>
             <Link to="/politica-de-privacidade" className="text-primary hover:underline">Política de Privacidade</Link>

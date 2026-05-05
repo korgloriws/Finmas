@@ -34,7 +34,7 @@ const FEATURES: Array<{ icon: typeof Wallet; title: string; description: string;
     title: 'Carteira de investimentos',
     description: 'Centralize todos os seus investimentos em uma única tela: ações, FIIs, BDRs, ETFs, criptomoedas e renda fixa. Importe posições direto da B3, acompanhe valorização por período, proventos recebidos e a receber, gráficos de evolução e rebalanceamento para manter sua alocação alinhada às metas.',
     details: [
-      'Importação de posições da B3 em poucos cliques',
+      
       'Valorização por período (dia, mês, ano) e evolução do patrimônio',
       'Proventos (dividendos, JCP): histórico e previsão',
       'Gráficos de evolução e composição da carteira',
@@ -69,9 +69,11 @@ const FEATURES: Array<{ icon: typeof Wallet; title: string; description: string;
   {
     icon: Calculator,
     title: 'Controle financeiro',
-    description: 'Registre receitas e despesas, acompanhe fluxo de caixa e controle cartões e compras parceladas. Tudo integrado à visão dos seus investimentos: saiba quanto entra, quanto sai e qual seu saldo disponível.',
+    description: 'Registre receitas e despesas, acompanhe fluxo de caixa e controle cartões e compras parceladas. Agora com categorias personalizáveis (incluindo cores sólidas e degradê) para organizar melhor sua visão por tipo de gasto.',
     details: [
       'Receitas e despesas por categoria e período',
+      'Categorias de gastos personalizáveis com cor sólida, degradê e CSS avançado',
+      'Edição e remoção de categorias com reaproveitamento nos formulários e gráficos',
       'Fluxo de caixa e saldo em tempo real',
       'Controle de cartões e compras parceladas',
       'Visão mensal e por período personalizado',
@@ -81,9 +83,10 @@ const FEATURES: Array<{ icon: typeof Wallet; title: string; description: string;
   {
     icon: BookOpen,
     title: 'Guia do mercado',
-    description: 'Conteúdo educativo sobre classes de ativos (renda variável, renda fixa, Tesouro Direto), riscos, estratégias (Buy & Hold, Value, Dividendos) e boas práticas. Indicadores explicados (P/L, ROE, DY). Acesso 100% livre, sem login, para você estudar e investir com mais segurança.',
+    description: 'Conteúdo educativo sobre classes de ativos (renda variável, renda fixa, Tesouro Direto), riscos, estratégias (Buy & Hold, Value, Dividendos) e boas práticas. Agora inclui também Guia Fiscal com alíquotas por classe, DARF e eficiência tributária legal.',
     details: [
       'Guia geral e por classe: ações, FIIs, renda fixa, internacional, Tesouro',
+      'Guia Fiscal: alíquotas, DARF, benefícios por classe e checklist por perfil',
       'Riscos e como mitigá-los',
       'Estratégias e indicadores explicados de forma clara',
       'Notas de mercado (não-técnicas) opcionais',
@@ -92,12 +95,12 @@ const FEATURES: Array<{ icon: typeof Wallet; title: string; description: string;
   },
   {
     icon: TrendingUp,
-    title: 'Calculadora de juros compostos',
-    description: 'Simule o crescimento do patrimônio com aporte único ou mensal e diferentes taxas de retorno. Veja projeções em tabela e gráfico: quanto seu dinheiro pode render no longo prazo. Acesso 100% gratuito.',
+    title: 'Hub de calculadoras financeiras',
+    description: 'Um ambiente único com várias calculadoras para tomada de decisão: juros compostos, comparações e simulações práticas para diferentes cenários do investidor. Acesso 100% gratuito.',
     details: [
-      'Aporte único ou aportes recorrentes (mensais)',
-      'Taxa de retorno e prazo em anos',
-      'Tabela ano a ano e gráfico de evolução',
+      'Juros compostos com aporte único ou recorrente',
+      'Comparativos e simulações em uma experiência centralizada',
+      'Apoio a diferentes cenários de planejamento financeiro',
       'Acesso gratuito, sem cadastro',
     ],
   },
@@ -167,11 +170,12 @@ const PREMIUM_HIGHLIGHTS = [
   'Conceitos (aba em Detalhes) – conteúdo exclusivo',
   'Radar de Dividendos (aba em Detalhes)',
   'Impostos, Insights, Projeção e Simulador na Carteira',
+  'Mais profundidade operacional para quem já domina o guia gratuito (incluindo o novo módulo fiscal)',
   'Acesso completo a todas as telas do sistema',
 ]
 
 const SEO_TITLE = 'Finmas – Gestão de investimentos e controle financeiro'
-const SEO_DESCRIPTION = 'Plataforma completa para acompanhar sua carteira de investimentos, análise de ativos, controle financeiro e ferramentas gratuitas: guia do mercado, juros compostos, conversor de moedas e correção monetária. Cadastre-se grátis.'
+const SEO_DESCRIPTION = 'Plataforma completa para acompanhar carteira de investimentos, análise de ativos e controle financeiro. Inclui ferramentas gratuitas como guia do mercado com módulo fiscal, juros compostos, conversor de moedas e correção monetária.'
 
 export default function LandingPage() {
   const { isDark, toggleTheme } = useTheme()
@@ -283,7 +287,7 @@ export default function LandingPage() {
               transition={{ delay: 0.4, duration: 0.5 }}
               className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto mb-6 leading-relaxed font-medium"
             >
-              Pensado para quem investe: centralize sua carteira de ações, FIIs, BDRs, ETFs e renda fixa; acompanhe valorização, proventos e indicadores; controle receitas, despesas e fluxo de caixa; e use ferramentas gratuitas como guia do mercado, calculadora de juros compostos, conversor de moedas e correção monetária.
+              Pensado para quem investe: centralize sua carteira de ações, FIIs, BDRs, ETFs e renda fixa; acompanhe valorização, proventos e indicadores; controle receitas, despesas e fluxo de caixa com categorias personalizadas; e use ferramentas gratuitas como guia do mercado com módulo fiscal, hub de calculadoras, conversor de moedas e correção monetária.
             </motion.p>
             <motion.p
               initial={{ opacity: 0, y: 16 }}
@@ -511,7 +515,7 @@ export default function LandingPage() {
         className="border-t border-border dark:border-white/20 py-8 bg-card/50 dark:bg-white/[0.02]"
       >
         <div className="container max-w-5xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© Finmas. Seu acompanhamento de investimentos em um só lugar.</p>
+          <p>© Finmas 2026 - Seu Companheiro de Investimentos.</p>
           <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
             <Link to="/termos-de-uso" className="text-primary hover:underline">Termos de Uso</Link>
             <Link to="/politica-de-privacidade" className="text-primary hover:underline">Política de Privacidade</Link>
