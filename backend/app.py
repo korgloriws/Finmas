@@ -1233,8 +1233,10 @@ def api_analise_ativos():
         request_generation = _analise_cancel_generation_for(user_key)
 
         def should_cancel_analise():
-            if cliente_desconectado():
-                return True
+            # Cancelar SOMENTE quando o próprio usuário disparar nova busca
+            # (generation diferente) ou clicar em "Cancelar".
+            # Não usar cliente_desconectado aqui para evitar cancelamento
+            # automático em buscas longas.
             return _analise_cancel_generation_for(user_key) != request_generation
 
         data = request.get_json()
