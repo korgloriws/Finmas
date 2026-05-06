@@ -28,6 +28,13 @@ import { ativoService, carteiraService } from '../../services/api'
 export type PeriodoValorizacao = '1m' | '3m' | '6m' | '1a' | 'ytd'
 
 type Lot = { qty: number; price: number; date: string }
+type IndicadoresFundamentais = { dy: number | null; pl: number | null; pvp: number | null; roe: number | null }
+
+const toNumberOrNull = (value: unknown): number | null => {
+  if (value == null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
 
 const buildRemainingLots = (movimentacoes: any[]): Lot[] => {
   const lots: Lot[] = []
@@ -129,6 +136,7 @@ function TabelaAtivosPorTipo({
   setManageTipoOpen, 
   setRenameTipoValue,
   getMetadadosAtivo,
+  getIndicadoresAtivo,
   valorizacaoPeriodoMap,
   periodoLabel,
   onOpenAddAtivo
@@ -152,12 +160,16 @@ function TabelaAtivosPorTipo({
   setManageTipoOpen: (value: { open: boolean; tipo?: string }) => void
   setRenameTipoValue: (value: string) => void
   getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number } | null
+  getIndicadoresAtivo: (ativo: any) => IndicadoresFundamentais
   valorizacaoPeriodoMap?: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>
   periodoLabel?: string
   onOpenAddAtivo?: () => void
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
   const totalTipo = ativosDoTipo.reduce((total, ativo) => total + (ativo?.valor_total || 0), 0)
+  const dyMedioTipo = ativosDoTipo.length > 0
+    ? (ativosDoTipo.reduce((sum, ativo) => sum + (getIndicadoresAtivo(ativo).dy || 0), 0) / ativosDoTipo.length)
+    : null
   const porcentagemTipo = valorTotal > 0 ? (totalTipo / valorTotal * 100).toFixed(1) : '0.0'
   const isExpanded = expandedTipos[tipo] || false
   const podeRemoverTipo = ativosDoTipo.length === 0
@@ -215,7 +227,7 @@ function TabelaAtivosPorTipo({
                 <span>{porcentagemTipo}% da carteira</span>
                 <span className="hidden xs:inline">•</span>
                 <span className="text-xs">Média DY: {ativosDoTipo.length > 0 ? 
-                  formatDividendYield(ativosDoTipo.reduce((sum, ativo) => sum + (ativo?.dy || 0), 0) / ativosDoTipo.length) : 
+                  formatDividendYield(dyMedioTipo) : 
                   'N/A'
                 }</span>
               </div>
@@ -315,6 +327,7 @@ function TabelaAtivosPorTipo({
                 </thead>
                 <tbody>
                   {ativosDoTipo.map((ativo) => {
+                    const indicadoresAtivo = getIndicadoresAtivo(ativo)
                     const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
                     const precoBase = metrica.precoBase
                     const rendimentoPct = metrica.rendimentoPct
@@ -428,19 +441,19 @@ function TabelaAtivosPorTipo({
                         {!isRendaFixa && !isCripto && !isFii && (
                           <>
                             <td className="px-3 py-2 text-green-600 font-medium text-sm">
-                              {formatDividendYield(ativo?.dy)}
+                              {formatDividendYield(indicadoresAtivo.dy)}
                             </td>
-                            <td className={`px-3 py-2 font-medium text-sm ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
-                              {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
+                            <td className={`px-3 py-2 font-medium text-sm ${indicadoresAtivo.roe && indicadoresAtivo.roe > 0.15 ? 'text-blue-600' : ''}`}>
+                              {formatPercentage(indicadoresAtivo.roe != null ? indicadoresAtivo.roe * 100 : null)}
                             </td>
-                            <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pl)}</td>
-                            <td className="px-3 py-2 text-sm">{formatNumber(ativo?.pvp)}</td>
+                            <td className="px-3 py-2 text-sm">{formatNumber(indicadoresAtivo.pl)}</td>
+                            <td className="px-3 py-2 text-sm">{formatNumber(indicadoresAtivo.pvp)}</td>
                           </>
                         )}
                         {isFii && (
                           <>
                             <td className="px-3 py-2 text-green-600 font-medium text-sm">
-                              {formatDividendYield(ativo?.dy)}
+                              {formatDividendYield(indicadoresAtivo.dy)}
                             </td>
                             <td className="px-3 py-2 text-sm">
                               {(() => {
@@ -531,6 +544,7 @@ function TabelaAtivosPorTipo({
               {/* Mobile Card View */}
               <div className="lg:hidden space-y-3 p-3 sm:p-4">
                 {ativosDoTipo.map((ativo) => {
+                  const indicadoresAtivo = getIndicadoresAtivo(ativo)
                   const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
                   const precoMedioLocal = metrica.precoMedioLocal
                   const rendimentoPct = metrica.rendimentoPct
@@ -650,21 +664,21 @@ function TabelaAtivosPorTipo({
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-muted-foreground">DY</span>
                               <span className="text-xs sm:text-sm text-green-600 font-medium">
-                                {formatDividendYield(ativo?.dy)}
+                                {formatDividendYield(indicadoresAtivo.dy)}
                               </span>
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-muted-foreground">P/L</span>
-                              <span className="text-xs sm:text-sm">{formatNumber(ativo?.pl)}</span>
+                              <span className="text-xs sm:text-sm">{formatNumber(indicadoresAtivo.pl)}</span>
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-muted-foreground">P/VP</span>
-                              <span className="text-xs sm:text-sm">{formatNumber(ativo?.pvp)}</span>
+                              <span className="text-xs sm:text-sm">{formatNumber(indicadoresAtivo.pvp)}</span>
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-muted-foreground">ROE</span>
-                              <span className={`text-xs sm:text-sm font-medium ${ativo?.roe && ativo.roe > 15 ? 'text-blue-600' : ''}`}>
-                                {formatPercentage(ativo?.roe ? ativo.roe * 100 : null)}
+                              <span className={`text-xs sm:text-sm font-medium ${indicadoresAtivo.roe && indicadoresAtivo.roe > 0.15 ? 'text-blue-600' : ''}`}>
+                                {formatPercentage(indicadoresAtivo.roe != null ? indicadoresAtivo.roe * 100 : null)}
                               </span>
                             </div>
                           </div>
@@ -677,13 +691,13 @@ function TabelaAtivosPorTipo({
                         const metadados = getMetadadosAtivo(ativo?.ticker || '')
                         const segmento = metadados?.segmento || (ativo as any)?.segmento_fii
                         const pvp = metadados?.p_vp
-                        return (ativo?.dy !== undefined || segmento || pvp !== undefined) ? (
+                        return (indicadoresAtivo.dy !== undefined || segmento || pvp !== undefined) ? (
                           <div className="pt-2 sm:pt-3 border-t border-border space-y-2">
-                            {ativo?.dy !== undefined && (
+                            {indicadoresAtivo.dy !== undefined && (
                               <div className="flex justify-between items-center">
                                 <span className="text-xs text-muted-foreground">DY</span>
                                 <span className="text-xs sm:text-sm text-green-600 font-medium">
-                                  {formatDividendYield(ativo.dy)}
+                                  {formatDividendYield(indicadoresAtivo.dy)}
                                 </span>
                               </div>
                             )}
@@ -927,6 +941,60 @@ export default function CarteiraAtivosTab({
     return metadadosFiis.data?.[ticker] || null
   }
 
+  const tickersIndicadoresFaltantes = useMemo(() => {
+    if (!carteira) return []
+    const set = new Set<string>()
+    for (const ativo of carteira) {
+      const tipo = String(ativo?.tipo || '').toLowerCase()
+      if (tipo.includes('renda fixa') || tipo.includes('cripto')) continue
+      if (ativo?.dy == null || ativo?.pl == null || ativo?.pvp == null || ativo?.roe == null) {
+        const ticker = String(ativo?.ticker || '').trim().toUpperCase()
+        if (ticker) set.add(ticker)
+      }
+    }
+    return Array.from(set)
+  }, [carteira])
+
+  const indicadoresAtivosQuery = useQuery({
+    queryKey: ['carteira-indicadores-fundamentos', tickersIndicadoresFaltantes],
+    queryFn: async () => {
+      const map: Record<string, IndicadoresFundamentais> = {}
+      await Promise.all(
+        tickersIndicadoresFaltantes.map(async (ticker) => {
+          try {
+            const detalhes = await ativoService.getDetalhes(ticker)
+            const info = (detalhes as any)?.info || {}
+            map[ticker] = {
+              dy: toNumberOrNull(info?.dividendYield),
+              pl: toNumberOrNull(info?.trailingPE),
+              pvp: toNumberOrNull(info?.priceToBook),
+              roe: toNumberOrNull(info?.returnOnEquity),
+            }
+          } catch {
+            map[ticker] = { dy: null, pl: null, pvp: null, roe: null }
+          }
+        })
+      )
+      return map
+    },
+    enabled: tickersIndicadoresFaltantes.length > 0,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  })
+
+  const getIndicadoresAtivo = (ativo: any): IndicadoresFundamentais => {
+    const ticker = String(ativo?.ticker || '').trim().toUpperCase()
+    const fallback = indicadoresAtivosQuery.data?.[ticker]
+    return {
+      dy: toNumberOrNull(ativo?.dy) ?? fallback?.dy ?? null,
+      pl: toNumberOrNull(ativo?.pl) ?? fallback?.pl ?? null,
+      pvp: toNumberOrNull(ativo?.pvp) ?? fallback?.pvp ?? null,
+      roe: toNumberOrNull(ativo?.roe) ?? fallback?.roe ?? null,
+    }
+  }
+
   const handleB3Import = async (ativos: B3Ativo[]) => {
     try {
      
@@ -1020,7 +1088,7 @@ export default function CarteiraAtivosTab({
             <div className="bg-card border border-border rounded-lg p-2 sm:p-3 md:p-4">
               <div className="text-xs sm:text-sm text-muted-foreground">Média DY</div>
               <div className="text-sm sm:text-lg md:text-xl lg:text-2xl font-bold text-primary">
-                {formatDividendYield(carteira.reduce((sum, ativo) => sum + (ativo?.dy || 0), 0) / carteira.length)}
+                {formatDividendYield(carteira.reduce((sum, ativo) => sum + (getIndicadoresAtivo(ativo).dy || 0), 0) / carteira.length)}
               </div>
             </div>
             <div className="bg-card border border-border rounded-lg p-2 sm:p-3 md:p-4">
@@ -1134,6 +1202,7 @@ export default function CarteiraAtivosTab({
               setManageTipoOpen={setManageTipoOpen}
               setRenameTipoValue={setRenameTipoValue}
               getMetadadosAtivo={getMetadadosAtivo}
+              getIndicadoresAtivo={getIndicadoresAtivo}
               valorizacaoPeriodoMap={valorizacaoPeriodoMap}
               periodoLabel={periodoLabel}
               onOpenAddAtivo={onOpenAddAtivo}

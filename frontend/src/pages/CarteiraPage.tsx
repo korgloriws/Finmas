@@ -205,6 +205,7 @@ export default function CarteiraPage() {
     // Os dados serão atualizados em background quando necessário via refresh manual ou invalidação
   })
 
+
   // Atualizar preços em background quando abrir a aba "Ativos"
   // Isso mantém o carregamento instantâneo (mostra cache) e atualiza preços em background
   useEffect(() => {

@@ -3530,7 +3530,7 @@ def atualizar_precos_indicadores_carteira():
             conn = _pg_conn_for_user(usuario)
             try:
                 with conn.cursor() as c:
-                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao FROM carteira')
+                    c.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao, dy, pl, pvp, roe FROM carteira')
                     rows = c.fetchall()
                     
                     # Coletar todos os tickers únicos
@@ -3576,6 +3576,10 @@ def atualizar_precos_indicadores_carteira():
                         _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
                         _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
                         _data_aplicacao = row[11] if (len(row) > 11 and row[11]) else None
+                        _dy_atual = float(row[12]) if (len(row) > 12 and row[12] is not None) else None
+                        _pl_atual = float(row[13]) if (len(row) > 13 and row[13] is not None) else None
+                        _pvp_atual = float(row[14]) if (len(row) > 14 and row[14] is not None) else None
+                        _roe_atual = float(row[15]) if (len(row) > 15 and row[15] is not None) else None
                         
                         if not _ticker:
                             continue
@@ -3635,7 +3639,8 @@ def atualizar_precos_indicadores_carteira():
                                 preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
                             else:
                                 print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
-                            dy = None; pl = None; pvp = None; roe = None
+                            # Preservar indicadores já existentes para ativos com indexador.
+                            dy = _dy_atual; pl = _pl_atual; pvp = _pvp_atual; roe = _roe_atual
                         elif _ticker in precos_batch:
                             # Se não tem indexador, usar preços do batch (yfinance)
                             dados_preco = precos_batch[_ticker]
@@ -3645,9 +3650,9 @@ def atualizar_precos_indicadores_carteira():
                             pvp = dados_preco.get('pvp')
                             roe = dados_preco.get('roe')
                         else:
-                            # Se não tem indexador e não está no batch, manter preço atual
+                            # Se não tem indexador e não está no batch, manter preço e indicadores atuais
                             preco_atual = _preco_atual
-                            dy = None; pl = None; pvp = None; roe = None
+                            dy = _dy_atual; pl = _pl_atual; pvp = _pvp_atual; roe = _roe_atual
 
                         # Persistir atualização
                         valor_total = preco_atual * _qtd
@@ -3664,7 +3669,7 @@ def atualizar_precos_indicadores_carteira():
             conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
             try:
                 cur = conn.cursor()
-                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao FROM carteira')
+                cur.execute('SELECT id, ticker, quantidade, preco_atual, data_adicao, indexador, indexador_pct, indexador_base_preco, indexador_base_data, preco_compra, preco_medio, data_aplicacao, dy, pl, pvp, roe FROM carteira')
                 rows = cur.fetchall()
                 
                 # Coletar todos os tickers únicos para SQLite também
@@ -3708,6 +3713,10 @@ def atualizar_precos_indicadores_carteira():
                     _preco_compra = float(row[9]) if (len(row) > 9 and row[9] is not None) else None
                     _preco_medio = float(row[10]) if (len(row) > 10 and row[10] is not None) else None
                     _data_aplicacao = row[11] if (len(row) > 11 and row[11]) else None
+                    _dy_atual = float(row[12]) if (len(row) > 12 and row[12] is not None) else None
+                    _pl_atual = float(row[13]) if (len(row) > 13 and row[13] is not None) else None
+                    _pvp_atual = float(row[14]) if (len(row) > 14 and row[14] is not None) else None
+                    _roe_atual = float(row[15]) if (len(row) > 15 and row[15] is not None) else None
                     
                     if not _ticker:
                         continue
@@ -3763,10 +3772,11 @@ def atualizar_precos_indicadores_carteira():
                         else:
                             print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                         
-                        dy = None
-                        pl = None 
-                        pvp = None
-                        roe = None
+                        # Preservar indicadores já existentes para ativos com indexador.
+                        dy = _dy_atual
+                        pl = _pl_atual
+                        pvp = _pvp_atual
+                        roe = _roe_atual
                     elif _ticker in precos_batch:
                         # Se não tem indexador, usar preços do batch (yfinance)
                         dados_preco = precos_batch[_ticker]
@@ -3776,13 +3786,13 @@ def atualizar_precos_indicadores_carteira():
                         pvp = dados_preco.get('pvp')
                         roe = dados_preco.get('roe')
                     else:
-                        # Se não tem indexador e não está no batch, manter preço atual
+                        # Se não tem indexador e não está no batch, manter preço e indicadores atuais
                         print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
                         preco_atual = _preco_atual
-                        dy = None
-                        pl = None
-                        pvp = None
-                        roe = None
+                        dy = _dy_atual
+                        pl = _pl_atual
+                        pvp = _pvp_atual
+                        roe = _roe_atual
                     
                     valor_total = preco_atual * _qtd
                     cur.execute(
