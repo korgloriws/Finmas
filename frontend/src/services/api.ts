@@ -529,15 +529,23 @@ export const TELAS_APP = [
   { id: 'configuracoes', path: '/configuracoes', label: 'Configurações' },
 ] as const
 
+const asArray = <T = any>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
+const asObject = <T extends Record<string, any>>(value: unknown, fallback: T): T =>
+  (value && typeof value === 'object' && !Array.isArray(value) ? (value as T) : fallback)
+const asNumber = (value: unknown, fallback = 0): number => {
+  const n = typeof value === 'string' ? Number(value.replace(',', '.')) : Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
 export const carteiraService = {
 
   getCarteira: async (): Promise<AtivoCarteira[]> => {
     const response = await api.get('/carteira')
-    return response.data
+    return asArray<AtivoCarteira>(response.data)
   },
   getCarteiraRefresh: async (): Promise<AtivoCarteira[]> => {
     const response = await api.get('/carteira?refresh=1')
-    return response.data
+    return asArray<AtivoCarteira>(response.data)
   },
 
   refreshCarteira: async (): Promise<{ success: boolean; updated?: number; errors?: string[]; message?: string }> => {
@@ -576,7 +584,7 @@ export const carteiraService = {
   // Indicadores e Tesouro Direto
   getIndicadores: async (): Promise<{ selic?: any; cdi?: any; ipca?: any }> => {
     const response = await api.get('/indicadores')
-    return response.data
+    return asObject(response.data, {})
   },
   getTesouroTitulos: async (): Promise<{ titulos: Array<{ nome: string; vencimento: string; taxaCompra: number; pu: number; indexador?: string; tipoRent?: string }> }> => {
     const response = await api.get('/tesouro/titulos')
@@ -617,7 +625,7 @@ export const carteiraService = {
     valorizacao_pct: number | null
   }>> => {
     const response = await api.get(`/carteira/valorizacao-periodo?periodo=${encodeURIComponent(periodo)}`)
-    return response.data
+    return asArray(response.data)
   },
 
   adicionarAtivo: async (
@@ -680,7 +688,7 @@ export const carteiraService = {
     if (ano) params.append('ano', ano.toString())
     
     const response = await api.get(`/carteira/movimentacoes?${params.toString()}`)
-    return response.data
+    return asArray<Movimentacao>(response.data)
   },
 
   // Rebalanceamento
@@ -718,7 +726,19 @@ export const carteiraService = {
     carteira_price?: (number|null)[]
   }> => {
     const response = await api.get(`/carteira/historico?periodo=${periodo}`)
-    return response.data
+    const payload = asObject(response.data, {} as Record<string, any>)
+    return {
+      datas: asArray<string>(payload.datas),
+      carteira: asArray<number | null>(payload.carteira),
+      ibov: asArray<number | null>(payload.ibov),
+      ivvb11: asArray<number | null>(payload.ivvb11),
+      ifix: asArray<number | null>(payload.ifix),
+      ipca: asArray<number | null>(payload.ipca),
+      cdi: asArray<number | null>(payload.cdi),
+      btc: asArray<number | null>(payload.btc),
+      carteira_valor: asArray<number>(payload.carteira_valor),
+      carteira_price: asArray<number | null>(payload.carteira_price),
+    }
   },
 
   // Goals (Metas)
@@ -974,7 +994,7 @@ export const marmitasService = {
     if (ano) params.append('ano', ano.toString())
     
     const response = await api.get(`/marmitas?${params.toString()}`)
-    return response.data
+    return asArray<Marmita>(response.data)
   },
 
   adicionarMarmita: async (data: string, valor: number, comprou: boolean): Promise<any> => {
@@ -1002,7 +1022,7 @@ export const marmitasService = {
 
   getGastosMensais: async (periodo: string = '6m'): Promise<GastoMensal[]> => {
     const response = await api.get(`/marmitas/gastos-mensais?periodo=${periodo}`)
-    return response.data
+    return asArray<GastoMensal>(response.data)
   },
 }
 
@@ -1090,7 +1110,7 @@ export const controleService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/outros?${params.toString()}`)
-    return response.data
+    return asArray<OutroGasto>(response.data)
   },
 
   adicionarOutro: async (
@@ -1125,7 +1145,8 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/saldo?${params.toString()}`)
-    return response.data
+    const payload = asObject(response.data, {} as Record<string, any>)
+    return { saldo: asNumber(payload.saldo, 0) }
   },
 
 
@@ -1146,7 +1167,7 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/evolucao-financeira?${params.toString()}`)
-    return response.data
+    return asArray<EvolucaoFinanceira>(response.data)
   },
 
   getEvolucaoReceitas: async (periodo: string): Promise<{mes: string, receitas: number}[]> => {
@@ -1165,7 +1186,11 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/receitas-despesas?${params.toString()}`)
-    return response.data
+    const payload = asObject(response.data, {} as Record<string, any>)
+    return {
+      receitas: asNumber(payload.receitas, 0),
+      despesas: asNumber(payload.despesas, 0),
+    }
   },
 
   getCategoriasGasto: async (): Promise<ControleCategoriaGastoApi[]> => {
@@ -1305,7 +1330,7 @@ export const rfCatalogService = {
 export const homeService = {
   getResumo: async (mes: string, ano: string): Promise<any> => {
     const response = await api.get(`/home/resumo?mes=${mes}&ano=${ano}`)
-    return response.data
+    return asObject(response.data, {})
   },
 }
 
@@ -1315,7 +1340,7 @@ export const cartaoService = {
   // Cartões Cadastrados
   getCartoesCadastrados: async (): Promise<CartaoCadastrado[]> => {
     const response = await api.get('/controle/cartoes-cadastrados')
-    return response.data
+    return asArray<CartaoCadastrado>(response.data)
   },
 
   adicionarCartaoCadastrado: async (data: {
@@ -1351,7 +1376,7 @@ export const cartaoService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/compras-cartao?${params.toString()}`)
-    return response.data
+    return asArray<CompraCartao>(response.data)
   },
 
   adicionarCompraCartao: async (data: {
@@ -1386,7 +1411,8 @@ export const cartaoService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/total-compras-cartao?${params.toString()}`)
-    return response.data.total
+    const payload = asObject(response.data, {} as Record<string, any>)
+    return asNumber(payload.total, 0)
   },
 
   marcarCartaoComoPago: async (cartaoId: number, mesPagamento: number, anoPagamento: number): Promise<any> => {
