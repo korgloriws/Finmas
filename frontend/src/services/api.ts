@@ -1018,6 +1018,8 @@ export const controleService = {
     const payload = response.data
     if (Array.isArray(payload)) return payload
     if (Array.isArray(payload?.receitas)) return payload.receitas
+    if (Array.isArray(payload?.registros)) return payload.registros
+    if (Array.isArray(payload?.receitas?.registros)) return payload.receitas.registros
     return []
   },
 

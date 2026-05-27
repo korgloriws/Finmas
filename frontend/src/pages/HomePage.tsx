@@ -178,10 +178,14 @@ export default function HomePage() {
     retry: 3,
   })
 
-  const carteira = heroData?.carteira as AtivoCarteira[] | undefined
-  const resumoHome = heroData?.resumoHome as any
-  const loadingCarteira = loadingHeroRaw && !carteira
-  const isFetchingCarteira = isFetchingHeroRaw && !carteira
+  const carteiraRaw = heroData?.carteira as unknown
+  const carteira = Array.isArray(carteiraRaw) ? (carteiraRaw as AtivoCarteira[]) : []
+  const resumoHomeRaw = heroData?.resumoHome as any
+  const resumoHome = (resumoHomeRaw && typeof resumoHomeRaw === 'object' && !Array.isArray(resumoHomeRaw))
+    ? resumoHomeRaw
+    : null
+  const loadingCarteira = loadingHeroRaw && carteira.length === 0
+  const isFetchingCarteira = isFetchingHeroRaw && carteira.length === 0
   const loadingResumo = loadingHeroRaw && !resumoHome
 
 
@@ -240,32 +244,32 @@ export default function HomePage() {
   })
 
 
-  const receitas = resumoHome?.receitas?.registros || []
-  const cartoes = resumoHome?.cartoes?.registros || []
-  const outros = resumoHome?.outros?.registros || []
+  const receitas = Array.isArray(resumoHome?.receitas?.registros) ? resumoHome.receitas.registros : []
+  const cartoes = Array.isArray(resumoHome?.cartoes?.registros) ? resumoHome.cartoes.registros : []
+  const outros = Array.isArray(resumoHome?.outros?.registros) ? resumoHome.outros.registros : []
  
   
   
 
 
 
-  const totalInvestido = carteira?.reduce((total: number, ativo: any) => total + (ativo?.valor_total || 0), 0) || 0
+  const totalInvestido = carteira.reduce((total: number, ativo: any) => total + (ativo?.valor_total || 0), 0)
   
   
   console.log('DEBUG HomePage:', {
     loadingCarteira,
     loadingResumo,
-    carteira: carteira?.length,
+    carteira: carteira.length,
     resumoHome: !!resumoHome,
     historicoCarteira: !!historicoCarteira
   })
   
 
-  const totalReceitas = resumoHome?.receitas?.total || receitas?.reduce((total: number, receita: any) => total + (receita?.valor || 0), 0) || 0
+  const totalReceitas = resumoHome?.receitas?.total || receitas.reduce((total: number, receita: any) => total + (receita?.valor || 0), 0) || 0
   
 
-  const totalCartoes = resumoHome?.cartoes?.total || cartoes?.reduce((total: number, cartao: any) => total + (cartao?.valor || 0), 0) || 0
-  const totalOutros = resumoHome?.outros?.total || outros?.reduce((total: number, outro: any) => total + (outro?.valor || 0), 0) || 0
+  const totalCartoes = resumoHome?.cartoes?.total || cartoes.reduce((total: number, cartao: any) => total + (cartao?.valor || 0), 0) || 0
+  const totalOutros = resumoHome?.outros?.total || outros.reduce((total: number, outro: any) => total + (outro?.valor || 0), 0) || 0
 
   
   
@@ -278,12 +282,12 @@ export default function HomePage() {
 
   
 
-  const ativosPorTipo = carteira?.reduce((acc, ativo) => {
+  const ativosPorTipo = carteira.reduce((acc, ativo) => {
     const tipo = ativo?.tipo || 'Desconhecido'
     acc[tipo] = (acc[tipo] || 0) + (ativo?.valor_total || 0)
     return acc
-  }, {} as Record<string, number>) || {}
-  const topAtivos = carteira?.slice(0, 5) || []
+  }, {} as Record<string, number>)
+  const topAtivos = carteira.slice(0, 5)
 
   const dadosPizza = Object.entries(ativosPorTipo).map(([tipo, valor]) => {
     const valorNumerico = typeof valor === 'number' ? valor : 0
