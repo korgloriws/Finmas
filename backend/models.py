@@ -3455,17 +3455,47 @@ def _obter_preco_um_ticker(ticker, taxa_usd_brl):
                 'roe': None
             })
         normalized = _normalize_ticker_for_yf(ticker)
-        ticker_obj = yf.Ticker(normalized)
-        info = ticker_obj.info
+        info = {}
         preco_usd = None
-        if info and info.get('currentPrice'):
-            preco_usd = float(info['currentPrice'])
-        else:
-            hist = ticker_obj.history(period="1d")
-            if not hist.empty:
-                preco_usd = float(hist['Close'].iloc[-1])
+
+        # Tenta em 2 variantes: normalizado e original.
+        # Isso resolve casos em que alguns papéis retornam vazio em uma forma.
+        for symbol in [normalized, str(ticker or '').strip().upper()]:
+            if not symbol:
+                continue
+            try:
+                ticker_obj = yf.Ticker(symbol)
+                info = ticker_obj.info or {}
+
+                # Ordem de fallback para preço (mais robusta em B3/BDR/FII).
+                preco_candidato = (
+                    info.get('currentPrice')
+                    or info.get('regularMarketPrice')
+                    or info.get('previousClose')
+                )
+
+                if preco_candidato is None:
+                    try:
+                        fi = getattr(ticker_obj, 'fast_info', None)
+                        if fi:
+                            preco_candidato = fi.get('lastPrice') or fi.get('regularMarketPreviousClose')
+                    except Exception:
+                        pass
+
+                if preco_candidato is None:
+                    hist = ticker_obj.history(period="5d")
+                    if not hist.empty:
+                        preco_candidato = float(hist['Close'].dropna().iloc[-1])
+
+                if preco_candidato is not None:
+                    preco_usd = float(preco_candidato)
+                    break
+            except Exception:
+                continue
+
         if preco_usd is None:
             return None
+
         preco_final = preco_usd
         return (ticker, {
             'preco_atual': preco_final,
@@ -3650,9 +3680,20 @@ def atualizar_precos_indicadores_carteira():
                             pvp = dados_preco.get('pvp')
                             roe = dados_preco.get('roe')
                         else:
-                            # Se não tem indexador e não está no batch, manter preço e indicadores atuais
-                            preco_atual = _preco_atual
-                            dy = _dy_atual; pl = _pl_atual; pvp = _pvp_atual; roe = _roe_atual
+                            # Fallback individual para reduzir falsos negativos do batch.
+                            info_fallback = obter_informacoes_ativo(_ticker)
+                            if info_fallback and info_fallback.get('preco_atual') not in (None, 0):
+                                preco_atual = float(info_fallback.get('preco_atual') or _preco_atual)
+                                dy = info_fallback.get('dy', _dy_atual)
+                                pl = info_fallback.get('pl', _pl_atual)
+                                pvp = info_fallback.get('pvp', _pvp_atual)
+                                roe = info_fallback.get('roe', _roe_atual)
+                                print(f"[INFO] Preco recuperado via fallback individual para {_ticker}")
+                            else:
+                                # Se não tem indexador e não está no batch, manter preço e indicadores atuais
+                                print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
+                                preco_atual = _preco_atual
+                                dy = _dy_atual; pl = _pl_atual; pvp = _pvp_atual; roe = _roe_atual
 
                         # Persistir atualização
                         valor_total = preco_atual * _qtd
@@ -3786,13 +3827,23 @@ def atualizar_precos_indicadores_carteira():
                         pvp = dados_preco.get('pvp')
                         roe = dados_preco.get('roe')
                     else:
-                        # Se não tem indexador e não está no batch, manter preço e indicadores atuais
-                        print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
-                        preco_atual = _preco_atual
-                        dy = _dy_atual
-                        pl = _pl_atual
-                        pvp = _pvp_atual
-                        roe = _roe_atual
+                        # Fallback individual para reduzir falsos negativos do batch.
+                        info_fallback = obter_informacoes_ativo(_ticker)
+                        if info_fallback and info_fallback.get('preco_atual') not in (None, 0):
+                            preco_atual = float(info_fallback.get('preco_atual') or _preco_atual)
+                            dy = info_fallback.get('dy', _dy_atual)
+                            pl = info_fallback.get('pl', _pl_atual)
+                            pvp = info_fallback.get('pvp', _pvp_atual)
+                            roe = info_fallback.get('roe', _roe_atual)
+                            print(f"[INFO] Preco recuperado via fallback individual para {_ticker}")
+                        else:
+                            # Se não tem indexador e não está no batch, manter preço e indicadores atuais
+                            print(f"[AVISO] Preco nao encontrado em batch para {_ticker}, mantendo preco atual")
+                            preco_atual = _preco_atual
+                            dy = _dy_atual
+                            pl = _pl_atual
+                            pvp = _pvp_atual
+                            roe = _roe_atual
                     
                     valor_total = preco_atual * _qtd
                     cur.execute(

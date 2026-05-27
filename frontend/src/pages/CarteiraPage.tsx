@@ -213,7 +213,8 @@ export default function CarteiraPage() {
 
 
   // Atualizar preços em background quando abrir a aba "Ativos"
-  // Isso mantém o carregamento instantâneo (mostra cache) e atualiza preços em background
+  // Usa endpoint atômico (GET /carteira?refresh=1) para evitar corrida entre
+  // "refresh" e "refetch" e garantir que a UI receba os valores mais recentes.
   useEffect(() => {
     if (activeTab === 'ativos' && carteira && carteira.length > 0) {
       const agora = Date.now()
@@ -223,24 +224,26 @@ export default function CarteiraPage() {
       if (tempoDesdeUltimaAtualizacao >= MIN_INTERVALO_ATUALIZACAO) {
         ultimaAtualizacaoPrecos.current = agora
         
-        // Atualizar preços no backend primeiro (em background, não bloqueia UI)
-        carteiraService.refreshCarteira()
-          .then((result) => {
-            // Após atualizar no backend, fazer refetch para buscar dados atualizados
-            // Isso acontece em background, não bloqueia a UI
-            refetchCarteira()
-            if (result?.success) {
-              toast.success('Valores atualizados', { id: 'carteira-valores-atualizados' })
-            }
+        carteiraService.getCarteiraRefresh()
+          .then((carteiraAtualizada) => {
+            // Atualiza imediatamente o cache principal da carteira
+            // para refletir preços/indicadores novos sem esperar outra query.
+            queryClient.setQueryData(['carteira', user], carteiraAtualizada)
+
+            // Invalida dados derivados que dependem da carteira atualizada.
+            queryClient.invalidateQueries({ queryKey: ['carteira-valorizacao-periodo'] })
+            queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+
+            toast.success('Valores atualizados', { id: 'carteira-valores-atualizados' })
           })
           .catch((error) => {
-            // Se der erro no refresh, ainda tenta fazer refetch (pode ter dados atualizados)
+            // Fallback: se refresh falhar, tenta pelo menos refetch normal.
             console.warn('Erro ao atualizar preços:', error)
             refetchCarteira()
           })
       }
     }
-  }, [activeTab, carteira?.length, refetchCarteira]) // Atualiza quando a carteira finalmente carregar na aba de ativos
+  }, [activeTab, carteira?.length, queryClient, refetchCarteira, user]) // Atualiza quando a carteira finalmente carregar na aba de ativos
 
   const { data: tiposApi } = useQuery({
     queryKey: ['tipos-ativos', user],
