@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatCurrency, formatDividendYield, formatPercentage, formatNumber } from '../../utils/formatters'
 import {
   calculateFixedIncomeAnnualRate,
+  normalizeIndexerAnnualRate,
   normalizeIndexerPercent,
   type FixedIncomeIndexer
 } from '../../utils/fixedIncomeCalculator'
@@ -35,6 +36,14 @@ const toNumberOrNull = (value: unknown): number | null => {
   if (value == null) return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
+}
+
+const getIndicatorNumber = (value: unknown): number | null => {
+  if (value == null) return null
+  if (typeof value === 'object' && value !== null && 'valor' in (value as Record<string, unknown>)) {
+    return toNumberOrNull((value as Record<string, unknown>).valor)
+  }
+  return toNumberOrNull(value)
 }
 
 const buildRemainingLots = (movimentacoes: any[]): Lot[] => {
@@ -240,6 +249,8 @@ function TabelaAtivosPorTipo({
   const isRendaFixa = tipo.toLowerCase().includes('renda fixa')
   const isCripto = tipo.toLowerCase().includes('cripto')
   const isFii = tipo.toLowerCase().includes('fii')
+  const ipca12mAnual = normalizeIndexerAnnualRate('IPCA', (indicadores as any)?.ipca_12m ?? (indicadores as any)?.ipca)
+  const ipcaMensalRaw = getIndicatorNumber((indicadores as any)?.ipca_mensal)
 
   const { valorizacaoReaisBarra, rendPctBarra } = (() => {
     if (valorizacaoPeriodoMap && periodoLabel) {
@@ -343,6 +354,19 @@ function TabelaAtivosPorTipo({
         <>
           {ativosDoTipo.length > 0 ? (
             <>
+              {isRendaFixa && (
+                <div className="px-3 sm:px-4 md:px-6 py-3 border-b border-border bg-muted/20 text-xs text-muted-foreground">
+                  Base dos indexadores: IPCA (12m){' '}
+                  <strong className="text-foreground">
+                    {ipca12mAnual != null ? `${ipca12mAnual.toFixed(2).replace('.', ',')}% a.a.` : 'N/D'}
+                  </strong>
+                  {' '}| IPCA mensal{' '}
+                  <strong className="text-foreground">
+                    {ipcaMensalRaw != null ? `${ipcaMensalRaw.toFixed(2).replace('.', ',')}%` : 'N/D'}
+                  </strong>
+                </div>
+              )}
+
               {/* Desktop Table View */}
               <div className="hidden lg:block overflow-x-auto">
               <table className="w-full min-w-[900px]">
@@ -358,7 +382,7 @@ function TabelaAtivosPorTipo({
                       <th className="px-3 py-2 text-left font-medium text-sm">Indexado</th>
                     )}
                     {tipo.toLowerCase().includes('renda fixa') && (
-                      <th className="px-3 py-2 text-left font-medium text-sm">Rentab. Estimada (anual)</th>
+                      <th className="px-3 py-2 text-left font-medium text-sm">Rentab. Estimada (a.a.)</th>
                     )}
                     {tipo.toLowerCase().includes('renda fixa') && (
                       <th className="px-3 py-2 text-left font-medium text-sm">Valor Bruto</th>
@@ -883,6 +907,7 @@ function TabelaAtivosPorTipo({
 }
 
 interface CarteiraAtivosTabProps {
+  user?: string | null
   adicionarMutation: any
   
 
@@ -918,6 +943,7 @@ interface CarteiraAtivosTabProps {
 }
 
 export default function CarteiraAtivosTab({
+  user,
   adicionarMutation,
   carteira,
   loadingCarteira,
@@ -946,8 +972,16 @@ export default function CarteiraAtivosTab({
   const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('1m')
 
   const periodoParaFetch = periodoValorizacao
+  const carteiraFingerprint = useMemo(() => {
+    if (!Array.isArray(carteira) || carteira.length === 0) return 'empty'
+    return carteira
+      .map((a: any) => `${a?.id ?? ''}:${String(a?.ticker ?? '')}`)
+      .sort()
+      .join('|')
+  }, [carteira])
+
   const { data: valorizacaoPeriodoList, isFetching: carregandoValorizacaoPeriodo, isError: erroValorizacaoPeriodo } = useQuery({
-    queryKey: ['carteira-valorizacao-periodo', periodoParaFetch, carteira?.length],
+    queryKey: ['carteira-valorizacao-periodo', user || 'anon', periodoParaFetch, carteiraFingerprint],
     queryFn: () => carteiraService.getValorizacaoPeriodo(periodoValorizacao as string),
     enabled: !!periodoParaFetch && !!carteira?.length,
     staleTime: 0,

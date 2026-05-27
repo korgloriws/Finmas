@@ -2755,8 +2755,11 @@ def obter_taxas_indexadores():
         
         # SELIC (série 432) - fonte principal
         selic = sgs_last(432, use_range=True)
-        # IPCA (série 433) - taxa mensal
-        ipca = sgs_last(433)
+        # IPCA mensal (série 433) e acumulado 12m (série 4449)
+        ipca_mensal = sgs_last(433)
+        ipca_12m = sgs_last(4449)
+        # Para comparações anuais (Focus), priorizar IPCA 12m.
+        ipca = ipca_12m if ipca_12m is not None else ipca_mensal
         
         print(f"DEBUG: Taxas obtidas - SELIC: {selic}%, IPCA: {ipca}%")
         
@@ -2788,9 +2791,14 @@ def obter_taxas_indexadores():
         cdi = max(selic - 0.10, 0.0)
         print(f"DEBUG: CDI derivado da SELIC: {selic:.4f}% - 0,10 p.p. = {cdi:.4f}%")
         
-        if not ipca or ipca < 0.1:  # IPCA muito baixo, usar padrão
-            ipca = 0.5  # IPCA mensal padrão
-            print(f"DEBUG: IPCA não obtido ou muito baixo, usando padrão: {ipca}%")
+        if ipca_12m is None and ipca_mensal is not None:
+            # Se só houver IPCA mensal, anualiza para manter comparabilidade anual.
+            ipca = (pow(1 + (ipca_mensal / 100.0), 12) - 1) * 100
+            print(f"DEBUG: IPCA mensal {ipca_mensal}% anualizado para {ipca:.4f}%")
+
+        if not ipca or ipca < 0.1:  # IPCA inválido/muito baixo, usar padrão anual
+            ipca = 4.5
+            print(f"DEBUG: IPCA não obtido ou muito baixo, usando padrão anual: {ipca}%")
         
         return {
             "SELIC": selic,

@@ -233,6 +233,7 @@ export default function CarteiraPage() {
             // Invalida dados derivados que dependem da carteira atualizada.
             queryClient.invalidateQueries({ queryKey: ['carteira-valorizacao-periodo'] })
             queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+            queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
 
             toast.success('Valores atualizados', { id: 'carteira-valores-atualizados' })
           })
@@ -284,7 +285,7 @@ export default function CarteiraPage() {
   const { data: movimentacoesAll } = useQuery<Movimentacao[]>({
     queryKey: ['movimentacoes-all', user],
     queryFn: () => carteiraService.getMovimentacoes(),
-    enabled: !!user && (activeTab === 'movimentacoes' || activeTab === 'impostos'),
+    enabled: !!user && (activeTab === 'ativos' || activeTab === 'movimentacoes' || activeTab === 'impostos'),
     refetchOnWindowFocus: false,
     refetchOnMount: false, // PERFORMANCE: Usa cache se disponível
     staleTime: 10 * 60 * 1000, // 10 minutos - dados completos mudam pouco
@@ -385,6 +386,7 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
       
       // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
@@ -424,6 +426,7 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['movimentacoes-all', user] })
       // Invalidar queries da HomePage para atualizar cards e gráficos
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
       
       // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
@@ -492,6 +495,7 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-valorizacao-periodo'] })
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
       setAporteModalOpen(false)
       setAtivoParaAporte(null)
@@ -921,6 +925,7 @@ export default function CarteiraPage() {
         )}
         {activeTab === 'ativos' && (
           <CarteiraAtivosTab
+            user={user}
             adicionarMutation={adicionarMutation}
             carteira={carteira || []}
             loadingCarteira={loadingCarteira}

@@ -4427,7 +4427,26 @@ def api_indicadores():
                 return arr[0] if arr else None
 
         selic = sgs_last(432, use_range=True)
-        ipca = sgs_last(433)
+        ipca_mensal = sgs_last(433)
+        # Série 4449 = IPCA acumulado em 12 meses (mais comparável ao Boletim Focus anual).
+        ipca_12m = sgs_last(4449)
+
+        # Mantém compatibilidade: campo "ipca" passa a priorizar 12m.
+        if ipca_12m:
+            ipca = ipca_12m
+        elif ipca_mensal:
+            # Fallback: anualiza o último IPCA mensal quando 12m não estiver disponível.
+            try:
+                ipca_mensal_val = float(str(ipca_mensal.get("valor", "0")).replace(",", "."))
+                ipca_anual_fallback = (pow(1 + (ipca_mensal_val / 100.0), 12) - 1) * 100
+                ipca = {
+                    "data": ipca_mensal.get("data"),
+                    "valor": f"{ipca_anual_fallback:.2f}"
+                }
+            except Exception:
+                ipca = ipca_mensal
+        else:
+            ipca = None
 
         # REGRA DE NEGÓCIO: CDI atrelado à SELIC com diferença fixa de -0,10 p.p.
         cdi = None
@@ -4449,6 +4468,8 @@ def api_indicadores():
             "selic": selic,
             "cdi": cdi,
             "ipca": ipca,
+            "ipca_mensal": ipca_mensal,
+            "ipca_12m": ipca_12m,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
