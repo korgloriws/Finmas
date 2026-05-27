@@ -3988,6 +3988,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
 
         quantidade_val = float(quantidade or 0)
         valor_total = float(info["preco_atual"] or 0) * quantidade_val
+        data_movimentacao = data_aplicacao or datetime.now().strftime("%Y-%m-%d")
         data_adicao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         usuario = get_usuario_atual()
@@ -4017,18 +4018,51 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                         print(f"DEBUG: Erro ao adicionar colunas (pode ser normal se já existirem): {e}")
                     
                     cursor.execute(
-                        'SELECT id, quantidade FROM carteira WHERE ticker = %s',
+                        'SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE ticker = %s',
                         (info["ticker"],)
                     )
                     ativo_existente = cursor.fetchone()
+                    if not ativo_existente and is_renda_fixa and not sobrescrever:
+                        nome_lookup = str(info.get("nome_completo") or "").strip().lower()
+                        if nome_lookup:
+                            cursor.execute(
+                                "SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE LOWER(TRIM(nome_completo)) = %s AND LOWER(COALESCE(tipo,'')) LIKE '%%renda fixa%%' LIMIT 1",
+                                (nome_lookup,)
+                            )
+                            ativo_existente = cursor.fetchone()
+                    if not ativo_existente and is_renda_fixa and not sobrescrever and emissor_rf and tipo_renda_fixa and vencimento:
+                        cursor.execute(
+                            "SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE LOWER(COALESCE(emissor_rf,'')) = %s AND LOWER(COALESCE(tipo_renda_fixa,'')) = %s AND COALESCE(vencimento,'') = %s AND LOWER(COALESCE(tipo,'')) LIKE '%%renda fixa%%' LIMIT 1",
+                            (str(emissor_rf).lower(), str(tipo_renda_fixa).lower(), str(vencimento))
+                        )
+                        ativo_existente = cursor.fetchone()
+
+                    ticker_mov = ativo_existente[2] if ativo_existente else info["ticker"]
+                    nome_mov = ativo_existente[3] if ativo_existente else info["nome_completo"]
+                    indexador_existente = ativo_existente[4] if ativo_existente and len(ativo_existente) > 4 else None
+                    indexador_pct_existente = ativo_existente[5] if ativo_existente and len(ativo_existente) > 5 else None
+
+                    preco_movimentacao = preco_compra_definitivo
+                    # Para aporte em RF com data retroativa, estimar preço unitário naquela data
+                    # para que a valorização entre a data do aporte e hoje seja considerada.
+                    try:
+                        if is_renda_fixa and ativo_existente and data_aplicacao:
+                            idx_ref = indexador or indexador_existente
+                            idx_pct_ref = indexador_pct if indexador_pct is not None else indexador_pct_existente
+                            if idx_ref and float(preco_compra_definitivo or 0) > 0:
+                                fator_ate_hoje = calcular_preco_com_indexador(1.0, idx_ref, idx_pct_ref, data_aplicacao)
+                                if fator_ate_hoje and float(fator_ate_hoje) > 0:
+                                    preco_movimentacao = float(preco_compra_definitivo) / float(fator_ate_hoje)
+                    except Exception:
+                        preco_movimentacao = preco_compra_definitivo
 
 
                     resultado_movimentacao = registrar_movimentacao(
-                        data_adicao,
-                        info["ticker"],
-                        info["nome_completo"],
+                        data_movimentacao,
+                        ticker_mov,
+                        nome_mov,
                         quantidade_val,
-                        preco_compra_definitivo,
+                        preco_movimentacao,
                         "atualizado" if (ativo_existente and sobrescrever) else "compra",
                         conn
                     )
@@ -4037,7 +4071,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
 
                     if ativo_existente:
                         # Ativo já existe, atualizar quantidade
-                        id_existente, quantidade_existente = ativo_existente
+                        id_existente, quantidade_existente, _, _, _, _ = ativo_existente
                         try:
                             quantidade_existente = float(quantidade_existente)
                         except Exception:
@@ -4091,9 +4125,12 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                 preco_medio_atual = float(preco_compra_definitivo or 0)
                             nova_quantidade = quantidade_existente + quantidade_val
                            
-                            preco_medio_novo = (
-                                (preco_medio_atual * quantidade_existente) + (float(preco_compra_definitivo or 0) * quantidade_val)
-                            ) / (nova_quantidade or 1)
+                            if is_renda_fixa:
+                                preco_medio_novo = preco_medio_atual
+                            else:
+                                preco_medio_novo = (
+                                    (preco_medio_atual * quantidade_existente) + (float(preco_movimentacao or 0) * quantidade_val)
+                                ) / (nova_quantidade or 1)
                             novo_valor_total = float(info["preco_atual"] or 0) * nova_quantidade
                             # Atualizar apenas preco_medio (média ponderada). preco_compra deve permanecer
                             # o preço da primeira compra e não ser sobrescrito.
@@ -4111,7 +4148,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                                     id_existente,
                                 )
                             )
-                            mensagem = f"Quantidade do ativo {info['ticker']} atualizada: {quantidade_existente} + {quantidade} = {nova_quantidade}"
+                            mensagem = f"Aporte realizado em {ticker_mov}: {quantidade_existente} + {quantidade} = {nova_quantidade}"
                     else:
                         # Novo ativo - adicionar todas as colunas necessárias
                         preco_compra = preco_compra_definitivo
@@ -4154,16 +4191,47 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
             cursor = conn.cursor()
             
           
-            cursor.execute('SELECT id, quantidade FROM carteira WHERE ticker = ?', (info["ticker"],))
+            cursor.execute('SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE ticker = ?', (info["ticker"],))
             ativo_existente = cursor.fetchone()
+            if not ativo_existente and is_renda_fixa and not sobrescrever:
+                nome_lookup = str(info.get("nome_completo") or "").strip().lower()
+                if nome_lookup:
+                    cursor.execute(
+                        "SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE LOWER(TRIM(nome_completo)) = ? AND LOWER(COALESCE(tipo,'')) LIKE '%renda fixa%' LIMIT 1",
+                        (nome_lookup,)
+                    )
+                    ativo_existente = cursor.fetchone()
+            if not ativo_existente and is_renda_fixa and not sobrescrever and emissor_rf and tipo_renda_fixa and vencimento:
+                cursor.execute(
+                    "SELECT id, quantidade, ticker, nome_completo, indexador, indexador_pct FROM carteira WHERE LOWER(COALESCE(emissor_rf,'')) = ? AND LOWER(COALESCE(tipo_renda_fixa,'')) = ? AND COALESCE(vencimento,'') = ? AND LOWER(COALESCE(tipo,'')) LIKE '%renda fixa%' LIMIT 1",
+                    (str(emissor_rf).lower(), str(tipo_renda_fixa).lower(), str(vencimento))
+                )
+                ativo_existente = cursor.fetchone()
+
+            ticker_mov = ativo_existente[2] if ativo_existente else info["ticker"]
+            nome_mov = ativo_existente[3] if ativo_existente else info["nome_completo"]
+            indexador_existente = ativo_existente[4] if ativo_existente and len(ativo_existente) > 4 else None
+            indexador_pct_existente = ativo_existente[5] if ativo_existente and len(ativo_existente) > 5 else None
+
+            preco_movimentacao = preco_compra_definitivo
+            try:
+                if is_renda_fixa and ativo_existente and data_aplicacao:
+                    idx_ref = indexador or indexador_existente
+                    idx_pct_ref = indexador_pct if indexador_pct is not None else indexador_pct_existente
+                    if idx_ref and float(preco_compra_definitivo or 0) > 0:
+                        fator_ate_hoje = calcular_preco_com_indexador(1.0, idx_ref, idx_pct_ref, data_aplicacao)
+                        if fator_ate_hoje and float(fator_ate_hoje) > 0:
+                            preco_movimentacao = float(preco_compra_definitivo) / float(fator_ate_hoje)
+            except Exception:
+                preco_movimentacao = preco_compra_definitivo
             
 
             resultado_movimentacao = registrar_movimentacao(
-                data_adicao,
-                info["ticker"],
-                info["nome_completo"],
+                data_movimentacao,
+                ticker_mov,
+                nome_mov,
                 quantidade_val,
-                preco_compra_definitivo,
+                preco_movimentacao,
                 "atualizado" if (ativo_existente and sobrescrever) else "compra",
                 conn
             )
@@ -4173,7 +4241,7 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
             
             if ativo_existente:
                
-                id_existente, quantidade_existente = ativo_existente
+                id_existente, quantidade_existente, _, _, _, _ = ativo_existente
                 try:
                     quantidade_existente = float(quantidade_existente)
                 except Exception:
@@ -4227,16 +4295,19 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
                     except Exception:
                         preco_medio_atual = float(preco_compra_definitivo or 0)
                     nova_quantidade = quantidade_existente + quantidade_val
-                    preco_medio_novo = (
-                        (preco_medio_atual * quantidade_existente) + (float(preco_compra_definitivo or 0) * quantidade_val)
-                    ) / (nova_quantidade or 1)
+                    if is_renda_fixa:
+                        preco_medio_novo = preco_medio_atual
+                    else:
+                        preco_medio_novo = (
+                            (preco_medio_atual * quantidade_existente) + (float(preco_movimentacao or 0) * quantidade_val)
+                        ) / (nova_quantidade or 1)
                     novo_valor_total = float(info["preco_atual"] or 0) * nova_quantidade
                     # Atualizar apenas preco_medio (média ponderada). preco_compra permanece o preço da primeira compra.
                     cursor.execute('''
                         UPDATE carteira SET quantidade = ?, valor_total = ?, preco_atual = ?, dy = ?, pl = ?, pvp = ?, roe = ?, preco_medio = ?
                         WHERE id = ?
                     ''', (nova_quantidade, novo_valor_total, info["preco_atual"], info.get("dy"), info.get("pl"), info.get("pvp"), info.get("roe"), preco_medio_novo, id_existente))
-                    mensagem = f"Quantidade do ativo {info['ticker']} atualizada: {quantidade_existente} + {quantidade} = {nova_quantidade}"
+                    mensagem = f"Aporte realizado em {ticker_mov}: {quantidade_existente} + {quantidade} = {nova_quantidade}"
             else:
                
  
@@ -6378,7 +6449,8 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                 q = 0.0
                 for mdt, mq, mtype in mov_by_ticker.get(tk, []):
                     if mdt <= dt:
-                        if mtype == 'venda':
+                        tipo_norm = str(mtype or '').strip().lower()
+                        if tipo_norm == 'venda':
                             q -= mq
                         else:
                             q += mq

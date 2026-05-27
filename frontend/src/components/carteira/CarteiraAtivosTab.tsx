@@ -7,7 +7,8 @@ import {
   Edit, 
   Trash2,
   FileSpreadsheet,
-  Plus
+  Plus,
+  DollarSign
 } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -75,8 +76,16 @@ const calcularAliquotaIrRegressiva = (dias: number | null, isentoIr?: boolean) =
 }
 
 const calcularMetricasAtivo = (ativo: any, movimentacoesAll: any[], isRendaFixa: boolean) => {
+  const tickerAlvo = String(ativo?.ticker || '').trim().toUpperCase()
+  const nomeAlvo = String(ativo?.nome_completo || '').trim().toLowerCase()
   const movsDoTicker = (movimentacoesAll || [])
-    .filter(m => m.ticker?.toUpperCase?.() === (ativo?.ticker || '').toUpperCase())
+    .filter((m) => {
+      const tickerMov = String(m?.ticker || '').trim().toUpperCase()
+      const nomeMov = String(m?.nome_completo || '').trim().toLowerCase()
+      if (tickerAlvo && tickerMov && tickerMov === tickerAlvo) return true
+      if (nomeAlvo && nomeMov && nomeMov === nomeAlvo) return true
+      return false
+    })
     .sort((a, b) => String(a.data).localeCompare(String(b.data)))
 
   const lots = buildRemainingLots(movsDoTicker)
@@ -88,6 +97,56 @@ const calcularMetricasAtivo = (ativo: any, movimentacoesAll: any[], isRendaFixa:
   const quantidadeAtivo = Number(ativo?.quantidade || 0)
   const precoAtual = Number(ativo?.preco_atual || 0)
   const quantidadeParaValorizacao = quantidadeAtivo > 0 ? quantidadeAtivo : totalQtd
+
+  if (isRendaFixa) {
+    let valorInvestido = 0
+    for (const mov of movsDoTicker) {
+      const qty = Number(mov?.quantidade || 0)
+      const prc = Number(mov?.preco || 0)
+      const tipoMov = String(mov?.tipo || '').toLowerCase()
+      if (!Number.isFinite(qty) || !Number.isFinite(prc) || qty <= 0 || prc <= 0) continue
+      if (tipoMov === 'venda') valorInvestido -= qty * prc
+      else valorInvestido += qty * prc
+    }
+    if (valorInvestido < 0) valorInvestido = 0
+
+    if (valorInvestido <= 0 && quantidadeAtivo > 0) {
+      const precoBaseFallback = Number(
+        (ativo as any)?.preco_compra ??
+        (ativo as any)?.preco_medio ??
+        precoMedioLocal ??
+        0
+      )
+      if (Number.isFinite(precoBaseFallback) && precoBaseFallback > 0) {
+        valorInvestido = precoBaseFallback * quantidadeAtivo
+      }
+    }
+
+    const valorAtualTotal = Number(ativo?.valor_total || 0)
+    const valorizacaoAbsRf = valorInvestido > 0 ? (valorAtualTotal - valorInvestido) : null
+    const rendimentoPctRf = valorInvestido > 0 ? ((valorAtualTotal - valorInvestido) / valorInvestido) * 100 : null
+
+    const valorBrutoRf = Number.isFinite(valorAtualTotal) ? valorAtualTotal : null
+    const diasRf = calcularDiasCorridos(((ativo as any)?.data_aplicacao as string | undefined) || (ativo?.data_adicao as string | undefined))
+    const aliquotaIrRf = calcularAliquotaIrRegressiva(diasRf, Boolean((ativo as any)?.isento_ir))
+    const ganhoBrutoRf = (valorBrutoRf != null && valorInvestido > 0) ? Math.max(valorBrutoRf - valorInvestido, 0) : null
+    const irValorRf = (ganhoBrutoRf != null) ? (ganhoBrutoRf * aliquotaIrRf / 100) : null
+    const valorLiquidoRf = (valorBrutoRf != null && irValorRf != null) ? valorBrutoRf - irValorRf : null
+
+    const precoBaseRf = (quantidadeAtivo > 0 && valorInvestido > 0)
+      ? (valorInvestido / quantidadeAtivo)
+      : (precoMedioLocal ?? null)
+
+    return {
+      precoMedioLocal,
+      precoBase: precoBaseRf,
+      rendimentoPct: rendimentoPctRf,
+      valorizacaoAbs: valorizacaoAbsRf,
+      valorInvestido: valorInvestido > 0 ? valorInvestido : null,
+      valorBrutoRf,
+      valorLiquidoRf
+    }
+  }
 
   const rendimentoPct = (precoBase != null && precoAtual)
     ? ((precoAtual - precoBase) / precoBase) * 100
@@ -111,6 +170,9 @@ const calcularMetricasAtivo = (ativo: any, movimentacoesAll: any[], isRendaFixa:
     precoBase,
     rendimentoPct,
     valorizacaoAbs,
+    valorInvestido: (precoBase != null && quantidadeParaValorizacao > 0)
+      ? Number(precoBase) * quantidadeParaValorizacao
+      : null,
     valorBrutoRf,
     valorLiquidoRf
   }
@@ -139,6 +201,7 @@ function TabelaAtivosPorTipo({
   getIndicadoresAtivo,
   valorizacaoPeriodoMap,
   periodoLabel,
+  onAporteRendaFixa,
   onOpenAddAtivo
 }: {
   tipo: string
@@ -163,6 +226,7 @@ function TabelaAtivosPorTipo({
   getIndicadoresAtivo: (ativo: any) => IndicadoresFundamentais
   valorizacaoPeriodoMap?: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>
   periodoLabel?: string
+  onAporteRendaFixa?: (ativo: any) => void
   onOpenAddAtivo?: () => void
 }) {
   const ativosDoTipo = carteira?.filter(ativo => ativo?.tipo === tipo) || []
@@ -196,10 +260,12 @@ function TabelaAtivosPorTipo({
     let somaValoresInvestidos = 0
     for (const a of ativosDoTipo) {
       const metrica = calcularMetricasAtivo(a, movs, isRendaFixa)
-      const precoBase = metrica.precoBase
-      if (precoBase != null) {
-        somaValoresInvestidos += precoBase * (a?.quantidade || 0)
-        somaValoresAtuais += (a?.preco_atual || 0) * (a?.quantidade || 0)
+      const valorInvestido = Number(metrica?.valorInvestido)
+      if (Number.isFinite(valorInvestido) && valorInvestido > 0) {
+        somaValoresInvestidos += valorInvestido
+        somaValoresAtuais += isRendaFixa
+          ? Number(a?.valor_total || 0)
+          : (a?.preco_atual || 0) * (a?.quantidade || 0)
       }
     }
     const rendTipo = (somaValoresInvestidos > 0) ? ((somaValoresAtuais - somaValoresInvestidos) / somaValoresInvestidos) * 100 : null
@@ -507,6 +573,15 @@ function TabelaAtivosPorTipo({
                               </>
                             ) : (
                               <>
+                                {isRendaFixa && onAporteRendaFixa && (
+                                  <button
+                                    onClick={() => onAporteRendaFixa(ativo)}
+                                    className="p-1 text-amber-600 hover:text-amber-700"
+                                    title="Registrar aporte"
+                                  >
+                                    <DollarSign size={14} />
+                                  </button>
+                                )}
                                 {onOpenAddAtivo && (
                                   <button
                                     onClick={onOpenAddAtivo}
@@ -580,6 +655,15 @@ function TabelaAtivosPorTipo({
                             </>
                           ) : (
                             <>
+                              {isRendaFixa && onAporteRendaFixa && (
+                                <button
+                                  onClick={() => onAporteRendaFixa(ativo)}
+                                  className="p-1.5 sm:p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded"
+                                  title="Registrar aporte"
+                                >
+                                  <DollarSign size={16} className="sm:w-[18px] sm:h-[18px]" />
+                                </button>
+                              )}
                               {onOpenAddAtivo && (
                                 <button
                                   onClick={onOpenAddAtivo}
@@ -828,6 +912,7 @@ interface CarteiraAtivosTabProps {
   // Dados adicionais
   movimentacoesAll: any[]
   indicadores: any
+  onAporteRendaFixa?: (ativo: any) => void
   /** Abre o modal de adicionar ativo (empty state) */
   onOpenAddAtivo?: () => void
 }
@@ -854,6 +939,7 @@ export default function CarteiraAtivosTab({
   setRenameTipoValue,
   movimentacoesAll,
   indicadores,
+  onAporteRendaFixa,
   onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
   const [showB3Import, setShowB3Import] = useState(false)
@@ -1205,6 +1291,7 @@ export default function CarteiraAtivosTab({
               getIndicadoresAtivo={getIndicadoresAtivo}
               valorizacaoPeriodoMap={valorizacaoPeriodoMap}
               periodoLabel={periodoLabel}
+              onAporteRendaFixa={onAporteRendaFixa}
               onOpenAddAtivo={onOpenAddAtivo}
             />
           ))}

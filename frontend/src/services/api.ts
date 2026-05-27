@@ -858,12 +858,31 @@ export const carteiraService = {
     const resp = await api.get(url, { responseType: 'blob' })
     return resp.data as Blob
   },
+  downloadMovimentacoesXLSX: async (params: { mes?: string; ano?: string; inicio?: string; fim?: string }) => {
+    const p = new URLSearchParams()
+    if (params.mes) p.append('mes', params.mes)
+    if (params.ano) p.append('ano', params.ano)
+    if (params.inicio) p.append('inicio', params.inicio)
+    if (params.fim) p.append('fim', params.fim)
+    p.append('formato', 'xlsx')
+    const url = `/relatorios/movimentacoes?${p.toString()}`
+    const resp = await api.get(url, { responseType: 'blob' })
+    return resp.data as Blob
+  },
   downloadPosicoesCSV: async () => {
     const resp = await api.get(`/relatorios/posicoes`, { responseType: 'blob' })
     return resp.data as Blob
   },
+  downloadPosicoesXLSX: async () => {
+    const resp = await api.get(`/relatorios/posicoes?formato=xlsx`, { responseType: 'blob' })
+    return resp.data as Blob
+  },
   downloadRendimentosCSV: async (periodo: string = 'mensal') => {
     const resp = await api.get(`/relatorios/rendimentos?periodo=${periodo}`, { responseType: 'blob' })
+    return resp.data as Blob
+  },
+  downloadRendimentosXLSX: async (periodo: string = 'mensal') => {
+    const resp = await api.get(`/relatorios/rendimentos?periodo=${periodo}&formato=xlsx`, { responseType: 'blob' })
     return resp.data as Blob
   },
   downloadMovimentacoesPDF: async (params: { mes?: string; ano?: string; inicio?: string; fim?: string }) => {
@@ -996,7 +1015,10 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/receitas?${params.toString()}`)
-    return response.data
+    const payload = response.data
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.receitas)) return payload.receitas
+    return []
   },
 
   adicionarReceita: async (
@@ -1127,7 +1149,10 @@ export const controleService = {
 
   getEvolucaoReceitas: async (periodo: string): Promise<{mes: string, receitas: number}[]> => {
     const response = await api.get(`/controle/evolucao-receitas?periodo=${periodo}`)
-    return response.data
+    const payload = response.data
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.dados)) return payload.dados
+    return []
   },
 
 

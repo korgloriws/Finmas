@@ -15,10 +15,13 @@ import {
   LockKeyhole,
   LayoutGrid,
   Mail,
-  Eye
+  Eye,
+  Database,
+  Download,
+  Upload
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { perfilService, adminService, TELAS_APP } from '../services/api'
+import { perfilService, adminService, carteiraService, TELAS_APP } from '../services/api'
 import { toast } from 'react-hot-toast'
 import HelpTips from '../components/HelpTips'
 
@@ -544,6 +547,114 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
             )}
+
+            {/* Backup e restauração do sistema */}
+            <div className="border-t border-border pt-8">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <Database className="w-5 h-5 text-primary" />
+                Backup e Restauração do Sistema
+              </h2>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6 space-y-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-700 dark:text-blue-300">
+                    <p className="font-medium mb-1">Importante sobre backups:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>O backup contém seus dados da carteira e demais registros do sistema</li>
+                      <li>Guarde o arquivo em local seguro</li>
+                      <li>A restauração substitui os dados atuais pelos dados do backup</li>
+                      <li>Recomendamos backup antes de alterações importantes</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                  <div className="bg-card border border-border rounded-lg p-5">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <Download className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      Fazer Backup
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Baixe uma cópia do banco de dados para guardar localmente.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          toast.loading('Gerando backup...', { id: 'backup-config' })
+                          const blob = await carteiraService.downloadBackup()
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `backup_${new Date().toISOString().split('T')[0]}.${blob.type.includes('zip') ? 'zip' : 'sql'}`
+                          document.body.appendChild(a)
+                          a.click()
+                          a.remove()
+                          URL.revokeObjectURL(url)
+                          toast.success('Backup baixado com sucesso!', { id: 'backup-config' })
+                        } catch (error: any) {
+                          console.error('Erro ao fazer backup:', error)
+                          toast.error(error?.response?.data?.error || 'Erro ao fazer backup', { id: 'backup-config' })
+                        }
+                      }}
+                      className="w-full px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Baixar Backup
+                    </button>
+                  </div>
+
+                  <div className="bg-card border border-border rounded-lg p-5">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <Upload className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      Restaurar Backup
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Restaure um backup anterior. <strong className="text-red-600 dark:text-red-400">Atenção:</strong> isso substitui os dados atuais.
+                    </p>
+                    <input
+                      type="file"
+                      accept=".zip,.sql"
+                      className="hidden"
+                      id="config-backup-file-input"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+
+                        if (!confirm('ATENÇÃO: Isso substituirá TODOS os seus dados atuais pelos dados do backup. Deseja continuar?')) {
+                          e.target.value = ''
+                          return
+                        }
+
+                        try {
+                          toast.loading('Restaurando backup...', { id: 'restore-config' })
+                          const result = await carteiraService.restoreBackup(file)
+                          if (result.success) {
+                            toast.success('Backup restaurado com sucesso! A página será recarregada.', { id: 'restore-config', duration: 5000 })
+                            setTimeout(() => {
+                              window.location.reload()
+                            }, 2000)
+                          } else {
+                            toast.error(result.message || 'Erro ao restaurar backup', { id: 'restore-config' })
+                          }
+                        } catch (error: any) {
+                          console.error('Erro ao restaurar backup:', error)
+                          toast.error(error?.response?.data?.error || 'Erro ao restaurar backup', { id: 'restore-config' })
+                        } finally {
+                          e.target.value = ''
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="config-backup-file-input"
+                      className="w-full px-4 py-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Selecionar e Restaurar Backup
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Excluir Conta */}
             <div className="border-t border-border pt-8">

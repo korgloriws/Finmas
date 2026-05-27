@@ -74,6 +74,9 @@ export default function ControleReceitaTab({
     enabled: !!user,
   })
 
+  const receitasSafe = Array.isArray(receitas) ? receitas : []
+  const evolucaoReceitasSafe = Array.isArray(evolucaoReceitas) ? evolucaoReceitas : []
+
 
   const adicionarReceitaMutation = useMutation({
     mutationFn: ({ nome, valor, opts }: { nome: string; valor: number; opts?: any }) =>
@@ -196,17 +199,17 @@ export default function ControleReceitaTab({
   }, [editingReceitaId, editReceitaNome, editReceitaValor, editReceitaData, editReceitaCategoria, editReceitaTipo, editReceitaRecorrencia, atualizarReceitaMutation])
 
   // Cálculos
-  const totalReceitas = receitas?.reduce((total, receita) => total + receita.valor, 0) || 0
-  const totalReceitasCount = receitas?.length || 0
-  const receitasFixo = receitas?.filter(r => r.tipo === 'fixo').length || 0
-  const receitasVariavel = receitas?.filter(r => r.tipo === 'variavel').length || 0
+  const totalReceitas = receitasSafe.reduce((total, receita) => total + receita.valor, 0)
+  const totalReceitasCount = receitasSafe.length
+  const receitasFixo = receitasSafe.filter(r => r.tipo === 'fixo').length
+  const receitasVariavel = receitasSafe.filter(r => r.tipo === 'variavel').length
 
   // Comparação com mês anterior
   const comparacaoMesAnterior = useMemo(() => {
-    if (!evolucaoReceitas || evolucaoReceitas.length < 2) return null
+    if (evolucaoReceitasSafe.length < 2) return null
     
-    const mesAtual = evolucaoReceitas[evolucaoReceitas.length - 1]
-    const mesAnterior = evolucaoReceitas[evolucaoReceitas.length - 2]
+    const mesAtual = evolucaoReceitasSafe[evolucaoReceitasSafe.length - 1]
+    const mesAnterior = evolucaoReceitasSafe[evolucaoReceitasSafe.length - 2]
     
     const variacao = mesAnterior.receitas > 0 
       ? ((mesAtual.receitas - mesAnterior.receitas) / mesAnterior.receitas) * 100
@@ -218,20 +221,18 @@ export default function ControleReceitaTab({
       variacao: variacao,
       isAumento: variacao > 0
     }
-  }, [evolucaoReceitas])
+  }, [evolucaoReceitasSafe])
 
   // Dados do gráfico
   const dadosGrafico = useMemo(() => {
-    if (!evolucaoReceitas) return []
-    
-    return evolucaoReceitas.map((item: {mes: string, receitas: number}, index: number) => ({
+    return evolucaoReceitasSafe.map((item: {mes: string, receitas: number}, index: number) => ({
       mes: item.mes,
       receitas: item.receitas,
       variacao: index > 0 
-        ? ((item.receitas - evolucaoReceitas[index - 1].receitas) / evolucaoReceitas[index - 1].receitas) * 100
+        ? ((item.receitas - evolucaoReceitasSafe[index - 1].receitas) / evolucaoReceitasSafe[index - 1].receitas) * 100
         : 0
     }))
-  }, [evolucaoReceitas])
+  }, [evolucaoReceitasSafe])
 
   return (
     <>
@@ -464,7 +465,7 @@ export default function ControleReceitaTab({
             <div className="text-center text-muted-foreground py-8">
               Carregando receitas...
             </div>
-          ) : receitas && receitas.length > 0 ? (
+          ) : receitasSafe.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-muted/30">
@@ -478,7 +479,7 @@ export default function ControleReceitaTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {receitas.map((receita) => (
+                  {receitasSafe.map((receita) => (
                     <tr key={receita.id} className="hover:bg-muted/40 transition-colors">
                       <td className="px-4 py-3">
                         {editingReceitaId === receita.id ? (

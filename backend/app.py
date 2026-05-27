@@ -3517,6 +3517,318 @@ def _parse_periodo_args():
     return mes, ano, inicio, fim
 
 
+def _periodo_relatorio_to_valorizacao(periodo_relatorio: str) -> str:
+    periodo = str(periodo_relatorio or '').strip().lower()
+    mapping = {
+        'mensal': '1m',
+        'trimestral': '3m',
+        'semestral': '6m',
+        'anual': '1a',
+        'maximo': 'ytd',
+        '1m': '1m',
+        '3m': '3m',
+        '6m': '6m',
+        '1a': '1a',
+        'ytd': 'ytd',
+    }
+    return mapping.get(periodo, '1m')
+
+
+def _obter_rendimento_periodo_rows(periodo_relatorio: str):
+    periodo_valorizacao = _periodo_relatorio_to_valorizacao(periodo_relatorio)
+    rows = obter_valorizacao_periodo(periodo_valorizacao) or []
+    if not isinstance(rows, list):
+        rows = []
+    return periodo_valorizacao, rows
+
+
+def _obter_rendimento_rows_com_fallback(periodo_relatorio: str):
+    periodo_valorizacao, rows_periodo = _obter_rendimento_periodo_rows(periodo_relatorio)
+
+    validos_periodo = []
+    for item in rows_periodo:
+        if not isinstance(item, dict):
+            continue
+        if item.get('valorizacao_reais') is None or item.get('valorizacao_pct') is None:
+            continue
+        validos_periodo.append(item)
+
+    # Se não houver base histórica suficiente para o período, usa a lógica da aba de ativos:
+    # preco_base = preco_medio || preco_compra e rendimento sobre preço atual.
+    if validos_periodo:
+        return periodo_valorizacao, validos_periodo, 'periodo'
+
+    carteira = obter_carteira() or []
+    fallback_rows = []
+    for ativo in carteira:
+        try:
+            qtd = _safe_float(ativo.get('quantidade'))
+            preco_atual = _safe_float(ativo.get('preco_atual'))
+            preco_base = ativo.get('preco_medio')
+            if preco_base is None:
+                preco_base = ativo.get('preco_compra')
+            preco_base = _safe_float(preco_base, 0.0)
+            if qtd <= 0 or preco_atual <= 0 or preco_base <= 0:
+                continue
+            val_reais = (preco_atual - preco_base) * qtd
+            val_pct = ((preco_atual - preco_base) / preco_base) * 100.0
+            fallback_rows.append({
+                'id': ativo.get('id'),
+                'ticker': ativo.get('ticker'),
+                'quantidade': qtd,
+                'preco_inicio_periodo': preco_base,
+                'preco_atual': preco_atual,
+                'valorizacao_reais': val_reais,
+                'valorizacao_pct': val_pct,
+            })
+        except Exception:
+            continue
+
+    return periodo_valorizacao, fallback_rows, 'atual'
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value)[:10], '%Y-%m-%d')
+    except Exception:
+        return None
+
+
+def _filtrar_movimentacoes_por_intervalo(rows, inicio=None, fim=None):
+    dt_inicio = _parse_iso_date(inicio)
+    dt_fim = _parse_iso_date(fim)
+    if not dt_inicio and not dt_fim:
+        return list(rows or [])
+
+    filtradas = []
+    for row in rows or []:
+        dt = _parse_iso_date(row.get('data') or '')
+        if dt is None:
+            continue
+        if dt_inicio and dt < dt_inicio:
+            continue
+        if dt_fim and dt > dt_fim:
+            continue
+        filtradas.append(row)
+    return filtradas
+
+
+def _safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _format_currency_br(value):
+    number = _safe_float(value, 0.0)
+    text = f"{number:,.2f}"
+    return f"R$ {text.replace(',', 'X').replace('.', ',').replace('X', '.')}"
+
+
+def _format_number_br(value, decimals=2):
+    number = _safe_float(value, 0.0)
+    text = f"{number:,.{decimals}f}"
+    return text.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def _format_percent_br(value):
+    return f"{_format_number_br(value, 2)}%"
+
+
+def _format_date_br(value):
+    dt = _parse_iso_date(value)
+    if not dt:
+        return str(value or '')
+    return dt.strftime('%d/%m/%Y')
+
+
+def _build_excel_response(df, filename, sheet_name='Relatorio'):
+    try:
+        from io import BytesIO
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except Exception:
+        return jsonify({"error": "Exportação XLSX indisponível (dependência openpyxl ausente)."}), 500
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        ws = writer.sheets[sheet_name]
+
+        ws.freeze_panes = 'A2'
+        header_fill = PatternFill(start_color='1F4F8A', end_color='1F4F8A', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+
+        for col_idx, column_name in enumerate(df.columns, start=1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+            sample_values = [str(column_name)]
+            for value in df[column_name].head(300):
+                sample_values.append(str(value if value is not None else ''))
+
+            max_len = max((len(item) for item in sample_values), default=12)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(max(max_len + 2, 12), 40)
+
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+def _build_pdf_report(
+    filename,
+    title,
+    subtitle,
+    summary_rows,
+    table_headers,
+    table_rows,
+    chart_labels=None,
+    chart_values=None,
+):
+    try:
+        from io import BytesIO
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.graphics.shapes import Drawing
+        from reportlab.graphics.charts.linecharts import HorizontalLineChart
+    except Exception:
+        return jsonify({"error": "PDF indisponível no momento (dependências ausentes)."}), 500
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=1.2 * cm,
+        rightMargin=1.2 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'FinmasTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        textColor=colors.HexColor('#1E3A8A'),
+        spaceAfter=8,
+    )
+    subtitle_style = ParagraphStyle(
+        'FinmasSubTitle',
+        parent=styles['BodyText'],
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=colors.HexColor('#334155'),
+        spaceAfter=10,
+    )
+    body_style = ParagraphStyle(
+        'FinmasBody',
+        parent=styles['BodyText'],
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=colors.HexColor('#0F172A'),
+    )
+
+    elements = [
+        Paragraph(title, title_style),
+        Paragraph(subtitle, subtitle_style),
+    ]
+
+    if summary_rows:
+        summary_table = Table(summary_rows, colWidths=[5.2 * cm, 10.6 * cm])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EFF6FF')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1E3A8A')),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#BFDBFE')),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.extend([summary_table, Spacer(1, 10)])
+
+    if chart_labels and chart_values and len(chart_values) > 1:
+        drawing = Drawing(520, 175)
+        chart = HorizontalLineChart()
+        chart.x = 34
+        chart.y = 24
+        chart.height = 120
+        chart.width = 460
+        chart.data = [chart_values]
+        chart.joinedLines = 1
+        chart.lines[0].strokeColor = colors.HexColor('#2563EB')
+        chart.lines[0].strokeWidth = 2
+        chart.lines[0].symbol = None
+
+        step = max(1, len(chart_labels) // 8)
+        chart.categoryAxis.categoryNames = [
+            label if idx % step == 0 or idx == len(chart_labels) - 1 else ''
+            for idx, label in enumerate(chart_labels)
+        ]
+        chart.categoryAxis.labels.boxAnchor = 'n'
+        chart.categoryAxis.labels.angle = 0
+        chart.categoryAxis.labels.fontName = 'Helvetica'
+        chart.categoryAxis.labels.fontSize = 7
+
+        val_min = min(chart_values)
+        val_max = max(chart_values)
+        if val_min == val_max:
+            val_max += 1
+        chart.valueAxis.valueMin = max(0, val_min * 0.97)
+        chart.valueAxis.valueMax = val_max * 1.03
+        chart.valueAxis.labels.fontName = 'Helvetica'
+        chart.valueAxis.labels.fontSize = 7
+        chart.valueAxis.gridStrokeColor = colors.HexColor('#E2E8F0')
+
+        drawing.add(chart)
+        elements.extend([
+            Paragraph('Evolução da carteira no período', body_style),
+            Spacer(1, 4),
+            drawing,
+            Spacer(1, 10),
+        ])
+
+    if table_headers:
+        formatted_rows = [table_headers] + (table_rows or [])
+        relatorio_table = Table(formatted_rows, repeatRows=1)
+        relatorio_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E3A8A')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        elements.append(relatorio_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
+
+
 @server.route('/api/relatorios/movimentacoes.csv', methods=['GET'])
 def export_movimentacoes_csv():
     try:
@@ -3525,26 +3837,7 @@ def export_movimentacoes_csv():
             return jsonify({"error": "Não autenticado"}), 401
         mes, ano, inicio, fim = _parse_periodo_args()
         if inicio or fim:
-            movs = obter_movimentacoes() or []
-            def to_date(s):
-                from datetime import datetime
-                try:
-                    return datetime.strptime(s[:10], '%Y-%m-%d')
-                except Exception:
-                    return None
-            di = to_date(inicio) if inicio else None
-            df = to_date(fim) if fim else None
-            filtered = []
-            for m in movs:
-                dt = to_date(m.get('data') or '')
-                if dt is None:
-                    continue
-                if di and dt < di:
-                    continue
-                if df and dt > df:
-                    continue
-                filtered.append(m)
-            rows = filtered
+            rows = _filtrar_movimentacoes_por_intervalo(obter_movimentacoes() or [], inicio, fim)
         else:
             rows = obter_movimentacoes(mes, ano) or []
 
@@ -3556,7 +3849,7 @@ def export_movimentacoes_csv():
             writer.writerow([
                 r.get('data'), r.get('ticker'), r.get('nome_completo'), r.get('quantidade'), r.get('preco'), r.get('tipo')
             ])
-        resp = make_response(output.getvalue())
+        resp = make_response('\ufeff' + output.getvalue())
         resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
         resp.headers['Content-Disposition'] = 'attachment; filename="movimentacoes.csv"'
         return resp
@@ -3580,7 +3873,7 @@ def export_posicoes_csv():
                 it.get('ticker'), it.get('nome_completo'), it.get('quantidade'), it.get('preco_atual'),
                 it.get('valor_total'), it.get('tipo'), it.get('dy'), it.get('pl'), it.get('pvp'), it.get('roe')
             ])
-        resp = make_response(output.getvalue())
+        resp = make_response('\ufeff' + output.getvalue())
         resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
         resp.headers['Content-Disposition'] = 'attachment; filename="posicoes.csv"'
         return resp
@@ -3594,17 +3887,24 @@ def export_rendimentos_csv():
         usuario = get_usuario_atual()
         if not usuario:
             return jsonify({"error": "Não autenticado"}), 401
-        periodo = request.args.get('periodo', 'mensal')
-        hist = obter_historico_carteira_comparado(periodo or 'mensal') or {}
-        datas = hist.get('datas') or []
-        carteira = hist.get('carteira_valor') or []
+        periodo = request.args.get('periodo', 'mensal') or 'mensal'
+        periodo_valorizacao, rows, fonte = _obter_rendimento_rows_com_fallback(periodo)
         import csv, io
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['periodo', 'valor_carteira'])
-        for i, d in enumerate(datas):
-            writer.writerow([d, carteira[i] if i < len(carteira) else None])
-        resp = make_response(output.getvalue())
+        writer.writerow(['ticker', 'quantidade', 'preco_base', 'preco_atual', 'valorizacao_reais', 'rendimento_pct', 'periodo', 'fonte_calculo'])
+        for item in rows:
+            writer.writerow([
+                item.get('ticker'),
+                item.get('quantidade'),
+                item.get('preco_inicio_periodo'),
+                item.get('preco_atual'),
+                item.get('valorizacao_reais'),
+                item.get('valorizacao_pct'),
+                periodo_valorizacao,
+                fonte,
+            ])
+        resp = make_response('\ufeff' + output.getvalue())
         resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
         resp.headers['Content-Disposition'] = 'attachment; filename="rendimentos.csv"'
         return resp
@@ -3620,33 +3920,58 @@ def export_movimentacoes_pdf():
             return jsonify({"error": "Não autenticado"}), 401
         mes, ano, inicio, fim = _parse_periodo_args()
         if inicio or fim:
-            rows = obter_movimentacoes() or []
+            rows = _filtrar_movimentacoes_por_intervalo(obter_movimentacoes() or [], inicio, fim)
         else:
             rows = obter_movimentacoes(mes, ano) or []
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
-            from io import BytesIO
-        except Exception:
-            return jsonify({"error": "PDF indisponível no momento (dependência ausente)"}), 500
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        y = height - 40
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(40, y, "Relatório de Movimentações")
-        y -= 20
-        c.setFont("Helvetica", 9)
+
+        total_operado = 0.0
+        total_compras = 0.0
+        total_vendas = 0.0
+        table_rows = []
         for r in rows:
-            if y < 40:
-                c.showPage(); y = height - 40; c.setFont("Helvetica", 9)
-            line = f"{r.get('data','')}  {r.get('ticker',''):8}  {r.get('tipo',''):7}  qtd={r.get('quantidade','')}  preco={r.get('preco','')}"
-            c.drawString(40, y, line)
-            y -= 14
-        c.showPage()
-        c.save()
-        buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name='movimentacoes.pdf', mimetype='application/pdf')
+            qtd = _safe_float(r.get('quantidade'))
+            preco = _safe_float(r.get('preco'))
+            valor_operacao = abs(qtd * preco)
+            total_operado += valor_operacao
+            tipo = str(r.get('tipo') or '').upper()
+            if tipo == 'COMPRA':
+                total_compras += valor_operacao
+            elif tipo == 'VENDA':
+                total_vendas += valor_operacao
+
+            table_rows.append([
+                _format_date_br(r.get('data')),
+                str(r.get('ticker') or ''),
+                tipo,
+                _format_number_br(qtd, 4),
+                _format_currency_br(preco),
+                _format_currency_br(valor_operacao),
+            ])
+
+        periodo_txt = (
+            f"Período: {str(inicio or '-')} até {str(fim or '-')}"
+            if (inicio or fim)
+            else f"Mês/Ano: {str(mes or '-')}/{str(ano or '-')}"
+        )
+        summary_rows = [
+            ['Gerado em', datetime.now().strftime('%d/%m/%Y %H:%M')],
+            ['Registros', str(len(rows))],
+            ['Volume total', _format_currency_br(total_operado)],
+            ['Compras', _format_currency_br(total_compras)],
+            ['Vendas', _format_currency_br(total_vendas)],
+        ]
+
+        if not table_rows:
+            table_rows = [['-', 'Sem movimentações no período', '-', '-', '-', '-']]
+
+        return _build_pdf_report(
+            filename='movimentacoes.pdf',
+            title='Relatório de Movimentações - Carteira',
+            subtitle=periodo_txt,
+            summary_rows=summary_rows,
+            table_headers=['Data', 'Ticker', 'Tipo', 'Quantidade', 'Preço unitário', 'Valor operação'],
+            table_rows=table_rows,
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -3658,30 +3983,43 @@ def export_posicoes_pdf():
         if not usuario:
             return jsonify({"error": "Não autenticado"}), 401
         itens = obter_carteira() or []
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
-            from io import BytesIO
-        except Exception:
-            return jsonify({"error": "PDF indisponível no momento (dependência ausente)"}), 500
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        y = height - 40
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(40, y, "Relatório de Posições")
-        y -= 20
-        c.setFont("Helvetica", 9)
+
+        valor_total = 0.0
+        qtd_total = 0.0
+        table_rows = []
         for it in itens:
-            if y < 40:
-                c.showPage(); y = height - 40; c.setFont("Helvetica", 9)
-            line = f"{it.get('ticker',''):8}  {it.get('nome_completo','')[:40]}  qtd={it.get('quantidade','')}  val={it.get('valor_total','')}"
-            c.drawString(40, y, line)
-            y -= 14
-        c.showPage()
-        c.save()
-        buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name='posicoes.pdf', mimetype='application/pdf')
+            qtd = _safe_float(it.get('quantidade'))
+            preco = _safe_float(it.get('preco_atual'))
+            valor = _safe_float(it.get('valor_total'))
+            qtd_total += qtd
+            valor_total += valor
+            table_rows.append([
+                str(it.get('ticker') or ''),
+                str(it.get('nome_completo') or '-')[:40],
+                str(it.get('tipo') or '-'),
+                _format_number_br(qtd, 4),
+                _format_currency_br(preco),
+                _format_currency_br(valor),
+            ])
+
+        summary_rows = [
+            ['Gerado em', datetime.now().strftime('%d/%m/%Y %H:%M')],
+            ['Ativos', str(len(itens))],
+            ['Quantidade total', _format_number_br(qtd_total, 4)],
+            ['Valor total da carteira', _format_currency_br(valor_total)],
+        ]
+
+        if not table_rows:
+            table_rows = [['-', 'Sem posições em carteira', '-', '-', '-', '-']]
+
+        return _build_pdf_report(
+            filename='posicoes.pdf',
+            title='Relatório de Posições - Carteira',
+            subtitle='Posição consolidada atual da carteira',
+            summary_rows=summary_rows,
+            table_headers=['Ticker', 'Nome', 'Tipo', 'Quantidade', 'Preço atual', 'Valor total'],
+            table_rows=table_rows,
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -3692,37 +4030,156 @@ def export_rendimentos_pdf():
         usuario = get_usuario_atual()
         if not usuario:
             return jsonify({"error": "Não autenticado"}), 401
-        periodo = request.args.get('periodo', 'mensal')
-        hist = obter_historico_carteira_comparado(periodo or 'mensal') or {}
-        datas = hist.get('datas') or []
-        carteira = hist.get('carteira_valor') or []
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
-            from io import BytesIO
-        except Exception:
-            return jsonify({"error": "PDF indisponível no momento (dependência ausente)"}), 500
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        y = height - 40
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(40, y, "Relatório de Rendimentos")
-        y -= 20
-        c.setFont("Helvetica", 9)
-        for i, d in enumerate(datas):
-            if y < 40:
-                c.showPage(); y = height - 40; c.setFont("Helvetica", 9)
-            val = carteira[i] if i < len(carteira) else None
-            line = f"{d}: {val}"
-            c.drawString(40, y, line)
-            y -= 14
-        c.showPage()
-        c.save()
-        buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name='rendimentos.pdf', mimetype='application/pdf')
+        periodo = request.args.get('periodo', 'mensal') or 'mensal'
+        periodo_valorizacao, rows, fonte = _obter_rendimento_rows_com_fallback(periodo)
+
+        table_rows = []
+        soma_reais = 0.0
+        soma_inicio = 0.0
+        ativos_com_base = 0
+        for item in rows:
+            qtd = _safe_float(item.get('quantidade'))
+            preco_inicio = item.get('preco_inicio_periodo')
+            preco_atual = _safe_float(item.get('preco_atual'))
+            val_reais = item.get('valorizacao_reais')
+            val_pct = item.get('valorizacao_pct')
+            if val_reais is not None:
+                soma_reais += _safe_float(val_reais)
+            if preco_inicio is not None and qtd > 0:
+                soma_inicio += _safe_float(preco_inicio) * qtd
+                ativos_com_base += 1
+            table_rows.append([
+                str(item.get('ticker') or '-'),
+                _format_number_br(qtd, 4),
+                _format_currency_br(preco_inicio) if preco_inicio is not None else '-',
+                _format_currency_br(preco_atual),
+                _format_currency_br(val_reais) if val_reais is not None else '-',
+                _format_percent_br(val_pct) if val_pct is not None else '-',
+            ])
+
+        rendimento_total_pct = (soma_reais / soma_inicio * 100.0) if soma_inicio > 0 else 0.0
+        summary_rows = [
+            ['Gerado em', datetime.now().strftime('%d/%m/%Y %H:%M')],
+            ['Período selecionado', str(periodo).capitalize()],
+            ['Base de cálculo', str(periodo_valorizacao)],
+            ['Fonte do cálculo', 'Histórico do período' if fonte == 'periodo' else 'Preço médio/preço compra (igual aba Ativos)'],
+            ['Ativos com base histórica', str(ativos_com_base)],
+            ['Capital no início do período', _format_currency_br(soma_inicio)],
+            ['Valorização total (R$)', _format_currency_br(soma_reais)],
+            ['Rendimento total (%)', _format_percent_br(rendimento_total_pct)],
+        ]
+
+        if not table_rows:
+            table_rows = [['-', '-', '-', '-', '-', '-']]
+
+        return _build_pdf_report(
+            filename='rendimentos.pdf',
+            title='Relatório de Rendimentos - Carteira',
+            subtitle='Rendimento por ativo no período (mesma lógica da aba Ativos)',
+            summary_rows=summary_rows,
+            table_headers=['Ticker', 'Quantidade', 'Preço início', 'Preço atual', 'Valorização (R$)', 'Rendimento (%)'],
+            table_rows=table_rows,
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@server.route('/api/relatorios/movimentacoes.xlsx', methods=['GET'])
+def export_movimentacoes_xlsx():
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        mes, ano, inicio, fim = _parse_periodo_args()
+        if inicio or fim:
+            rows = _filtrar_movimentacoes_por_intervalo(obter_movimentacoes() or [], inicio, fim)
+        else:
+            rows = obter_movimentacoes(mes, ano) or []
+
+        df = pd.DataFrame([
+            {
+                'Data': _format_date_br(r.get('data')),
+                'Ticker': r.get('ticker'),
+                'Nome': r.get('nome_completo'),
+                'Tipo': r.get('tipo'),
+                'Quantidade': _safe_float(r.get('quantidade')),
+                'Preço unitário': _safe_float(r.get('preco')),
+                'Valor operação': abs(_safe_float(r.get('quantidade')) * _safe_float(r.get('preco'))),
+            }
+            for r in rows
+        ])
+
+        if df.empty:
+            df = pd.DataFrame(columns=['Data', 'Ticker', 'Nome', 'Tipo', 'Quantidade', 'Preço unitário', 'Valor operação'])
+
+        return _build_excel_response(df, 'movimentacoes.xlsx', sheet_name='Movimentacoes')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route('/api/relatorios/posicoes.xlsx', methods=['GET'])
+def export_posicoes_xlsx():
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+        itens = obter_carteira() or []
+
+        df = pd.DataFrame([
+            {
+                'Ticker': it.get('ticker'),
+                'Nome': it.get('nome_completo'),
+                'Tipo': it.get('tipo'),
+                'Quantidade': _safe_float(it.get('quantidade')),
+                'Preço atual': _safe_float(it.get('preco_atual')),
+                'Valor total': _safe_float(it.get('valor_total')),
+                'DY': _safe_float(it.get('dy')),
+                'P/L': _safe_float(it.get('pl')),
+                'P/VP': _safe_float(it.get('pvp')),
+                'ROE': _safe_float(it.get('roe')),
+            }
+            for it in itens
+        ])
+
+        if df.empty:
+            df = pd.DataFrame(columns=['Ticker', 'Nome', 'Tipo', 'Quantidade', 'Preço atual', 'Valor total', 'DY', 'P/L', 'P/VP', 'ROE'])
+
+        return _build_excel_response(df, 'posicoes.xlsx', sheet_name='Posicoes')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route('/api/relatorios/rendimentos.xlsx', methods=['GET'])
+def export_rendimentos_xlsx():
+    try:
+        usuario = get_usuario_atual()
+        if not usuario:
+            return jsonify({"error": "Não autenticado"}), 401
+
+        periodo = request.args.get('periodo', 'mensal') or 'mensal'
+        periodo_valorizacao, rows, fonte = _obter_rendimento_rows_com_fallback(periodo)
+
+        linhas = []
+        for item in rows:
+            linhas.append({
+                'Período base': periodo_valorizacao,
+                'Ticker': item.get('ticker'),
+                'Quantidade': _safe_float(item.get('quantidade')),
+                'Preço início período': _safe_float(item.get('preco_inicio_periodo')) if item.get('preco_inicio_periodo') is not None else None,
+                'Preço atual': _safe_float(item.get('preco_atual')),
+                'Valorização (R$)': _safe_float(item.get('valorizacao_reais')) if item.get('valorizacao_reais') is not None else None,
+                'Rendimento (%)': _safe_float(item.get('valorizacao_pct')) if item.get('valorizacao_pct') is not None else None,
+                'Fonte cálculo': 'Histórico do período' if fonte == 'periodo' else 'Preço médio/preço compra (igual aba Ativos)',
+            })
+
+        df = pd.DataFrame(linhas)
+        if df.empty:
+            df = pd.DataFrame(columns=['Período base', 'Ticker', 'Quantidade', 'Preço início período', 'Preço atual', 'Valorização (R$)', 'Rendimento (%)', 'Fonte cálculo'])
+
+        return _build_excel_response(df, 'rendimentos.xlsx', sheet_name='Rendimentos')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # Rotas sem extensão para evitar conflitos com estáticos
 @server.route('/api/relatorios/movimentacoes', methods=['GET'])
@@ -3730,6 +4187,8 @@ def export_movimentacoes_generic():
     formato = (request.args.get('formato') or 'csv').lower()
     if formato == 'pdf':
         return export_movimentacoes_pdf()
+    if formato in ('xlsx', 'excel'):
+        return export_movimentacoes_xlsx()
     return export_movimentacoes_csv()
 
 @server.route('/api/relatorios/posicoes', methods=['GET'])
@@ -3737,6 +4196,8 @@ def export_posicoes_generic():
     formato = (request.args.get('formato') or 'csv').lower()
     if formato == 'pdf':
         return export_posicoes_pdf()
+    if formato in ('xlsx', 'excel'):
+        return export_posicoes_xlsx()
     return export_posicoes_csv()
 
 @server.route('/api/relatorios/rendimentos', methods=['GET'])
@@ -3744,6 +4205,8 @@ def export_rendimentos_generic():
     formato = (request.args.get('formato') or 'csv').lower()
     if formato == 'pdf':
         return export_rendimentos_pdf()
+    if formato in ('xlsx', 'excel'):
+        return export_rendimentos_xlsx()
     return export_rendimentos_csv()
 
 @server.route("/api/carteira/adicionar", methods=["POST"])

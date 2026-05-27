@@ -321,6 +321,9 @@ export default function AddAtivoModal({ open, onClose, carteira = [] }: AddAtivo
       }
       
       const idxPct = indexadorPct ? parseFloat(indexadorPct.replace(',', '.')) : undefined
+      const dataAplicacaoFinal = isTesouro
+        ? (dataAplicacao || undefined)
+        : dataCompraFinal
       
       return carteiraService.adicionarAtivo(
         ticker || nome,
@@ -330,7 +333,7 @@ export default function AddAtivoModal({ open, onClose, carteira = [] }: AddAtivo
         nome || undefined,
         indexador || undefined,
         idxPct,
-        dataCompraFinal,
+        dataAplicacaoFinal,
         vencimento || undefined,
         isentoIr || undefined,
         liquidezDiaria || undefined,

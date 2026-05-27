@@ -79,6 +79,12 @@ export default function CarteiraPage() {
   const [ativoRendaFixaParaEditar, setAtivoRendaFixaParaEditar] = useState<any>(null)
   const [venderModalOpen, setVenderModalOpen] = useState(false)
   const [ativoParaVender, setAtivoParaVender] = useState<any>(null)
+  const [aporteModalOpen, setAporteModalOpen] = useState(false)
+  const [ativoParaAporte, setAtivoParaAporte] = useState<any>(null)
+  const [aporteValor, setAporteValor] = useState('')
+  const [aporteData, setAporteData] = useState<string>(new Date().toISOString().split('T')[0])
+  const [historicoAportes, setHistoricoAportes] = useState<any[]>([])
+  const [loadingHistoricoAportes, setLoadingHistoricoAportes] = useState(false)
   const [filtroMes, setFiltroMes] = useState<number>(new Date().getMonth() + 1)
   const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear())
   const [activeTab, setActiveTab] = useState(() => {
@@ -430,6 +436,131 @@ export default function CarteiraPage() {
       setEditPreco('')
     },
   })
+
+  const aporteRendaFixaMutation = useMutation({
+    mutationFn: async (payload: {
+      ativo: any
+      quantidade: number
+      preco_aporte: number
+      data_aplicacao: string
+    }) => {
+      const a = payload.ativo || {}
+      return carteiraService.adicionarAtivo(
+        a.ticker || a.nome_completo,
+        payload.quantidade,
+        a.tipo || 'Renda Fixa',
+        payload.preco_aporte,
+        a.nome_completo || undefined,
+        a.indexador || undefined,
+        typeof a.indexador_pct === 'number' ? a.indexador_pct : (a.indexador_pct ? Number(a.indexador_pct) : undefined),
+        payload.data_aplicacao || undefined,
+        a.vencimento || undefined,
+        typeof a.isento_ir === 'boolean' ? a.isento_ir : undefined,
+        typeof a.liquidez_diaria === 'boolean' ? a.liquidez_diaria : undefined,
+        false,
+        a.emissor_rf || undefined,
+        a.tipo_renda_fixa || undefined
+      )
+    },
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['carteira', user] })
+      const previousCarteira = queryClient.getQueryData<AtivoCarteira[]>(['carteira', user])
+      queryClient.setQueryData<AtivoCarteira[]>(['carteira', user], (old) => {
+        if (!old || !Array.isArray(old)) return old
+        return old.map((item: any) => {
+          if (!item || item.id !== payload.ativo?.id) return item
+          const qtdAtual = Number(item.quantidade || 0)
+          const qtdAdd = Number(payload.quantidade || 0)
+          const novoQtd = qtdAtual + qtdAdd
+          const valorAporte = Number(payload.preco_aporte || 0) * qtdAdd
+          return {
+            ...item,
+            quantidade: novoQtd,
+            valor_total: Number(item.valor_total || 0) + (Number.isFinite(valorAporte) ? valorAporte : 0),
+          }
+        })
+      })
+      return { previousCarteira }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
+      queryClient.invalidateQueries({ queryKey: ['movimentacoes-all', user] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['carteira-valorizacao-periodo'] })
+      queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
+      queryClient.refetchQueries({ queryKey: ['carteira', user] })
+      setAporteModalOpen(false)
+      setAtivoParaAporte(null)
+      setAporteValor('')
+      toast.success('Aporte em renda fixa registrado com sucesso!')
+    },
+    onError: (error: any, _payload, context) => {
+      if (context?.previousCarteira) {
+        queryClient.setQueryData(['carteira', user], context.previousCarteira)
+      }
+      toast.error(error?.response?.data?.error || 'Erro ao registrar aporte')
+    },
+  })
+
+  const handleAporteRendaFixa = useCallback((ativo: any) => {
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    setAtivoParaAporte(ativo)
+    setAporteValor('')
+    setAporteData(todayStr)
+    setAporteModalOpen(true)
+  }, [])
+
+  const handleSalvarAporte = useCallback(() => {
+    if (!ativoParaAporte) return
+    const valorAporte = parseFloat(String(aporteValor).replace(',', '.'))
+    if (!Number.isFinite(valorAporte) || valorAporte <= 0) {
+      toast.error('Valor do aporte inválido')
+      return
+    }
+    const precoReferencia = Number(ativoParaAporte?.preco_atual || 1)
+    if (!Number.isFinite(precoReferencia) || precoReferencia <= 0) {
+      toast.error('Preço de referência inválido para calcular o aporte')
+      return
+    }
+    const quantidade = valorAporte / precoReferencia
+    const dataAporte = String(aporteData || '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAporte)) {
+      toast.error('Data inválida. Use o formato YYYY-MM-DD')
+      return
+    }
+
+    aporteRendaFixaMutation.mutate({
+      ativo: ativoParaAporte,
+      quantidade,
+      preco_aporte: precoReferencia,
+      data_aplicacao: dataAporte,
+    })
+  }, [ativoParaAporte, aporteValor, aporteData, aporteRendaFixaMutation])
+
+  useEffect(() => {
+    const carregarHistoricoAportes = async () => {
+      if (!aporteModalOpen || !ativoParaAporte?.ticker) {
+        setHistoricoAportes([])
+        return
+      }
+      try {
+        setLoadingHistoricoAportes(true)
+        const movs = await carteiraService.getMovimentacoes()
+        const tickerAlvo = String(ativoParaAporte.ticker || '').toUpperCase()
+        const comprasTicker = (Array.isArray(movs) ? movs : [])
+          .filter((m: any) => String(m?.ticker || '').toUpperCase() === tickerAlvo && String(m?.tipo || '').toLowerCase() === 'compra')
+          .sort((a: any, b: any) => String(b?.data || '').localeCompare(String(a?.data || '')))
+        setHistoricoAportes(comprasTicker)
+      } catch {
+        setHistoricoAportes([])
+      } finally {
+        setLoadingHistoricoAportes(false)
+      }
+    }
+    carregarHistoricoAportes()
+  }, [aporteModalOpen, ativoParaAporte?.ticker])
 
 
   const handleAdicionar = useCallback(() => {
@@ -808,6 +939,7 @@ export default function CarteiraPage() {
             movimentacoesAll={movimentacoesAll || []}
             indicadores={indicadores}
             topAtivos={topAtivos}
+            onAporteRendaFixa={handleAporteRendaFixa}
             onOpenAddAtivo={() => setAddModalOpen(true)}
           />
         )}
@@ -1163,6 +1295,117 @@ export default function CarteiraPage() {
       )}
       {activeTab === 'ativos' && addModalOpen && (
         <AddAtivoModal open={addModalOpen} onClose={()=>setAddModalOpen(false)} carteira={carteira || []} />
+      )}
+
+      {aporteModalOpen && ativoParaAporte && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-t-xl sm:rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4"
+          >
+            <div>
+              <h3 className="text-lg font-semibold">Registrar aporte em renda fixa</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Título: <strong>{ativoParaAporte?.ticker || ativoParaAporte?.nome_completo}</strong>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                O aporte pede apenas valor e data. O sistema converte internamente pela cotação atual do título.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="aporte-valor-input" className="block text-sm font-medium mb-1">Valor do aporte (R$)</label>
+                <input
+                  id="aporte-valor-input"
+                  type="text"
+                  inputMode="decimal"
+                  value={aporteValor}
+                  onChange={(e) => setAporteValor(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  placeholder="Ex.: 1500,00"
+                />
+              </div>
+              <div>
+                <label htmlFor="aporte-cotacao-atual" className="block text-sm font-medium mb-1">Cotação de referência atual</label>
+                <input
+                  id="aporte-cotacao-atual"
+                  type="text"
+                  readOnly
+                  value={formatCurrency(Number(ativoParaAporte?.preco_atual || 1))}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-muted-foreground"
+                />
+              </div>
+              <div>
+                <label htmlFor="aporte-data-input" className="block text-sm font-medium mb-1">Data do aporte</label>
+                <input
+                  id="aporte-data-input"
+                  type="date"
+                  value={aporteData}
+                  onChange={(e) => setAporteData(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-3 space-y-2">
+              <h4 className="text-sm font-semibold">Histórico de aportes/compras</h4>
+              {loadingHistoricoAportes ? (
+                <div className="text-sm text-muted-foreground">Carregando histórico…</div>
+              ) : historicoAportes.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto border border-border rounded">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/30">
+                      <tr>
+                        <th className="px-2 py-1 text-left">Data</th>
+                        <th className="px-2 py-1 text-left">Qtd</th>
+                        <th className="px-2 py-1 text-left">Preço</th>
+                        <th className="px-2 py-1 text-left">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicoAportes.slice(0, 50).map((m: any, idx: number) => {
+                        const qtd = Number(m?.quantidade || 0)
+                        const preco = Number(m?.preco || 0)
+                        return (
+                          <tr key={`${m?.id || idx}-${m?.data || ''}`} className="border-b border-border/50">
+                            <td className="px-2 py-1">{String(m?.data || '').slice(0, 10)}</td>
+                            <td className="px-2 py-1">{qtd.toFixed(4)}</td>
+                            <td className="px-2 py-1">{formatCurrency(preco)}</td>
+                            <td className="px-2 py-1">{formatCurrency(qtd * preco)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Sem histórico de aportes para este título.</div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setAporteModalOpen(false)
+                  setAtivoParaAporte(null)
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors"
+                disabled={aporteRendaFixaMutation.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSalvarAporte}
+                disabled={aporteRendaFixaMutation.isPending}
+                className="w-full sm:w-auto px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+              >
+                {aporteRendaFixaMutation.isPending ? 'Salvando...' : 'Confirmar aporte'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
       
       {/* Modal de editar ativo */}
