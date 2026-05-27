@@ -7,7 +7,7 @@ import {
   Edit, Save, X, Plus, Calendar,
   ArrowUpRight, ArrowDownRight, TrendingDown
 } from 'lucide-react'
-import { controleService } from '../../services/api'
+import { controleService, homeService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { useControleCategorias } from '../../contexts/ControleCategoriasContext'
@@ -61,7 +61,16 @@ export default function ControleReceitaTab({
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   const { data: receitas, isLoading: loadingReceitas } = useQuery<Receita[]>({
     queryKey: ['receitas', user, filtroMes, filtroAno],
-    queryFn: () => controleService.getReceitas(filtroMes, filtroAno),
+    queryFn: async () => {
+      const receitasDiretas = await controleService.getReceitas(filtroMes, filtroAno)
+      if (Array.isArray(receitasDiretas) && receitasDiretas.length > 0) return receitasDiretas
+
+      // Fallback para cenários em produção onde /controle/receitas
+      // volta vazio/inconsistente apenas para alguns usuários.
+      const resumo = await homeService.getResumo(filtroMes, filtroAno)
+      const registrosResumo = Array.isArray(resumo?.receitas?.registros) ? resumo.receitas.registros : []
+      return registrosResumo as Receita[]
+    },
     enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,

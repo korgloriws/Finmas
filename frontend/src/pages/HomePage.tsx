@@ -139,10 +139,31 @@ export default function HomePage() {
           { endpoint: '/indicadores', method: 'GET' },
           { endpoint: '/home/resumo', method: 'GET', params: { mes: String(mesAtual), ano: String(anoAtual) } },
         ], { signal })
+
+        let carteiraBatch = results['/carteira'] as unknown
+        let resumoBatch = results['/home/resumo'] as unknown
+
+        const carteiraInvalida = !Array.isArray(carteiraBatch)
+        const resumoInvalido = !resumoBatch || typeof resumoBatch !== 'object' || Array.isArray(resumoBatch) || Boolean((resumoBatch as any)?.error)
+
+        // Fallback cirúrgico: batch pode vir parcial para alguns usuários em produção.
+        if (carteiraInvalida || resumoInvalido) {
+          try {
+            const [carteiraFallback, resumoFallback] = await Promise.all([
+              carteiraInvalida ? carteiraService.getCarteira() : Promise.resolve(carteiraBatch as AtivoCarteira[]),
+              resumoInvalido ? homeService.getResumo(String(mesAtual), String(anoAtual)) : Promise.resolve(resumoBatch),
+            ])
+            carteiraBatch = carteiraFallback
+            resumoBatch = resumoFallback
+          } catch (fallbackErr) {
+            console.warn('[HomePage] fallback pós-batch falhou', fallbackErr)
+          }
+        }
+
         return {
-          carteira: (results['/carteira'] as AtivoCarteira[]) || [],
+          carteira: (Array.isArray(carteiraBatch) ? (carteiraBatch as AtivoCarteira[]) : []),
           indicadores: results['/indicadores'] || {},
-          resumoHome: results['/home/resumo'] || null,
+          resumoHome: resumoBatch || null,
         }
       } catch (err: any) {
         // Se foi cancelamento (usuário mudou de rota), propaga sem fallback —
