@@ -13,7 +13,7 @@ import secrets
 import re
 import unicodedata
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, as_completed
 try:
     import psycopg
 except Exception:
@@ -8417,11 +8417,35 @@ def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, rec
     conn.commit()
     conn.close()
 
+def _calcular_intervalo_meses(ano: int, mes: int, qtd_meses: int):
+    """Retorna (inicio, fim) em YYYY-MM-DD; fim é exclusivo (1º dia do mês após o último)."""
+    mes_int = int(mes)
+    ano_int = int(ano)
+    qtd = max(1, int(qtd_meses))
+    if mes_int == 12:
+        fim = f"{ano_int + 1}-01-01"
+    else:
+        fim = f"{ano_int}-{mes_int + 1:02d}-01"
+    start_month = mes_int
+    start_year = ano_int
+    for _ in range(qtd - 1):
+        start_month -= 1
+        if start_month < 1:
+            start_month = 12
+            start_year -= 1
+    inicio = f"{start_year}-{start_month:02d}-01"
+    return inicio, fim
+
+
+def _garantir_lista_registros(valor):
+    return valor if isinstance(valor, list) else []
+
+
 def carregar_outros_mes_ano(mes, ano):
     
     usuario = get_usuario_atual()
     if not usuario:
-        return {"success": False, "message": "Usuário não autenticado"}
+        return []
 
     mes_int = int(mes)
     ano_int = int(ano)
@@ -8455,6 +8479,72 @@ def carregar_outros_mes_ano(mes, ano):
     finally:
         conn.close()
     return df.to_dict('records')
+
+
+def carregar_outros_por_intervalo(mes, ano, qtd_meses=1):
+    usuario = get_usuario_atual()
+    if not usuario:
+        return []
+    inicio, fim = _calcular_intervalo_meses(int(ano), int(mes), int(qtd_meses))
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            query = '''
+                SELECT * FROM outros_gastos
+                WHERE data >= %s AND data < %s
+                ORDER BY data DESC
+            '''
+            df = pd.read_sql_query(query, conn, params=(inicio, fim))
+        finally:
+            conn.close()
+        return df.to_dict('records')
+    db_path = get_db_path(usuario, "controle")
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    try:
+        query = '''
+            SELECT * FROM outros_gastos
+            WHERE data >= ? AND data < ?
+            ORDER BY data DESC
+        '''
+        df = pd.read_sql_query(query, conn, params=(inicio, fim))
+    finally:
+        conn.close()
+    return df.to_dict('records')
+
+
+def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1):
+    """Todas as compras de cartão no intervalo de N meses (terminando em mes/ano)."""
+    usuario = get_usuario_atual()
+    if not usuario:
+        return []
+    inicio, fim = _calcular_intervalo_meses(int(ano), int(mes), int(qtd_meses))
+    if _is_postgres():
+        conn = _pg_conn_for_user(usuario)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                    SELECT * FROM compras_cartao
+                    WHERE data >= %s AND data < %s
+                    ORDER BY data DESC
+                ''', (inicio, fim))
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+                return [dict(zip(columns, row)) for row in results]
+        finally:
+            conn.close()
+    db_path = get_db_path(usuario, "controle")
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM compras_cartao
+        WHERE data >= ? AND data < ?
+        ORDER BY data DESC
+    ''', (inicio, fim))
+    columns = [desc[0] for desc in cursor.description]
+    results = cursor.fetchall()
+    conn.close()
+    return [dict(zip(columns, row)) for row in results]
+
 
 def atualizar_outro_gasto(id_registro, nome=None, valor=None, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
     

@@ -188,14 +188,14 @@ function ControlePageContent() {
 
 
   const comparacaoMensal = useMemo(() => {
-    if (!dadosGraficoEvolucao || !dadosComparacao) return null
+    if (!Array.isArray(dadosGraficoEvolucao) || !Array.isArray(dadosComparacao) || dadosGraficoEvolucao.length === 0 || dadosComparacao.length === 0) return null
     
-    const totalReceitasAtual = dadosGraficoEvolucao.reduce((sum, item) => sum + item.receitas, 0)
-    const totalDespesasAtual = dadosGraficoEvolucao.reduce((sum, item) => sum + item.despesas, 0)
+    const totalReceitasAtual = dadosGraficoEvolucao.reduce((sum, item) => sum + (item?.receitas || 0), 0)
+    const totalDespesasAtual = dadosGraficoEvolucao.reduce((sum, item) => sum + (item?.despesas || 0), 0)
     const saldoAtual = totalReceitasAtual - totalDespesasAtual
     
-    const totalReceitasAnterior = dadosComparacao.reduce((sum, item) => sum + item.receitas, 0)
-    const totalDespesasAnterior = dadosComparacao.reduce((sum, item) => sum + item.despesas, 0)
+    const totalReceitasAnterior = dadosComparacao.reduce((sum, item) => sum + (item?.receitas || 0), 0)
+    const totalDespesasAnterior = dadosComparacao.reduce((sum, item) => sum + (item?.despesas || 0), 0)
     const saldoAnterior = totalReceitasAnterior - totalDespesasAnterior
     
     return {
@@ -221,6 +221,8 @@ function ControlePageContent() {
     { name: 'Receitas', value: receitasDespesas?.receitas || 0, fill: '#10b981' },
     { name: 'Despesas', value: receitasDespesas?.despesas || 0, fill: '#ef4444' }
   ], [receitasDespesas])
+  const receitasValor = receitasDespesas?.receitas ?? 0
+  const despesasValor = receitasDespesas?.despesas ?? 0
 
   // Unificar despesas de diferentes fontes
   const despesasUnificadas = useMemo(() => {
@@ -561,8 +563,8 @@ function ControlePageContent() {
                     {(saldo?.saldo || 0) >= 0 ? 'Positivo' : 'Negativo'}
             </div>
                   <p className="text-sm text-muted-foreground">
-                    {receitasDespesas?.receitas ? 
-                      `${Math.round(((receitasDespesas.despesas || 0) / receitasDespesas.receitas) * 100)}% das receitas em despesas` : 
+                    {receitasValor > 0 ? 
+                      `${Math.round((despesasValor / receitasValor) * 100)}% das receitas em despesas` : 
                       'Nenhuma receita registrada'
                     }
                   </p>
@@ -933,8 +935,8 @@ function ControlePageContent() {
                   <h3 className="text-lg font-semibold text-foreground">Tendência</h3>
       </div>
                 <p className="text-sm text-muted-foreground mb-2">
-                  {receitasDespesas?.receitas && receitasDespesas?.despesas ? 
-                    (receitasDespesas.receitas > receitasDespesas.despesas ? 
+                  {(receitasDespesas?.receitas ?? null) !== null && (receitasDespesas?.despesas ?? null) !== null ? 
+                    (receitasValor > despesasValor ? 
                       'Suas receitas estão superando as despesas!' : 
                       'Suas despesas estão superando as receitas'
                     ) : 
@@ -942,8 +944,8 @@ function ControlePageContent() {
                   }
                 </p>
                 <div className="text-2xl font-bold text-foreground">
-                  {receitasDespesas?.receitas && receitasDespesas?.despesas ? 
-                    `${Math.round(((receitasDespesas.receitas - receitasDespesas.despesas) / receitasDespesas.receitas) * 100)}%` : 
+                  {receitasValor > 0 && (receitasDespesas?.despesas ?? null) !== null ? 
+                    `${Math.round(((receitasValor - despesasValor) / receitasValor) * 100)}%` : 
                     '0%'
                   }
           </div>
@@ -962,14 +964,14 @@ function ControlePageContent() {
                   <h3 className="text-lg font-semibold text-foreground">Meta de Economia</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-2">
-                  {receitasDespesas?.receitas ? 
-                    `Recomendado: ${ocultarValores ? '••••••' : formatCurrency(receitasDespesas.receitas * 0.2)}` : 
+                  {receitasValor > 0 ? 
+                    `Recomendado: ${ocultarValores ? '••••••' : formatCurrency(receitasValor * 0.2)}` : 
                     'Adicione receitas para calcular meta'
                   }
                 </p>
                 <div className="text-2xl font-bold text-foreground">
-                  {receitasDespesas?.receitas ? 
-                    `${Math.round(((saldo?.saldo || 0) / (receitasDespesas.receitas * 0.2)) * 100)}%` : 
+                  {receitasValor > 0 ? 
+                    `${Math.round(((saldo?.saldo || 0) / (receitasValor * 0.2)) * 100)}%` : 
                     '0%'
                   }
           </div>

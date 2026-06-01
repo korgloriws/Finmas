@@ -55,7 +55,7 @@ import {
   ResponsiveContainer,
   Legend
 } from '../components/LazyChart'
-import { carteiraService, homeService } from '../services/api'
+import { carteiraService, homeService, controleService, historicoCarteiraTemPontos, fetchHistoricoCarteiraComFallback } from '../services/api'
 import { formatCurrency } from '../utils/formatters'
 
 import { lazy, Suspense } from 'react'
@@ -252,22 +252,84 @@ export default function HomePage() {
 
   
   
-  const { data: historicoCarteira, isLoading: loadingHistoricoCarteira } = useQuery({
-    queryKey: ['carteira-historico', user, filtroPeriodo],
-    queryFn: () => carteiraService.getHistorico(filtroPeriodo),
-    retry: 3,
+  // Evolução da carteira (yfinance): endpoint dedicado da Home + fallback legado.
+  const { data: historicoCarteira, isLoading: loadingHistoricoCarteira, isError: historicoCarteiraErro } = useQuery({
+    queryKey: ['home-evolucao-carteira', user, filtroPeriodo, carteira.length],
+    queryFn: ({ signal }) =>
+      fetchHistoricoCarteiraComFallback(filtroPeriodo, { signal, carteiraLength: carteira.length }),
+    retry: 2,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false, 
-    enabled: !!user && !!carteira, 
-    staleTime: 30 * 60 * 1000, 
-    gcTime: 60 * 60 * 1000, 
+    refetchOnMount: 'always',
+    enabled: !!user && !loadingHeroRaw,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   })
 
 
   const receitas = Array.isArray(resumoHome?.receitas?.registros) ? resumoHome.receitas.registros : []
-  const cartoes = Array.isArray(resumoHome?.cartoes?.registros) ? resumoHome.cartoes.registros : []
-  const outros = Array.isArray(resumoHome?.outros?.registros) ? resumoHome.outros.registros : []
+
+  const { data: gastosCategoriaRaw, isLoading: loadingGastosCategoria, isError: gastosCategoriaErro } = useQuery({
+    queryKey: ['home-gastos-categoria', user, mesAtual, anoAtual, gastosPeriodo],
+    queryFn: async ({ signal }) => {
+      const mesStr = String(mesAtual)
+      const anoStr = String(anoAtual)
+      const carregar = () => homeService.getGastosCategoria(mesStr, anoStr, gastosPeriodo, { signal })
+
+      const mesesNoIntervalo = gastosPeriodo === '1m' ? 1 : gastosPeriodo === '3m' ? 3 : 6
+      const fallbackResumo = async () => {
+        const listasOutros = await Promise.all(
+          Array.from({ length: mesesNoIntervalo }, (_, idx) => {
+            let m = mesAtual - idx
+            let y = anoAtual
+            while (m < 1) { m += 12; y -= 1 }
+            return controleService.getOutros(String(m).padStart(2, '0'), String(y))
+          })
+        )
+        return {
+          janela: gastosPeriodo,
+          cartoes: Array.isArray(resumoHome?.cartoes?.registros) ? resumoHome.cartoes.registros : [],
+          outros: listasOutros.flat(),
+        }
+      }
+
+      try {
+        const data = await carregar()
+        const total = (data.cartoes?.length || 0) + (data.outros?.length || 0)
+        if (total > 0) return data
+        const fb = await fallbackResumo()
+        if ((fb.cartoes.length + fb.outros.length) > 0) return fb
+        return data
+      } catch (err: any) {
+        const isAbort =
+          signal?.aborted ||
+          err?.code === 'ERR_CANCELED' ||
+          err?.name === 'CanceledError' ||
+          err?.name === 'AbortError'
+        if (isAbort) throw err
+        console.warn('[HomePage] gastos-categoria indisponível, usando fallback', err)
+        try {
+          return await fallbackResumo()
+        } catch (fallbackErr) {
+          console.warn('[HomePage] fallback gastos-categoria falhou', fallbackErr)
+          throw err
+        }
+      }
+    },
+    enabled: !!user && !loadingHeroRaw,
+    retry: 2,
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  })
+
+  const cartoes = Array.isArray(gastosCategoriaRaw?.cartoes)
+    ? gastosCategoriaRaw.cartoes
+    : (Array.isArray(resumoHome?.cartoes?.registros) ? resumoHome.cartoes.registros : [])
+  const outros = Array.isArray(gastosCategoriaRaw?.outros)
+    ? gastosCategoriaRaw.outros
+    : (Array.isArray(resumoHome?.outros?.registros) ? resumoHome.outros.registros : [])
  
   
   
@@ -275,16 +337,6 @@ export default function HomePage() {
 
 
   const totalInvestido = carteira.reduce((total: number, ativo: any) => total + (ativo?.valor_total || 0), 0)
-  
-  
-  console.log('DEBUG HomePage:', {
-    loadingCarteira,
-    loadingResumo,
-    carteira: carteira.length,
-    resumoHome: !!resumoHome,
-    historicoCarteira: !!historicoCarteira
-  })
-  
 
   const totalReceitas = resumoHome?.receitas?.total || receitas.reduce((total: number, receita: any) => total + (receita?.valor || 0), 0) || 0
   
@@ -321,36 +373,26 @@ export default function HomePage() {
   })
 
 
-  const filtraPorPeriodo = (dataStr?: string) => {
-    if (!dataStr) return true
-    try {
-      const data = new Date(dataStr)
-      const agora = new Date()
-      const deltaDias = (agora.getTime() - data.getTime()) / (1000 * 60 * 60 * 24)
-      if (gastosPeriodo === '1m') return deltaDias <= 31
-      if (gastosPeriodo === '3m') return deltaDias <= 93
-      if (gastosPeriodo === '6m') return deltaDias <= 186
-      return true
-    } catch { return true }
-  }
-  const gastosPorCategoria: Record<string, number> = {}
-  ;(cartoes as any[]).forEach((c: any) => {
-    if (!filtraPorPeriodo(c?.data)) return
-    const categoria = (c?.categoria && String(c.categoria).trim()) ? String(c.categoria) : 'Cartões'
-    const valor = Number(c?.valor || 0)
-    gastosPorCategoria[categoria] = (gastosPorCategoria[categoria] || 0) + valor
-  })
-  ;(outros as any[]).forEach((o: any) => {
-    if (!filtraPorPeriodo(o?.data)) return
-    const categoria = (o?.categoria && String(o.categoria).trim()) ? String(o.categoria) : 'Outros'
-    const valor = Number(o?.valor || 0)
-    gastosPorCategoria[categoria] = (gastosPorCategoria[categoria] || 0) + valor
-  })
+  const gastosPorCategoria = useMemo(() => {
+    const acc: Record<string, number> = {}
+    const somar = (registro: any, categoriaPadrao: string) => {
+      const valor = Number(registro?.valor ?? 0)
+      if (!Number.isFinite(valor) || valor <= 0) return
+      const catRaw = registro?.categoria ?? registro?.categoria_slug
+      const categoria = (catRaw && String(catRaw).trim()) ? String(catRaw).trim() : categoriaPadrao
+      acc[categoria] = (acc[categoria] || 0) + valor
+    }
+    ;(cartoes as any[]).forEach((c) => somar(c, 'Cartões'))
+    ;(outros as any[]).forEach((o) => somar(o, 'Outros'))
+    return acc
+  }, [cartoes, outros])
 
-  const dadosGastos = Object.entries(gastosPorCategoria)
-    .map(([name, valor]) => ({ name, valor, cor: getRandomColor(name) }))
-    .filter((item) => item.valor > 0)
-    .sort((a, b) => b.valor - a.valor)
+  const dadosGastos = useMemo(() => (
+    Object.entries(gastosPorCategoria)
+      .map(([name, valor]) => ({ name, valor, cor: getRandomColor(name) }))
+      .filter((item) => item.valor > 0)
+      .sort((a, b) => b.valor - a.valor)
+  ), [gastosPorCategoria])
 
 
   function getRandomColor(seed: string) {
@@ -384,12 +426,20 @@ export default function HomePage() {
   
   const initialWealth = useMemo(() => {
     const arr = historicoCarteira?.carteira_valor || []
-    for (let i = 0; i < arr.length; i++) {
-      const v = arr[i]
-      if (typeof v === 'number' && !isNaN(v)) return v
+    const pickPositive = (values: number[]) => {
+      for (const v of values) {
+        const n = Number(v)
+        if (Number.isFinite(n) && n > 0) return n
+      }
+      return null
     }
+    const fromStart = pickPositive(arr)
+    if (fromStart != null) return fromStart
+    const fromEnd = pickPositive([...arr].reverse())
+    if (fromEnd != null) return fromEnd
+    if (totalInvestido > 0) return totalInvestido
     return 0
-  }, [historicoCarteira])
+  }, [historicoCarteira, totalInvestido])
 
   
   const carteiraRetornoSeries = useMemo(() => {
@@ -398,13 +448,52 @@ export default function HomePage() {
 
 
   const carteiraValorPrecoSeries = useMemo(() => {
-    if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
+    if (!historicoCarteira) return [] as Array<number | null>
+    const valoresAbsolutos = (historicoCarteira.carteira_valor || []).map((v) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    })
+    if (valoresAbsolutos.some((v) => v != null)) return valoresAbsolutos
+    if (initialWealth <= 0) return [] as Array<number | null>
     const baseSeries = carteiraRetornoSeries || []
     return baseSeries.map((v) => {
       if (v == null || isNaN(Number(v))) return null
       return initialWealth * (Number(v) / 100)
     })
   }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
+
+  const historicoTemPontos = useMemo(
+    () => historicoCarteiraTemPontos(historicoCarteira) || carteiraValorPrecoSeries.some((v) => v != null && Number(v) > 0),
+    [historicoCarteira, carteiraValorPrecoSeries]
+  )
+
+  const evolucaoCarteiraChartData = useMemo(() => {
+    if (!historicoCarteira || !historicoTemPontos) return []
+    const datas = historicoCarteira.datas || []
+    const len = Math.max(
+      datas.length,
+      carteiraValorPrecoSeries.length,
+      historicoCarteira.ibov?.length || 0,
+      historicoCarteira.ivvb11?.length || 0,
+      historicoCarteira.ifix?.length || 0,
+      historicoCarteira.ipca?.length || 0,
+      historicoCarteira.cdi?.length || 0,
+    )
+    const escalaIndice = (v: number | null | undefined) => {
+      if (v == null || initialWealth <= 0) return null
+      const n = Number(v)
+      return Number.isFinite(n) ? initialWealth * (n / 100) : null
+    }
+    return Array.from({ length: len }, (_, i) => ({
+      data: datas[i] || `ponto-${i + 1}`,
+      carteira: carteiraValorPrecoSeries[i] ?? null,
+      ibov: escalaIndice(historicoCarteira.ibov?.[i]),
+      ivvb11: escalaIndice(historicoCarteira.ivvb11?.[i]),
+      ifix: escalaIndice(historicoCarteira.ifix?.[i]),
+      ipca: escalaIndice(historicoCarteira.ipca?.[i]),
+      cdi: escalaIndice(historicoCarteira.cdi?.[i]),
+    }))
+  }, [historicoCarteira, historicoTemPontos, carteiraValorPrecoSeries, initialWealth])
 
   const carteiraTrend = useMemo(() => {
    
@@ -1701,7 +1790,7 @@ export default function HomePage() {
               </div>
             </div>
             
-            {(loadingResumo || loadingHistoricoCarteira) ? (
+            {loadingHistoricoCarteira ? (
               <div className="flex flex-col h-48 sm:h-64 md:h-80 lg:h-96 min-h-[260px]">
                 <div className="flex items-center gap-3 mb-4 animate-pulse">
                   <div className="w-8 h-8 rounded-md bg-muted" />
@@ -1724,33 +1813,11 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-            ) : (historicoCarteira?.datas?.length || 0) > 0 ? (
+            ) : historicoTemPontos ? (
               <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96 min-h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
-                  data={(historicoCarteira?.datas || []).map((d: string, i: number) => {
-                    const indiceSeries = (historicoCarteira?.ibov || []) as Array<number | null>
-                    const ibovValor = indiceSeries[i] != null && initialWealth > 0 
-                      ? initialWealth * (Number(indiceSeries[i]) / 100) 
-                      : null
-                    return {
-                      data: d,
-                      carteira: carteiraValorPrecoSeries?.[i] ?? null, 
-                      ibov: ibovValor,
-                      ivvb11: historicoCarteira?.ivvb11?.[i] != null && initialWealth > 0 
-                        ? initialWealth * (Number(historicoCarteira.ivvb11[i]) / 100) 
-                        : null,
-                      ifix: historicoCarteira?.ifix?.[i] != null && initialWealth > 0 
-                        ? initialWealth * (Number(historicoCarteira.ifix[i]) / 100) 
-                        : null,
-                      ipca: historicoCarteira?.ipca?.[i] != null && initialWealth > 0 
-                        ? initialWealth * (Number(historicoCarteira.ipca[i]) / 100) 
-                        : null,
-                      cdi: historicoCarteira?.cdi?.[i] != null && initialWealth > 0 
-                        ? initialWealth * (Number(historicoCarteira.cdi[i]) / 100) 
-                        : null,
-                    }
-                  })}
+                  data={evolucaoCarteiraChartData}
                   margin={{ top: 12, right: 16, left: 8, bottom: 8 }}
                   isAnimationActive={true}
                   animationDuration={1200}
@@ -1830,8 +1897,17 @@ export default function HomePage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                Nenhum dado disponível para o período selecionado.
+              <div className="h-64 flex flex-col items-center justify-center gap-2 text-muted-foreground text-center px-4">
+                <p>
+                  {historicoCarteiraErro
+                    ? 'Não foi possível carregar a evolução da carteira.'
+                    : 'Nenhum dado disponível para o período selecionado.'}
+                </p>
+                {carteira.length === 0 && (
+                  <Link to="/carteira" className="text-sm text-primary hover:text-primary/80">
+                    Adicionar ativos à carteira
+                  </Link>
+                )}
               </div>
             )}
           </motion.div>
@@ -1971,8 +2047,10 @@ export default function HomePage() {
                 </select>
               </div>
             </div>
-            {loadingResumo ? (
-              <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg"></div>
+            {loadingGastosCategoria ? (
+              <div className="animate-pulse h-48 sm:h-64 md:h-80 lg:h-96 bg-muted rounded-lg flex items-center justify-center">
+                <span className="text-sm text-muted-foreground">Carregando gastos por categoria...</span>
+              </div>
             ) : dadosGastos.length > 0 ? (
               <div className="w-full h-48 sm:h-64 md:h-80 lg:h-96">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1998,8 +2076,15 @@ export default function HomePage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                Nenhuma despesa registrada para o período selecionado.
+              <div className="h-64 flex flex-col items-center justify-center gap-2 text-muted-foreground text-center px-4">
+                <p>
+                  {gastosCategoriaErro
+                    ? 'Não foi possível carregar os gastos por categoria.'
+                    : 'Nenhuma despesa registrada para o período selecionado.'}
+                </p>
+                <Link to="/controle" className="text-sm text-primary hover:text-primary/80">
+                  Registrar despesas no controle
+                </Link>
               </div>
             )}
           </motion.div>

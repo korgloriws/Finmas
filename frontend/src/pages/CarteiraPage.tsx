@@ -29,7 +29,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { carteiraService } from '../services/api'
+import { carteiraService, fetchHistoricoCarteiraComFallback } from '../services/api'
 import { AtivoCarteira, Movimentacao } from '../types'
 import { formatCurrency } from '../utils/formatters'
 import HelpTips from '../components/HelpTips'
@@ -336,36 +336,42 @@ export default function CarteiraPage() {
   })
 
   // Proventos recebidos para a aba Gráficos (filtro de período próprio)
-  const { data: proventosRecebidosGraficos, isLoading: loadingProventosGraficos } = useQuery({
-    queryKey: ['proventos-recebidos-graficos', user, filtroProventosGraficos],
+  const { data: proventosRecebidosGraficos, isLoading: loadingProventosGraficos, isError: proventosGraficosErro } = useQuery({
+    queryKey: ['proventos-recebidos-graficos', user, filtroProventosGraficos, carteira?.length ?? 0],
     queryFn: () => carteiraService.getProventosRecebidos(filtroProventosGraficos),
-    enabled: !!user && !!carteira && carteira.length > 0 && activeTab === 'graficos',
-    retry: 1,
-    refetchOnWindowFocus: false,
-    staleTime: 10 * 60 * 1000,
-  })
-
-
-
-  const { data: historicoCarteira, isLoading: loadingHistorico, refetch: refetchHistorico } = useQuery({
-    queryKey: ['historico-carteira', user, filtroPeriodo],
-    queryFn: () => carteiraService.getHistorico(filtroPeriodo),
-    enabled: !!user && (activeTab === 'projecao' || activeTab === 'graficos'),
-    retry: 3,
-    staleTime: 10 * 60 * 1000, 
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false, 
-  })
-
-
-  const { data: historicoParaCalendario } = useQuery({
-    queryKey: ['historico-carteira-calendario', user],
-    queryFn: () => carteiraService.getHistorico('maximo'),
     enabled: !!user && activeTab === 'graficos',
+    retry: 2,
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    staleTime: 10 * 60 * 1000,
+  })
+
+
+
+  const carteiraLength = carteira?.length ?? 0
+
+  const { data: historicoCarteira, isLoading: loadingHistorico, isError: historicoErro, refetch: refetchHistorico } = useQuery({
+    queryKey: ['historico-carteira', user, filtroPeriodo, carteiraLength],
+    queryFn: ({ signal }) =>
+      fetchHistoricoCarteiraComFallback(filtroPeriodo, { signal, carteiraLength }),
+    enabled: !!user && !loadingCarteira && (activeTab === 'projecao' || activeTab === 'graficos'),
+    retry: 2,
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchOnMount: activeTab === 'graficos' || activeTab === 'projecao' ? 'always' : false,
+  })
+
+
+  const { data: historicoParaCalendario, refetch: refetchHistoricoCalendario } = useQuery({
+    queryKey: ['historico-carteira-calendario', user, carteiraLength],
+    queryFn: ({ signal }) =>
+      fetchHistoricoCarteiraComFallback('maximo', { signal, carteiraLength }),
+    enabled: !!user && !loadingCarteira && activeTab === 'graficos',
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: 'always',
   })
 
   // Aba Gráficos: ler saldo e histórico em tempo real do banco ao abrir a aba
@@ -373,8 +379,9 @@ export default function CarteiraPage() {
     if (activeTab === 'graficos') {
       refetchCarteira()
       refetchHistorico()
+      refetchHistoricoCalendario()
     }
-  }, [activeTab, refetchCarteira, refetchHistorico])
+  }, [activeTab, refetchCarteira, refetchHistorico, refetchHistoricoCalendario])
 
   const adicionarMutation = useMutation({
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
@@ -428,6 +435,7 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
       queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-evolucao-carteira', user] })
       
       // Forçar refetch imediato da carteira se estiver sendo observada (aba ativos ativa)
       queryClient.refetchQueries({ queryKey: ['carteira', user] })
@@ -956,14 +964,17 @@ export default function CarteiraPage() {
           <CarteiraGraficosTab
             carteira={carteira || []}
             valorTotal={valorTotal}
+            loadingCarteira={loadingCarteira}
             loadingHistorico={loadingHistorico}
-            historicoCarteira={historicoCarteira as any || null}
-            historicoParaCalendario={historicoParaCalendario as any || null}
+            historicoErro={historicoErro}
+            historicoCarteira={historicoCarteira ?? null}
+            historicoParaCalendario={historicoParaCalendario ?? null}
             filtroPeriodo={filtroPeriodo}
             setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
             ativosPorTipo={ativosPorTipo}
             proventosRecebidos={proventosRecebidosGraficos ?? []}
             loadingProventos={loadingProventosGraficos}
+            proventosErro={proventosGraficosErro}
             filtroProventosGraficos={filtroProventosGraficos}
             setFiltroProventosGraficos={(v: string) => setFiltroProventosGraficos(v as 'mes' | '6meses' | '1ano' | '5anos' | 'total')}
           />

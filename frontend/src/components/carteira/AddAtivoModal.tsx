@@ -347,6 +347,7 @@ export default function AddAtivoModal({ open, onClose, carteira = [] }: AddAtivo
       // Invalidar queries da HomePage para atualizar cards e gráficos
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-evolucao-carteira', user] })
       // Backfill para qualquer chave sem user (segurança)
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })

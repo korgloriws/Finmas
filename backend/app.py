@@ -26,7 +26,9 @@ from models import (
 
     salvar_receita, carregar_receitas_mes_ano, atualizar_receita, remover_receita,
     adicionar_cartao, atualizar_cartao, remover_cartao, 
-    adicionar_outro_gasto, carregar_outros_mes_ano, atualizar_outro_gasto, remover_outro_gasto, 
+    adicionar_outro_gasto, carregar_outros_mes_ano, carregar_outros_por_intervalo,
+    carregar_compras_cartao_por_intervalo, _garantir_lista_registros,
+    atualizar_outro_gasto, remover_outro_gasto, 
     calcular_saldo_mes_ano,
     
     adicionar_cartao_cadastrado, listar_cartoes_cadastrados, atualizar_cartao_cadastrado, remover_cartao_cadastrado,
@@ -3110,10 +3112,11 @@ def api_batch():
                         receitas = df_receitas.to_dict('records') if not df_receitas.empty else []
                         total_receitas = df_receitas['valor'].sum() if not df_receitas.empty else 0
                         
-                        total_cartoes = 0
+                        compras_cartao = carregar_compras_cartao_por_intervalo(mes, ano, 1)
+                        total_cartoes = sum(float(c.get('valor') or 0) for c in compras_cartao)
                         
-                        outros = carregar_outros_mes_ano(mes, ano)
-                        total_outros = sum(outro.get('valor', 0) for outro in outros)
+                        outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+                        total_outros = sum(float(outro.get('valor') or 0) for outro in outros)
                         
                         marmitas = consultar_marmitas(mes, ano)
                         marmitas_formatted = []
@@ -3181,7 +3184,7 @@ def api_batch():
                                 "total": float(total_receitas)
                             },
                             "cartoes": {
-                                "registros": [],
+                                "registros": compras_cartao,
                                 "total": float(total_cartoes)
                             },
                             "outros": {
@@ -4752,7 +4755,7 @@ def api_get_historico_carteira():
         agregacao = request.args.get('periodo', 'mensal')  
         print(f"DEBUG: API /api/carteira/historico chamada com agregacao: {agregacao}")
         dados = obter_historico_carteira_comparado(agregacao)
-        return jsonify(dados)
+        return jsonify(_normalizar_payload_historico_carteira(dados, agregacao))
     except Exception as e:
         print(f"DEBUG: Erro na API: {e}")
         return jsonify({"error": str(e)}), 500
@@ -5669,11 +5672,11 @@ def api_home_resumo():
         
   
     
-        total_cartoes = 0
+        compras_cartao = carregar_compras_cartao_por_intervalo(mes, ano, 1)
+        total_cartoes = sum(float(c.get('valor') or 0) for c in compras_cartao)
         
-   
-        outros = carregar_outros_mes_ano(mes, ano)
-        total_outros = sum(outro.get('valor', 0) for outro in outros)
+        outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+        total_outros = sum(float(outro.get('valor') or 0) for outro in outros)
         
 
         marmitas = consultar_marmitas(mes, ano)
@@ -5760,7 +5763,11 @@ def api_home_resumo():
                 'total': total_receitas,
                 'quantidade': len(receitas)
             },
-            
+            'cartoes': {
+                'registros': compras_cartao,
+                'total': total_cartoes,
+                'quantidade': len(compras_cartao)
+            },
             'outros': {
                 'registros': outros,
                 'total': total_outros,
@@ -5774,7 +5781,7 @@ def api_home_resumo():
             'saldo': saldo,
             'evolucao_financeira': evolucao,
             'gastos_mensais': gastos_mensais_data,
-            'total_despesas': total_outros + total_marmitas
+            'total_despesas': total_outros + total_marmitas + total_cartoes
         }
         
 
@@ -5788,6 +5795,94 @@ def api_home_resumo():
         return jsonify(resumo)
     except Exception as e:
         print(f"Erro na API home/resumo: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _payload_historico_carteira_vazio():
+    return {
+        "datas": [],
+        "carteira": [],
+        "ibov": [],
+        "ivvb11": [],
+        "ifix": [],
+        "ipca": [],
+        "cdi": [],
+        "btc": [],
+        "carteira_valor": [],
+        "carteira_price": [],
+    }
+
+
+def _normalizar_payload_historico_carteira(dados, periodo: str = "mensal"):
+    base = _payload_historico_carteira_vazio()
+    if not isinstance(dados, dict):
+        return {**base, "periodo": periodo}
+    out = {**base}
+    for key in base.keys():
+        val = dados.get(key)
+        if isinstance(val, list):
+            out[key] = val
+    out["periodo"] = periodo
+    return out
+
+
+@server.route("/api/home/evolucao-carteira", methods=["GET"])
+def api_home_evolucao_carteira():
+    try:
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
+        periodo = request.args.get("periodo", default="mensal", type=str) or "mensal"
+        periodos_validos = ("mensal", "semanal", "trimestral", "semestral", "anual", "maximo")
+        if periodo not in periodos_validos:
+            periodo = "mensal"
+
+        cache_key = f"home_evolucao:{usuario}:{periodo}"
+        if cache:
+            cached_payload = cache.get(cache_key)
+            if cached_payload is not None:
+                return jsonify(cached_payload)
+
+        dados = obter_historico_carteira_comparado(periodo)
+        payload = _normalizar_payload_historico_carteira(dados, periodo)
+
+        try:
+            if cache:
+                cache.set(cache_key, payload, timeout=180)
+        except Exception:
+            pass
+        return jsonify(payload)
+    except Exception as e:
+        print(f"Erro na API home/evolucao-carteira: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/home/gastos-categoria", methods=["GET"])
+def api_home_gastos_categoria():
+    try:
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
+        mes = request.args.get('mes', type=str)
+        ano = request.args.get('ano', type=str)
+        janela = request.args.get('janela', default='1m', type=str)
+
+        if not mes or not ano:
+            return jsonify({"error": "Mês e ano são obrigatórios"}), 400
+
+        qtd_meses = {'1m': 1, '3m': 3, '6m': 6}.get(janela, 1)
+        compras = carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses)
+        outros = _garantir_lista_registros(carregar_outros_por_intervalo(mes, ano, qtd_meses))
+
+        return jsonify({
+            'janela': janela,
+            'cartoes': compras,
+            'outros': outros,
+        })
+    except Exception as e:
+        print(f"Erro na API home/gastos-categoria: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

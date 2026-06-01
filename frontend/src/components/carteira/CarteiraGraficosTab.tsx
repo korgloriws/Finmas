@@ -28,6 +28,7 @@ import {
 } from 'recharts'
 import AtivosDetalhesModal from './AtivosDetalhesModal'
 import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
+import { historicoCarteiraTemPontos } from '../../services/api'
 
 /** Extrai ano e mês de YYYY-MM ou YYYY-MM-DD sem depender de fuso (evita bug com trimestral/semestral/anual/máximo). */
 function parseAnoMesCalendario(dataStr: string): { ano: number; mes: number; chave: string } | null {
@@ -44,7 +45,9 @@ interface CarteiraGraficosTabProps {
   carteira: any[]
   /** Saldo atual da carteira (soma valor_total) em tempo real do banco — usado na comparação com índices */
   valorTotal: number
+  loadingCarteira?: boolean
   loadingHistorico: boolean
+  historicoErro?: boolean
   historicoCarteira: {
     datas: string[]
     carteira_valor: number[]
@@ -70,6 +73,7 @@ interface CarteiraGraficosTabProps {
     proventos_recebidos?: Array<{ data: string; valor_recebido: number; tipo: string }>
   }>
   loadingProventos?: boolean
+  proventosErro?: boolean
   filtroProventosGraficos?: 'mes' | '6meses' | '1ano' | '5anos' | 'total'
   setFiltroProventosGraficos?: (value: 'mes' | '6meses' | '1ano' | '5anos' | 'total') => void
 }
@@ -77,7 +81,9 @@ interface CarteiraGraficosTabProps {
 export default function CarteiraGraficosTab({
   carteira,
   valorTotal,
+  loadingCarteira = false,
   loadingHistorico,
+  historicoErro = false,
   historicoCarteira,
   historicoParaCalendario = null,
   filtroPeriodo,
@@ -85,6 +91,7 @@ export default function CarteiraGraficosTab({
   ativosPorTipo,
   proventosRecebidos = [],
   loadingProventos = false,
+  proventosErro = false,
   filtroProventosGraficos = 'total',
   setFiltroProventosGraficos,
 }: CarteiraGraficosTabProps) {
@@ -169,12 +176,25 @@ export default function CarteiraGraficosTab({
 
   const initialWealth = useMemo(() => {
     const arr = historicoCarteira?.carteira_valor || []
-    for (let i = 0; i < arr.length; i++) {
-      const v = arr[i]
-      if (typeof v === 'number' && !isNaN(v)) return v
+    const pickPositive = (values: number[]) => {
+      for (const v of values) {
+        const n = Number(v)
+        if (Number.isFinite(n) && n > 0) return n
+      }
+      return null
     }
+    const fromStart = pickPositive(arr)
+    if (fromStart != null) return fromStart
+    const fromEnd = pickPositive([...arr].reverse())
+    if (fromEnd != null) return fromEnd
+    if (valorTotal > 0) return valorTotal
     return 0
-  }, [historicoCarteira])
+  }, [historicoCarteira, valorTotal])
+
+  const historicoTemPontos = useMemo(
+    () => historicoCarteiraTemPontos(historicoCarteira),
+    [historicoCarteira]
+  )
 
   const indiceSeries = useMemo(() => {
     if (!historicoCarteira) return [] as Array<number | null>
@@ -199,7 +219,9 @@ export default function CarteiraGraficosTab({
   }, [historicoCarteira])
 
   const indiceValorSeries = useMemo(() => {
-    if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
+    if (!historicoCarteira) return [] as Array<number | null>
+    const wealthBase = initialWealth > 0 ? initialWealth : valorTotal
+    if (wealthBase <= 0) return [] as Array<number | null>
     
     // Se 'todos' estiver selecionado, retornar objeto com todas as séries convertidas
     if (indiceRef === 'todos' && typeof indiceSeries === 'object' && !Array.isArray(indiceSeries)) {
@@ -208,7 +230,7 @@ export default function CarteiraGraficosTab({
       Object.keys(seriesObj).forEach(key => {
         result[key] = (seriesObj[key] || []).map((v) => {
           if (v == null || isNaN(Number(v))) return null
-          return initialWealth * (Number(v) / 100)
+          return wealthBase * (Number(v) / 100)
         })
       })
       return result
@@ -218,19 +240,54 @@ export default function CarteiraGraficosTab({
     const series = Array.isArray(indiceSeries) ? indiceSeries : []
     return series.map((v) => {
       if (v == null || isNaN(Number(v))) return null
-      return initialWealth * (Number(v) / 100)
+      return wealthBase * (Number(v) / 100)
     })
-  }, [historicoCarteira, indiceSeries, initialWealth, indiceRef])
+  }, [historicoCarteira, indiceSeries, initialWealth, valorTotal, indiceRef])
 
-  // Série de valor (R$) construída a partir do retorno por preço (sem aportes)
+  // Patrimônio real (com aportes) — usado só no gráfico de evolução patrimonial
+  const carteiraValorPatrimonioSeries = useMemo(() => {
+    if (!historicoCarteira) return [] as Array<number | null>
+    return (historicoCarteira.carteira_valor || []).map((v) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    })
+  }, [historicoCarteira])
+
+  // Série de valor (R$) sem aportes: prioriza carteira_price; senão patrimônio positivo; senão rebased × base
   const carteiraValorPrecoSeries = useMemo(() => {
-    if (!historicoCarteira || initialWealth <= 0) return [] as Array<number | null>
+    if (!historicoCarteira) return [] as Array<number | null>
+    const priceSeries = (historicoCarteira.carteira_price || []).map((v) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    })
+    if (priceSeries.some((v) => v != null)) return priceSeries
+    const valoresAbsolutos = (historicoCarteira.carteira_valor || []).map((v) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    })
+    if (valoresAbsolutos.some((v) => v != null)) return valoresAbsolutos
+    const wealthBase = initialWealth > 0 ? initialWealth : valorTotal
+    if (wealthBase <= 0) return [] as Array<number | null>
     const baseSeries = carteiraRetornoSeries || []
     return baseSeries.map((v) => {
       if (v == null || isNaN(Number(v))) return null
-      return initialWealth * (Number(v) / 100)
+      return wealthBase * (Number(v) / 100)
     })
-  }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
+  }, [historicoCarteira, carteiraRetornoSeries, initialWealth, valorTotal])
+
+  const historicoChartLen = useMemo(() => {
+    if (!historicoCarteira) return 0
+    return Math.max(
+      historicoCarteira.datas?.length || 0,
+      carteiraValorPrecoSeries.length,
+      carteiraValorPatrimonioSeries.length,
+      historicoCarteira.carteira_valor?.length || 0,
+      historicoCarteira.carteira?.length || 0,
+      historicoCarteira.carteira_price?.length || 0,
+    )
+  }, [historicoCarteira, carteiraValorPrecoSeries, carteiraValorPatrimonioSeries])
+
+  const labelHistoricoEm = (i: number) => historicoCarteira?.datas?.[i] || `ponto-${i + 1}`
 
   const comparativoResumo = useMemo(() => {
     // Não mostrar resumo quando 'todos' estiver selecionado (múltiplos benchmarks)
@@ -354,7 +411,7 @@ export default function CarteiraGraficosTab({
 
   // Calcular performance por período (mensal, trimestral, anual)
   const performancePorPeriodo = useMemo(() => {
-    if (!historicoCarteira || !historicoCarteira.datas || historicoCarteira.datas.length === 0) {
+    if (!historicoCarteira || !historicoTemPontos || historicoChartLen === 0) {
       return []
     }
 
@@ -364,7 +421,7 @@ export default function CarteiraGraficosTab({
       return []
     }
 
-    const datas = historicoCarteira.datas
+    const datas = Array.from({ length: historicoChartLen }, (_, i) => labelHistoricoEm(i))
     const carteiraSeries = carteiraRetornoSeries || []
     // Garantir que indiceSeriesData é um array
     const indiceSeriesData = Array.isArray(indiceSeries) ? indiceSeries : []
@@ -459,9 +516,24 @@ export default function CarteiraGraficosTab({
   // Retorno do mês = variação em relação ao valor do mês anterior (não “dentro do mês”), para que 1 ponto por mês mostre o % correto.
   const calendarioMensal = useMemo(() => {
     const fonte = historicoParaCalendario?.datas?.length ? historicoParaCalendario : historicoCarteira
-    if (!fonte?.datas?.length) return []
-    const datas = fonte.datas
-    const carteiraSeries = (fonte.carteira_price ?? fonte.carteira ?? []) as (number | null)[]
+    if (!fonte) return []
+    const serieLen = Math.max(
+      fonte.datas?.length || 0,
+      fonte.carteira_price?.length || 0,
+      fonte.carteira?.length || 0,
+      fonte.carteira_valor?.length || 0,
+    )
+    if (serieLen === 0) return []
+    const datas = fonte.datas?.length
+      ? fonte.datas
+      : Array.from({ length: serieLen }, (_, i) => `ponto-${i + 1}`)
+    const carteiraSeries = (
+      fonte.carteira_price?.length
+        ? fonte.carteira_price
+        : fonte.carteira?.length
+          ? fonte.carteira
+          : fonte.carteira_valor
+    ) as (number | null)[]
     const len = Math.min(datas.length, carteiraSeries.length)
     if (len === 0) return []
 
@@ -533,7 +605,7 @@ export default function CarteiraGraficosTab({
 
   // Calcular Sharpe Ratio vs CDI e vs SELIC
   const sharpeRatios = useMemo(() => {
-    if (!historicoCarteira || !historicoCarteira.datas || historicoCarteira.datas.length < 2) {
+    if (!historicoCarteira || historicoChartLen < 2) {
       return {
         vsCDI: null,
         vsSELIC: null,
@@ -762,7 +834,11 @@ export default function CarteiraGraficosTab({
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Análise Gráfica</h2>
       
-      {!carteira || carteira.length === 0 ? (
+      {loadingCarteira ? (
+        <div className="text-center text-muted-foreground py-12 animate-pulse">
+          Carregando dados da carteira...
+        </div>
+      ) : !carteira || carteira.length === 0 ? (
         <div className="text-center text-muted-foreground py-8">
           Adicione ativos à sua carteira para ver os gráficos.
         </div>
@@ -825,7 +901,7 @@ export default function CarteiraGraficosTab({
             
             {loadingHistorico ? (
               <div className="animate-pulse h-64 bg-muted rounded-lg"></div>
-            ) : historicoCarteira && historicoCarteira.datas && historicoCarteira.datas.length > 0 ? (
+            ) : historicoTemPontos ? (
               <>
                 {/* Resumo estatístico e comparativo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
@@ -1031,7 +1107,8 @@ export default function CarteiraGraficosTab({
                   </div>
                   <div className="w-full min-h-[280px] h-72 sm:h-80 md:h-[340px] lg:h-96 overflow-visible">
                     <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-                      <AreaChart data={historicoCarteira.datas.map((d, i) => {
+                      <AreaChart data={Array.from({ length: historicoChartLen }, (_, i) => {
+                        const d = labelHistoricoEm(i)
                         const dataPoint: any = {
                           data: d,
                           carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
@@ -1228,9 +1305,9 @@ export default function CarteiraGraficosTab({
                   <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
                     <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                       <AreaChart
-                        data={historicoCarteira.datas.map((d, i) => ({
-                          data: d,
-                          patrimonio: historicoCarteira.carteira_valor?.[i] ?? null,
+                        data={Array.from({ length: historicoChartLen }, (_, i) => ({
+                          data: labelHistoricoEm(i),
+                          patrimonio: carteiraValorPatrimonioSeries[i] ?? historicoCarteira?.carteira_valor?.[i] ?? null,
                         }))}
                         margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
                       >
@@ -1266,15 +1343,16 @@ export default function CarteiraGraficosTab({
                 </div>
               </>
             ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <div className="text-lg font-semibold mb-2">Nenhum dado histórico disponível</div>
-                  <div className="text-sm text-muted-foreground mb-4">
-                    Adicione movimentações à sua carteira para ver a evolução patrimonial
-            </div>
-                  <div className="text-xs text-muted-foreground">
-                    Dados de exemplo serão mostrados para demonstração
-                  </div>
+            <div className="h-64 flex flex-col items-center justify-center gap-2 text-muted-foreground text-center px-4">
+                <div className="text-lg font-semibold">
+                  {historicoErro
+                    ? 'Não foi possível carregar o histórico da carteira.'
+                    : 'Nenhum dado histórico disponível'}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {historicoErro
+                    ? 'Tente alterar o período ou recarregar a página.'
+                    : 'Adicione movimentações à sua carteira para ver a evolução patrimonial.'}
                 </div>
               </div>
             )}
@@ -2186,7 +2264,11 @@ export default function CarteiraGraficosTab({
             ) : (
               <div className="h-64 flex flex-col items-center justify-center text-muted-foreground text-center px-4">
                 <Banknote className="w-10 h-10 mb-2 opacity-50" />
-                <p className="text-sm font-medium">Nenhum provento recebido no período</p>
+                <p className="text-sm font-medium">
+                  {proventosErro
+                    ? 'Não foi possível carregar os proventos.'
+                    : 'Nenhum provento recebido no período'}
+                </p>
                 <p className="text-xs mt-1">Os proventos são calculados com base no histórico de dividendos dos ativos da sua carteira</p>
               </div>
             )}

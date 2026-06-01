@@ -713,32 +713,15 @@ export const carteiraService = {
     return response.data
   },
 
-  getHistorico: async (periodo: string = 'mensal'): Promise<{
-    datas: string[]
-    carteira: (number|null)[]
-    ibov: (number|null)[]
-    ivvb11: (number|null)[]
-    ifix: (number|null)[]
-    ipca: (number|null)[]
-    cdi: (number|null)[]
-    btc?: (number|null)[]
-    carteira_valor: number[]
-    carteira_price?: (number|null)[]
-  }> => {
-    const response = await api.get(`/carteira/historico?periodo=${periodo}`)
-    const payload = asObject(response.data, {} as Record<string, any>)
-    return {
-      datas: asArray<string>(payload.datas),
-      carteira: asArray<number | null>(payload.carteira),
-      ibov: asArray<number | null>(payload.ibov),
-      ivvb11: asArray<number | null>(payload.ivvb11),
-      ifix: asArray<number | null>(payload.ifix),
-      ipca: asArray<number | null>(payload.ipca),
-      cdi: asArray<number | null>(payload.cdi),
-      btc: asArray<number | null>(payload.btc),
-      carteira_valor: asArray<number>(payload.carteira_valor),
-      carteira_price: asArray<number | null>(payload.carteira_price),
-    }
+  getHistorico: async (
+    periodo: string = 'mensal',
+    options?: { signal?: AbortSignal }
+  ): Promise<HistoricoCarteiraPayload> => {
+    const response = await api.get(`/carteira/historico?periodo=${encodeURIComponent(periodo)}`, {
+      signal: options?.signal,
+      headers: { 'X-Priority': 'high' },
+    })
+    return normalizarHistoricoCarteira(response.data, periodo)
   },
 
   // Goals (Metas)
@@ -978,8 +961,21 @@ export const carteiraService = {
     total_recebido: number
   }>> => {
     try {
-      const response = await api.get(`/carteira/proventos-recebidos?periodo=${periodo}`)
-      return response.data
+      const response = await api.get(`/carteira/proventos-recebidos?periodo=${periodo}`, {
+        headers: { 'X-Priority': 'high' },
+      })
+      const raw = response.data
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).error) {
+        throw new Error(String((raw as Record<string, unknown>).error))
+      }
+      if (Array.isArray(raw)) return raw
+      if (Array.isArray((raw as Record<string, unknown>)?.proventos)) {
+        return asArray((raw as Record<string, unknown>).proventos)
+      }
+      if (Array.isArray((raw as Record<string, unknown>)?.registros)) {
+        return asArray((raw as Record<string, unknown>).registros)
+      }
+      return []
     } catch (error) {
       console.error('Erro ao buscar proventos recebidos:', error)
       return []
@@ -994,7 +990,11 @@ export const marmitasService = {
     if (ano) params.append('ano', ano.toString())
     
     const response = await api.get(`/marmitas?${params.toString()}`)
-    return asArray<Marmita>(response.data)
+    const payload = response.data
+    if (Array.isArray(payload)) return payload as Marmita[]
+    if (Array.isArray(payload?.registros)) return payload.registros as Marmita[]
+    if (Array.isArray(payload?.marmitas)) return payload.marmitas as Marmita[]
+    return []
   },
 
   adicionarMarmita: async (data: string, valor: number, comprou: boolean): Promise<any> => {
@@ -1110,7 +1110,12 @@ export const controleService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/outros?${params.toString()}`)
-    return asArray<OutroGasto>(response.data)
+    const payload = response.data
+    if (Array.isArray(payload)) return payload as OutroGasto[]
+    if (Array.isArray(payload?.registros)) return payload.registros as OutroGasto[]
+    if (Array.isArray(payload?.outros)) return payload.outros as OutroGasto[]
+    if (Array.isArray(payload?.outros?.registros)) return payload.outros.registros as OutroGasto[]
+    return []
   },
 
   adicionarOutro: async (
@@ -1167,7 +1172,11 @@ export const controleService = {
     if (pessoa) params.append('pessoa', pessoa)
     
     const response = await api.get(`/controle/evolucao-financeira?${params.toString()}`)
-    return asArray<EvolucaoFinanceira>(response.data)
+    const payload = response.data
+    if (Array.isArray(payload)) return payload as EvolucaoFinanceira[]
+    if (Array.isArray(payload?.dados)) return payload.dados as EvolucaoFinanceira[]
+    if (Array.isArray(payload?.evolucao)) return payload.evolucao as EvolucaoFinanceira[]
+    return []
   },
 
   getEvolucaoReceitas: async (periodo: string): Promise<{mes: string, receitas: number}[]> => {
@@ -1327,11 +1336,149 @@ export const rfCatalogService = {
   },
 }
 
+export type HistoricoCarteiraPayload = {
+  periodo?: string
+  datas: string[]
+  carteira: (number | null)[]
+  ibov: (number | null)[]
+  ivvb11: (number | null)[]
+  ifix: (number | null)[]
+  ipca: (number | null)[]
+  cdi: (number | null)[]
+  btc?: (number | null)[]
+  carteira_valor: number[]
+  carteira_price?: (number | null)[]
+}
+
+export const normalizarHistoricoCarteira = (raw: unknown, periodo = 'mensal'): HistoricoCarteiraPayload => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).error) {
+    throw new Error(String((raw as Record<string, unknown>).error))
+  }
+  const unwrapped =
+    raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).dados
+      ? (raw as Record<string, unknown>).dados
+      : raw
+  const payload = asObject(unwrapped, {} as Record<string, any>)
+  return {
+    periodo: String(payload.periodo || periodo),
+    datas: asArray<string>(payload.datas),
+    carteira: asArray<number | null>(payload.carteira),
+    ibov: asArray<number | null>(payload.ibov),
+    ivvb11: asArray<number | null>(payload.ivvb11),
+    ifix: asArray<number | null>(payload.ifix),
+    ipca: asArray<number | null>(payload.ipca),
+    cdi: asArray<number | null>(payload.cdi),
+    btc: asArray<number | null>(payload.btc),
+    carteira_valor: asArray<number>(payload.carteira_valor),
+    carteira_price: asArray<number | null>(payload.carteira_price),
+  }
+}
+
+export const historicoCarteiraTemPontos = (data?: HistoricoCarteiraPayload | null): boolean => {
+  if (!data) return false
+  if ((data.datas?.length || 0) > 0) return true
+  if ((data.carteira_valor || []).some((v) => Number(v) > 0)) return true
+  const series = data.carteira_price?.length ? data.carteira_price : data.carteira
+  return (series || []).some((v) => v != null && Number(v) > 0)
+}
+
+const normalizarBlocoResumo = (payload: Record<string, any>, key: string) => {
+  const bloco = asObject(payload[key], {} as Record<string, any>)
+  return {
+    ...bloco,
+    registros: asArray(bloco.registros),
+    total: asNumber(bloco.total, 0),
+    quantidade: asNumber(bloco.quantidade, asArray(bloco.registros).length),
+  }
+}
+
 export const homeService = {
-  getResumo: async (mes: string, ano: string): Promise<any> => {
-    const response = await api.get(`/home/resumo?mes=${mes}&ano=${ano}`)
-    return asObject(response.data, {})
+  getResumo: async (mes: string, ano: string, options?: { signal?: AbortSignal }): Promise<any> => {
+    const response = await api.get(`/home/resumo?mes=${mes}&ano=${ano}`, { signal: options?.signal })
+    const raw = response.data
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).error) {
+      throw new Error(String((raw as Record<string, unknown>).error))
+    }
+    const payload = asObject(raw, {} as Record<string, any>)
+    return {
+      ...payload,
+      receitas: normalizarBlocoResumo(payload, 'receitas'),
+      cartoes: normalizarBlocoResumo(payload, 'cartoes'),
+      outros: normalizarBlocoResumo(payload, 'outros'),
+      marmitas: normalizarBlocoResumo(payload, 'marmitas'),
+    }
   },
+
+  getGastosCategoria: async (
+    mes: string,
+    ano: string,
+    janela: '1m' | '3m' | '6m' = '1m',
+    options?: { signal?: AbortSignal }
+  ): Promise<{ cartoes: any[]; outros: any[]; janela: string }> => {
+    const response = await api.get(
+      `/home/gastos-categoria?mes=${encodeURIComponent(mes)}&ano=${encodeURIComponent(ano)}&janela=${janela}`,
+      { signal: options?.signal, headers: { 'X-Priority': 'high' } }
+    )
+    const raw = response.data
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).error) {
+      throw new Error(String((raw as Record<string, unknown>).error))
+    }
+    const payload = asObject(raw, {} as Record<string, any>)
+    return {
+      janela: String(payload.janela || janela),
+      cartoes: asArray(payload.cartoes),
+      outros: asArray(payload.outros),
+    }
+  },
+
+  getEvolucaoCarteira: async (
+    periodo: string = 'mensal',
+    options?: { signal?: AbortSignal }
+  ): Promise<HistoricoCarteiraPayload> => {
+    const response = await api.get(
+      `/home/evolucao-carteira?periodo=${encodeURIComponent(periodo)}`,
+      { signal: options?.signal, headers: { 'X-Priority': 'high' } }
+    )
+    return normalizarHistoricoCarteira(response.data, periodo)
+  },
+}
+
+/** Histórico comparado: endpoint dedicado da Home + fallback /carteira/historico (deploy antigo ou resposta vazia). */
+export async function fetchHistoricoCarteiraComFallback(
+  periodo: string,
+  options?: { signal?: AbortSignal; carteiraLength?: number }
+): Promise<HistoricoCarteiraPayload> {
+  const carteiraLength = options?.carteiraLength ?? 0
+  const carregarHome = () => homeService.getEvolucaoCarteira(periodo, { signal: options?.signal })
+  const carregarLegado = () => carteiraService.getHistorico(periodo, { signal: options?.signal })
+
+  const tentarComFallback = async () => {
+    let data = await carregarHome()
+    if (historicoCarteiraTemPontos(data)) return data
+    if (carteiraLength > 0) {
+      const legado = await carregarLegado()
+      if (historicoCarteiraTemPontos(legado)) return legado
+      const retryHome = await carregarHome()
+      if (historicoCarteiraTemPontos(retryHome)) return retryHome
+      const retryLegado = await carregarLegado()
+      if (historicoCarteiraTemPontos(retryLegado)) return retryLegado
+    }
+    return data
+  }
+
+  try {
+    return await tentarComFallback()
+  } catch (err: unknown) {
+    const e = err as { code?: string; name?: string }
+    const isAbort =
+      options?.signal?.aborted ||
+      e?.code === 'ERR_CANCELED' ||
+      e?.name === 'CanceledError' ||
+      e?.name === 'AbortError'
+    if (isAbort) throw err
+    console.warn('[fetchHistoricoCarteiraComFallback] evolucao-carteira indisponível, usando legado', err)
+    return carregarLegado()
+  }
 }
 
 // ==================== SERVIÇOS DE CARTÕES ====================
@@ -1340,7 +1487,11 @@ export const cartaoService = {
   // Cartões Cadastrados
   getCartoesCadastrados: async (): Promise<CartaoCadastrado[]> => {
     const response = await api.get('/controle/cartoes-cadastrados')
-    return asArray<CartaoCadastrado>(response.data)
+    const payload = response.data
+    if (Array.isArray(payload)) return payload as CartaoCadastrado[]
+    if (Array.isArray(payload?.cartoes)) return payload.cartoes as CartaoCadastrado[]
+    if (Array.isArray(payload?.registros)) return payload.registros as CartaoCadastrado[]
+    return []
   },
 
   adicionarCartaoCadastrado: async (data: {
@@ -1376,7 +1527,11 @@ export const cartaoService = {
     if (ano) params.append('ano', ano)
     
     const response = await api.get(`/controle/compras-cartao?${params.toString()}`)
-    return asArray<CompraCartao>(response.data)
+    const payload = response.data
+    if (Array.isArray(payload)) return payload as CompraCartao[]
+    if (Array.isArray(payload?.compras)) return payload.compras as CompraCartao[]
+    if (Array.isArray(payload?.registros)) return payload.registros as CompraCartao[]
+    return []
   },
 
   adicionarCompraCartao: async (data: {

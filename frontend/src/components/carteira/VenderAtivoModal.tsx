@@ -162,6 +162,7 @@ export default function VenderAtivoModal({ open, onClose, ativo }: VenderAtivoMo
       queryClient.invalidateQueries({ queryKey: ['carteira-insights', user] })
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira-historico', user] })
+      queryClient.invalidateQueries({ queryKey: ['home-evolucao-carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['carteira'] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes'] })
       queryClient.refetchQueries({ queryKey: ['carteira', user] })

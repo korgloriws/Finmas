@@ -259,6 +259,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ['batch-home', currentUser],
             ['home-resumo', currentUser],
             ['carteira-historico', currentUser],
+            ['home-evolucao-carteira', currentUser],
+            ['home-gastos-categoria', currentUser],
             ['movimentacoes', currentUser],
             ['movimentacoes-all', currentUser],
             ['proventos', currentUser],

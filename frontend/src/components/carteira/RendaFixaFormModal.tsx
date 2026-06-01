@@ -198,6 +198,7 @@ export default function RendaFixaFormModal({
       if (u) {
         queryClient.invalidateQueries({ queryKey: ['home-resumo', u] })
         queryClient.invalidateQueries({ queryKey: ['carteira-historico', u] })
+        queryClient.invalidateQueries({ queryKey: ['home-evolucao-carteira', u] })
       }
       
       // Forçar refetch imediato da carteira para atualização instantânea
