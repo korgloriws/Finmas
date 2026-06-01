@@ -1177,6 +1177,7 @@ def get_usuario_atual():
                         atualizar_last_seen(username)
                     except Exception:
                         pass
+                    username = canonical_account_username(username)
                     if g is not None:
                         try:
                             setattr(g, "_usuario_atual_cached", username)
@@ -1234,6 +1235,7 @@ def get_usuario_atual():
                     atualizar_last_seen(username)
                 except Exception:
                     pass
+                username = canonical_account_username(username)
                 if g is not None:
                     try:
                         setattr(g, "_usuario_atual_cached", username)
@@ -1395,6 +1397,98 @@ def _sqlite_controle_tem_registros(folder_name: str) -> bool:
                 pass
 
 
+def _pg_controle_tem_registros(username: str) -> bool:
+    if not username:
+        return False
+    try:
+        conn = _pg_conn_for_user(username)
+        try:
+            total = 0
+            with conn.cursor() as c:
+                c.execute('SELECT COUNT(*) FROM outros_gastos')
+                total += int(c.fetchone()[0] or 0)
+                c.execute(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = current_schema() AND table_name = 'compras_cartao')"
+                )
+                if c.fetchone()[0]:
+                    c.execute('SELECT COUNT(*) FROM compras_cartao')
+                    total += int(c.fetchone()[0] or 0)
+            return total > 0
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def _usuario_tem_dados_financeiros(username: str) -> bool:
+    if not username:
+        return False
+    if _is_postgres():
+        return _pg_controle_tem_registros(username)
+    return _sqlite_controle_tem_registros(username)
+
+
+def atualizar_email_conta(username, email):
+    """Grava o e-mail da conta (login Google sempre sincroniza o e-mail do provedor)."""
+    if not username or not email or not str(email).strip():
+        return
+    email_val = str(email).strip()
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute(
+                    'UPDATE public.usuarios SET email = %s WHERE username = %s',
+                    (email_val, username),
+                )
+        finally:
+            conn.close()
+        return
+    conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+    try:
+        c = conn.cursor()
+        c.execute('UPDATE usuarios SET email = ? WHERE username = ?', (email_val, username))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def canonical_account_username(username, email=None):
+    """
+    Username de sessão unificado: login Google usa a MESMA conta que já tem dados
+    (por e-mail ou pasta com registros), nunca uma conta vazia paralela.
+    """
+    if not username:
+        return username
+    user = str(username).strip()
+    if not user:
+        return user
+
+    email_eff = (email or '').strip()
+    if not email_eff:
+        perfil = obter_perfil_usuario(user) or {}
+        email_eff = (perfil.get('email') or '').strip()
+
+    if email_eff:
+        by_email = buscar_usuario_por_email(email_eff)
+        if by_email and by_email.get('username'):
+            canonical = str(by_email['username']).strip()
+            if canonical.lower() != user.lower():
+                print(f"[canonical_user] {user} -> {canonical} (mesmo e-mail)")
+            return canonical
+
+    storage = resolver_storage_username(user, email=email_eff or None)
+    if storage and storage.lower() != user.lower():
+        alt = buscar_usuario_por_username(storage)
+        if alt and alt.get('username'):
+            canonical = str(alt['username']).strip()
+            print(f"[canonical_user] {user} -> {canonical} (dados em outra conta)")
+            return canonical
+
+    return user
+
+
 def resolver_storage_username(username, email=None):
     """
     Resolve o identificador de armazenamento dos dados do usuário.
@@ -1407,6 +1501,18 @@ def resolver_storage_username(username, email=None):
     if not usuario:
         return usuario
     if _is_postgres():
+        if _pg_controle_tem_registros(usuario):
+            return usuario
+        email_eff = (email or '').strip()
+        if not email_eff:
+            perfil = obter_perfil_usuario(usuario) or {}
+            email_eff = (perfil.get('email') or '').strip()
+        if email_eff:
+            vinculado = buscar_usuario_por_email(email_eff)
+            alt_user = (vinculado or {}).get('username')
+            if alt_user and alt_user.lower() != usuario.lower() and _pg_controle_tem_registros(alt_user):
+                print(f"[resolver_storage/pg] {usuario} -> {alt_user} (mesmo e-mail)")
+                return alt_user
         return usuario
     current_dir = os.path.dirname(os.path.abspath(__file__))
     bancos_root = os.path.join(current_dir, "bancos_usuarios")
@@ -1447,7 +1553,8 @@ def _usuario_para_dados(usuario=None):
     base = (usuario or get_usuario_atual() or '').strip()
     if not base:
         return None
-    return resolver_storage_username(base)
+    perfil = obter_perfil_usuario(base) or {}
+    return resolver_storage_username(base, email=perfil.get('email'))
 
 
 def get_db_path(usuario, tipo_db):
@@ -1455,7 +1562,9 @@ def get_db_path(usuario, tipo_db):
     if not usuario:
         raise ValueError("Usuário não especificado")
 
-    usuario = resolver_storage_username(usuario)
+    usuario = _usuario_para_dados(usuario)
+    if not usuario:
+        raise ValueError("Usuário não especificado")
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -2145,8 +2254,32 @@ def buscar_usuario_por_username(username):
             }
         return None
 
+def _usuario_dict_from_row(row):
+    return {
+        'id': row[0],
+        'nome': row[1],
+        'username': row[2],
+        'senha_hash': row[3],
+        'pergunta_seguranca': row[4],
+        'resposta_seguranca_hash': row[5],
+        'data_cadastro': row[6],
+        'role': row[7] if len(row) > 7 else 'usuario',
+        'email': row[8] if len(row) > 8 else None,
+        'auth_provider': row[9] if len(row) > 9 else 'proprietario',
+    }
+
+
+def _escolher_usuario_com_dados(candidatos):
+    if not candidatos:
+        return None
+    for u in candidatos:
+        if _usuario_tem_dados_financeiros(u.get('username')):
+            return u
+    return candidatos[0]
+
+
 def buscar_usuario_por_email(email):
-    """Busca usuário por email (para Google OAuth) — comparação case-insensitive."""
+    """Busca usuário por email (para Google OAuth) — case-insensitive; prefere conta com dados."""
     if not email or not str(email).strip():
         return None
     email_norm = str(email).strip().lower()
@@ -2160,21 +2293,9 @@ def buscar_usuario_por_email(email):
                     FROM public.usuarios
                     WHERE LOWER(TRIM(COALESCE(email, ''))) = %s
                 ''', (email_norm,))
-                row = c.fetchone()
-                if row:
-                    return {
-                        'id': row[0],
-                        'nome': row[1],
-                        'username': row[2],
-                        'senha_hash': row[3],
-                        'pergunta_seguranca': row[4],
-                        'resposta_seguranca_hash': row[5],
-                        'data_cadastro': row[6],
-                        'role': row[7] if len(row) > 7 else 'usuario',
-                        'email': row[8] if len(row) > 8 else None,
-                        'auth_provider': row[9] if len(row) > 9 else 'proprietario'
-                    }
-                return None
+                rows = c.fetchall()
+                candidatos = [_usuario_dict_from_row(r) for r in rows]
+                return _escolher_usuario_com_dados(candidatos)
         finally:
             conn.close()
     else:
@@ -2186,22 +2307,10 @@ def buscar_usuario_por_email(email):
             FROM usuarios
             WHERE LOWER(TRIM(COALESCE(email, ''))) = ?
         ''', (email_norm,))
-        row = c.fetchone()
+        rows = c.fetchall()
         conn.close()
-        if row:
-            return {
-                'id': row[0],
-                'nome': row[1],
-                'username': row[2],
-                'senha_hash': row[3],
-                'pergunta_seguranca': row[4],
-                'resposta_seguranca_hash': row[5],
-                'data_cadastro': row[6],
-                'role': row[7] if len(row) > 7 else 'usuario',
-                'email': row[8] if len(row) > 8 else None,
-                'auth_provider': row[9] if len(row) > 9 else 'proprietario'
-            }
-        return None
+        candidatos = [_usuario_dict_from_row(r) for r in rows]
+        return _escolher_usuario_com_dados(candidatos)
 
 def vincular_email_usuario(username, email):
     """Grava e-mail no cadastro existente (login Google em conta criada com senha)."""

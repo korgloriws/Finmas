@@ -49,7 +49,7 @@ from models import (
     obter_carteira_para_admin, obter_movimentacoes_para_admin, consultar_marmitas_para_admin, obter_controle_para_admin,
     usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
     buscar_usuario_por_email, criar_usuario_google, vincular_email_usuario,
-    resolver_storage_username,
+    resolver_storage_username, canonical_account_username, atualizar_email_conta,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -562,15 +562,20 @@ def api_google_callback():
                 pass
         else:
             username = usuario['username']
-            try:
-                vincular_email_usuario(username, email)
-            except Exception as e:
-                print(f"[GOOGLE OAUTH] Aviso ao vincular email para {username}: {e}")
 
-        perfil_oauth = obter_perfil_usuario(username) or {}
-        storage_user = resolver_storage_username(username, email=email or perfil_oauth.get('email'))
-        if storage_user != username:
-            print(f"[GOOGLE OAUTH] Storage resolvido: login={username} dados={storage_user}")
+        # Mesmo comportamento do login com senha: uma conta canônica por e-mail
+        try:
+            atualizar_email_conta(username, email)
+            vincular_email_usuario(username, email)
+        except Exception as e:
+            print(f"[GOOGLE OAUTH] Aviso ao sincronizar e-mail: {e}")
+
+        username_antes = username
+        username = canonical_account_username(username, email)
+        if username != username_antes:
+            print(f"[GOOGLE OAUTH] Conta unificada: {username_antes} -> {username}")
+
+        storage_user = resolver_storage_username(username, email=email)
         
         # Verificar e corrigir bancos se necessário
         try:
@@ -584,7 +589,7 @@ def api_google_callback():
             frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br') if _finmas_is_production() else 'http://localhost:3000'
             return redirect(f"{frontend_url}/login?error=blocked")
         
-        # Criar sessão (username do cadastro; dados via resolver_storage_username nos models)
+        # Sessão sempre na conta canônica (mesma que login/senha com o mesmo e-mail)
         set_usuario_atual(username)
         session_token = criar_sessao(username, duracao_segundos=3600)
 
