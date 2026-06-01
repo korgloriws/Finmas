@@ -74,6 +74,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const invalidarCachesFinanceiros = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['controle-despesas'] })
+    queryClient.invalidateQueries({ queryKey: ['controle-despesas-agregado'] })
+    queryClient.invalidateQueries({ queryKey: ['outros'] })
     queryClient.invalidateQueries({ queryKey: ['receitas-despesas'] })
     queryClient.invalidateQueries({ queryKey: ['outros'] })
     queryClient.invalidateQueries({ queryKey: ['saldo'] })

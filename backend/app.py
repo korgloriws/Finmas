@@ -27,7 +27,7 @@ from models import (
     salvar_receita, carregar_receitas_mes_ano, atualizar_receita, remover_receita,
     adicionar_cartao, atualizar_cartao, remover_cartao, 
     adicionar_outro_gasto, carregar_outros_mes_ano, carregar_outros_por_intervalo,
-    carregar_compras_cartao_por_intervalo, _garantir_lista_registros,
+    carregar_compras_cartao_por_intervalo, _garantir_lista_registros, _serializar_registros_controle,
     obter_despesas_controle_mes, carregar_despesas_diarias_mes_ano,
     atualizar_outro_gasto, remover_outro_gasto, 
     calcular_saldo_mes_ano,
@@ -5401,7 +5401,9 @@ def api_outros():
                 cached = cache.get(key)
                 if cached is not None:
                     return jsonify(cached)
-            outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
+            outros = _serializar_registros_controle(
+                _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
+            )
             if cache and storage:
                 try:
                     cache.set(key, outros, timeout=30)

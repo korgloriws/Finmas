@@ -165,7 +165,7 @@ function ControlePageContent() {
 
   // Dados de abas específicas: sob demanda, com preload leve na aba financeiro.
   const { data: despesasMes } = useQuery({
-    queryKey: ['controle-despesas', user, filtroMes, filtroAno],
+    queryKey: ['controle-despesas-agregado', user, filtroMes, filtroAno],
     queryFn: ({ signal }) => fetchDespesasControleComFallback(filtroMes, filtroAno, { signal }),
     enabled: !!user && (abaAtiva === 'despesas' || (abaAtiva === 'financeiro' && carregarDadosSecundarios)),
     retry: 2,

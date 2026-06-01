@@ -537,6 +537,26 @@ const asNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
+/** Normaliza linha de outros_gastos vinda do SQLite/pandas para o frontend. */
+export const normalizarOutroGasto = (row: unknown): OutroGasto => {
+  const r = asObject(row as Record<string, unknown>, {} as Record<string, unknown>)
+  const dataRaw = String(r.data ?? '').trim()
+  const data = dataRaw.includes('T') ? dataRaw.split('T')[0]! : dataRaw
+  return {
+    id: asNumber(r.id, 0),
+    nome: String(r.nome ?? '').trim(),
+    valor: asNumber(r.valor, 0),
+    data,
+    categoria: r.categoria != null ? String(r.categoria) : undefined,
+    tipo: r.tipo != null ? String(r.tipo) : undefined,
+    recorrencia: r.recorrencia != null ? String(r.recorrencia) : undefined,
+    parcelas_total: r.parcelas_total != null ? asNumber(r.parcelas_total) : undefined,
+    parcela_atual: r.parcela_atual != null ? asNumber(r.parcela_atual) : undefined,
+    grupo_parcela: r.grupo_parcela != null ? String(r.grupo_parcela) : undefined,
+    observacao: r.observacao != null ? String(r.observacao) : undefined,
+  }
+}
+
 export const carteiraService = {
 
   getCarteira: async (): Promise<AtivoCarteira[]> => {
@@ -1106,8 +1126,8 @@ export const controleService = {
 
   getOutros: async (mes?: string, ano?: string, options?: { signal?: AbortSignal }): Promise<OutroGasto[]> => {
     const params = new URLSearchParams()
-    if (mes) params.append('mes', mes)
-    if (ano) params.append('ano', ano)
+    if (mes) params.append('mes', String(mes).padStart(2, '0'))
+    if (ano) params.append('ano', String(ano))
     
     const response = await api.get(`/controle/outros?${params.toString()}`, {
       signal: options?.signal,
@@ -1117,11 +1137,15 @@ export const controleService = {
     if (payload && typeof payload === 'object' && !Array.isArray(payload) && (payload as Record<string, unknown>).error) {
       throw new Error(String((payload as Record<string, unknown>).error))
     }
-    if (Array.isArray(payload)) return payload as OutroGasto[]
-    if (Array.isArray(payload?.registros)) return payload.registros as OutroGasto[]
-    if (Array.isArray(payload?.outros)) return payload.outros as OutroGasto[]
-    if (Array.isArray(payload?.outros?.registros)) return payload.outros.registros as OutroGasto[]
-    return []
+    let rows: unknown[] = []
+    if (Array.isArray(payload)) rows = payload
+    else if (Array.isArray((payload as Record<string, unknown>)?.registros)) rows = (payload as Record<string, unknown>).registros as unknown[]
+    else if (Array.isArray((payload as Record<string, unknown>)?.outros)) rows = (payload as Record<string, unknown>).outros as unknown[]
+    else {
+      const outrosBloco = asObject((payload as Record<string, unknown>)?.outros, {} as Record<string, unknown>)
+      if (Array.isArray(outrosBloco.registros)) rows = outrosBloco.registros as unknown[]
+    }
+    return rows.map(normalizarOutroGasto).filter((r) => r.id > 0 || r.nome.length > 0)
   },
 
   getDespesas: async (

@@ -8697,6 +8697,29 @@ def _garantir_lista_registros(valor):
     return valor if isinstance(valor, list) else []
 
 
+def _serializar_registros_controle(registros):
+    """Converte tipos numpy/pandas para JSON nativo (evita lista vazia no frontend)."""
+    saida = []
+    for row in _garantir_lista_registros(registros):
+        if not isinstance(row, dict):
+            continue
+        item = {}
+        for chave, val in row.items():
+            if val is None:
+                item[chave] = None
+            elif hasattr(val, 'item'):
+                try:
+                    item[chave] = val.item()
+                except Exception:
+                    item[chave] = val
+            elif isinstance(val, float) and (val != val):
+                item[chave] = 0
+            else:
+                item[chave] = val
+        saida.append(item)
+    return saida
+
+
 def carregar_outros_mes_ano(mes, ano, usuario=None):
     
     usuario = _usuario_para_dados(usuario)

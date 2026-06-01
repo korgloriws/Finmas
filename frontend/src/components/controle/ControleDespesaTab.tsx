@@ -6,12 +6,7 @@ import {
   Trash2, DollarSign, TrendingDown, BarChart3,
   TrendingUp, Edit, Save, X, Plus, Calendar,
 } from 'lucide-react'
-import {
-  controleService,
-  homeService,
-  despesasFromHomeResumo,
-  normalizarDespesasControle,
-} from '../../services/api'
+import { controleService, homeService, normalizarOutroGasto } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { corParaFillGrafico } from '../../utils/controleCorUtils'
@@ -74,41 +69,25 @@ export default function ControleDespesaTab({
 
   const queryClient = useQueryClient()
 
-  // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
-  const { data: despesasMes, isLoading: loadingOutros, isError: despesasErro } = useQuery({
-    queryKey: ['controle-despesas', user, filtroMes, filtroAno],
+  // Mesma chave/padrão da aba Receitas — evita colisão com controle-despesas da página Financeiro
+  const { data: outros, isLoading: loadingOutros, isError: despesasErro } = useQuery<OutroGasto[]>({
+    queryKey: ['outros', user, filtroMes, filtroAno],
     queryFn: async () => {
-      const mes = String(filtroMes).padStart(2, '0')
-      const ano = String(filtroAno)
+      const diretos = await controleService.getOutros(filtroMes, filtroAno)
+      if (Array.isArray(diretos) && diretos.length > 0) return diretos
 
-      const outrosDiretos = await controleService.getOutros(mes, ano)
-      if (Array.isArray(outrosDiretos) && outrosDiretos.length > 0) {
-        const total_outros = outrosDiretos.reduce((s, o) => s + Number(o.valor || 0), 0)
-        return normalizarDespesasControle(
-          {
-            mes,
-            ano,
-            outros: outrosDiretos,
-            cartoes: [],
-            total_outros,
-            total_cartoes: 0,
-            total_marmitas: 0,
-            total_despesas: total_outros,
-          },
-          mes,
-          ano
-        )
-      }
-
-      const resumo = await homeService.getResumo(mes, ano)
-      return despesasFromHomeResumo(resumo, mes, ano)
+      const resumo = await homeService.getResumo(filtroMes, filtroAno)
+      const registrosResumo = Array.isArray(resumo?.outros?.registros) ? resumo.outros.registros : []
+      return registrosResumo.map(normalizarOutroGasto)
     },
     enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    staleTime: 0,
   })
 
-  const outros = despesasMes?.outros
+  const outrosSafe = Array.isArray(outros) ? outros : []
 
   
 
@@ -118,8 +97,8 @@ export default function ControleDespesaTab({
       controleService.adicionarOutro(nome, valor, opts),
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
       limparFormulario()
@@ -131,8 +110,8 @@ export default function ControleDespesaTab({
       controleService.atualizarOutro(id, nome, valor, opts),
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
@@ -142,8 +121,8 @@ export default function ControleDespesaTab({
     mutationFn: controleService.removerOutro,
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
-      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
     },
@@ -285,16 +264,15 @@ export default function ControleDespesaTab({
   }, [editingDespesaId, editDespesaNome, editDespesaValor, editDespesaData, editDespesaCategoria, editDespesaTipo, editDespesaObservacao, atualizarOutroMutation])
 
   
-  const despesasUnificadas = useMemo(() => {
-    const outrosArray = Array.isArray(outros) ? outros : []
-    
-    return outrosArray.map(item => ({ ...item, fonte: 'outro' as const }))
-  }, [outros])
+  const despesasUnificadas = useMemo(
+    () => outrosSafe.map((item) => ({ ...item, fonte: 'outro' as const })),
+    [outrosSafe]
+  )
 
-  // Cálculos
-  const totalDespesas =
-    despesasMes?.total_despesas ??
-    despesasUnificadas.reduce((total, despesa) => total + Number(despesa.valor || 0), 0)
+  const totalDespesas = despesasUnificadas.reduce(
+    (total, despesa) => total + Number(despesa.valor || 0),
+    0
+  )
   const totalDespesasCount = despesasUnificadas.length
   const despesasPagas = despesasUnificadas.length
   const despesasNaoPagas = 0
