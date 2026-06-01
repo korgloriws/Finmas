@@ -50,6 +50,7 @@ from models import (
     usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
     buscar_usuario_por_email, criar_usuario_google, vincular_email_usuario,
     resolver_storage_username, canonical_account_username, atualizar_email_conta,
+    limpar_pastas_orfas_usuarios,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -195,6 +196,16 @@ try:
 except Exception as _e_wal:
     try:
         print(f"[WAL] warn no startup: {_e_wal}")
+    except Exception:
+        pass
+
+try:
+    n_orfas = limpar_pastas_orfas_usuarios()
+    if n_orfas:
+        print(f"[orphan] {n_orfas} pasta(s) órfã(s) removida(s) no startup")
+except Exception as _e_orphan:
+    try:
+        print(f"[orphan] aviso ao limpar pastas órfãs: {_e_orphan}")
     except Exception:
         pass
 
@@ -757,7 +768,11 @@ def api_excluir_conta():
             return jsonify({"error": "Confirmação inválida. Digite 'EXCLUIR' para confirmar"}), 400
         
         if excluir_conta_usuario(usuario):
-            # Fazer logout
+            try:
+                if cache:
+                    cache.clear()
+            except Exception:
+                pass
             invalidar_sessao(request.cookies.get('session_token'))
             return jsonify({"message": "Conta excluída com sucesso"}), 200
         return jsonify({"error": "Erro ao excluir conta"}), 500
@@ -815,6 +830,11 @@ def api_excluir_usuario(username):
         # Excluir usuário
         resultado = excluir_conta_usuario(username)
         if resultado:
+            try:
+                if cache:
+                    cache.clear()
+            except Exception:
+                pass
             print(f"[ADMIN] Usuário {username} excluído com sucesso")
             return jsonify({"message": f"Usuário {username} excluído com sucesso"}), 200
         else:

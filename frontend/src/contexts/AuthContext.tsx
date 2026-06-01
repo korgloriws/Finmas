@@ -86,7 +86,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const response = await api.get('/auth/usuario-atual')
 
       if (response.data.username) {
-        setUser(response.data.username)
+        const nextUser = response.data.username
+        setUser((prev) => {
+          if (prev && prev !== nextUser) {
+            try {
+              queryClient.clear()
+            } catch {
+              /* ignore */
+            }
+          }
+          return nextUser
+        })
         setUserRole(response.data.role || 'usuario')
         setAllowedScreens(response.data.allowed_screens ?? null)
         invalidarCachesFinanceiros()
@@ -131,6 +141,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       
       if (response.data.username) {
+        try {
+          queryClient.clear()
+        } catch {
+          /* ignore */
+        }
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
         await checkCurrentUser()

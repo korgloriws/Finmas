@@ -8,6 +8,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import os
+import shutil
 import json
 import secrets
 import re
@@ -1060,6 +1061,34 @@ def criar_sessao(username: str, duracao_segundos: int = 3600) -> str:
         finally:
             conn.close()
 
+def invalidar_sessoes_usuario(username: str) -> None:
+    """Remove todas as sessões de um usuário (exclusão de conta / admin)."""
+    if not username or not str(username).strip():
+        return
+    u = str(username).strip()
+    try:
+        _create_sessions_table_if_needed()
+        if _is_postgres():
+            conn = _get_pg_conn()
+            try:
+                with conn.cursor() as c:
+                    c.execute('DELETE FROM public.sessoes WHERE username = %s', (u,))
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+            try:
+                c = conn.cursor()
+                c.execute('DELETE FROM sessoes WHERE username = ?', (u,))
+                conn.commit()
+            finally:
+                conn.close()
+        print(f"[SEGURANÇA] Sessões removidas para usuário: {u}")
+    except Exception as e:
+        print(f"[AVISO] Erro ao invalidar sessões de {u}: {e}")
+
+
 def invalidar_sessao(token: str) -> None:
     try:
         if _is_postgres():
@@ -1456,8 +1485,8 @@ def atualizar_email_conta(username, email):
 
 def canonical_account_username(username, email=None):
     """
-    Username de sessão unificado: login Google usa a MESMA conta que já tem dados
-    (por e-mail ou pasta com registros), nunca uma conta vazia paralela.
+    Unifica sessão apenas entre cadastros ATIVOS com o mesmo e-mail no auth.
+    Não reutiliza pastas/schemas de contas excluídas (órfãos).
     """
     if not username:
         return username
@@ -1471,29 +1500,33 @@ def canonical_account_username(username, email=None):
         email_eff = (perfil.get('email') or '').strip()
 
     if email_eff:
-        by_email = buscar_usuario_por_email(email_eff)
-        if by_email and by_email.get('username'):
-            canonical = str(by_email['username']).strip()
+        candidatos = listar_usuarios_por_email(email_eff)
+        if len(candidatos) == 1:
+            canonical = str(candidatos[0]['username']).strip()
             if canonical.lower() != user.lower():
-                print(f"[canonical_user] {user} -> {canonical} (mesmo e-mail)")
+                print(f"[canonical_user] {user} -> {canonical} (único cadastro com este e-mail)")
             return canonical
+        if len(candidatos) > 1:
+            escolhido = _escolher_usuario_com_dados(candidatos)
+            if escolhido and escolhido.get('username'):
+                canonical = str(escolhido['username']).strip()
+                if canonical.lower() != user.lower():
+                    print(f"[canonical_user] {user} -> {canonical} (e-mail em mais de um cadastro)")
+                return canonical
 
-    storage = resolver_storage_username(user, email=email_eff or None)
+    storage = resolver_storage_username(user)
     if storage and storage.lower() != user.lower():
-        alt = buscar_usuario_por_username(storage)
-        if alt and alt.get('username'):
-            canonical = str(alt['username']).strip()
-            print(f"[canonical_user] {user} -> {canonical} (dados em outra conta)")
-            return canonical
-
+        reg = buscar_usuario_por_username(storage)
+        if reg and (reg.get('username') or '').lower() == user.lower():
+            return str(reg['username']).strip()
     return user
 
 
 def resolver_storage_username(username, email=None):
     """
-    Resolve o identificador de armazenamento dos dados do usuário.
-    - Case-insensitive (Mateus vs mateus)
-    - Mesmo e-mail em outra conta (Google vs login/senha com pastas diferentes)
+    Pasta/schema de dados do próprio username (case-insensitive).
+    Não redireciona para outra conta nem pasta órfã de usuário excluído.
+    O parâmetro email é ignorado (mantido por compatibilidade de chamadas).
     """
     if not username:
         return username
@@ -1501,51 +1534,18 @@ def resolver_storage_username(username, email=None):
     if not usuario:
         return usuario
     if _is_postgres():
-        if _pg_controle_tem_registros(usuario):
-            return usuario
-        email_eff = (email or '').strip()
-        if not email_eff:
-            perfil = obter_perfil_usuario(usuario) or {}
-            email_eff = (perfil.get('email') or '').strip()
-        if email_eff:
-            vinculado = buscar_usuario_por_email(email_eff)
-            alt_user = (vinculado or {}).get('username')
-            if alt_user and alt_user.lower() != usuario.lower() and _pg_controle_tem_registros(alt_user):
-                print(f"[resolver_storage/pg] {usuario} -> {alt_user} (mesmo e-mail)")
-                return alt_user
         return usuario
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    bancos_root = os.path.join(current_dir, "bancos_usuarios")
+    bancos_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bancos_usuarios")
     if not os.path.isdir(bancos_root):
         return usuario
     key = usuario.lower()
-    resolved = usuario
     for name in os.listdir(bancos_root):
         if name.startswith('_'):
             continue
         full = os.path.join(bancos_root, name)
         if os.path.isdir(full) and name.lower() == key:
-            resolved = name
-            break
-    if _sqlite_controle_tem_registros(resolved):
-        return resolved
-    try:
-        perfil = buscar_usuario_por_username(resolved) or buscar_usuario_por_username(usuario)
-        email_eff = (email or (perfil or {}).get('email') or '').strip()
-        if email_eff:
-            vinculado = buscar_usuario_por_email(email_eff)
-            alt_user = (vinculado or {}).get('username')
-            if alt_user:
-                alt_key = str(alt_user).strip().lower()
-                for name in os.listdir(bancos_root):
-                    if name.startswith('_'):
-                        continue
-                    if name.lower() == alt_key and _sqlite_controle_tem_registros(name):
-                        print(f"[resolver_storage] {usuario} -> {name} (mesmo e-mail)")
-                        return name
-    except Exception as e:
-        print(f"[resolver_storage] aviso ao resolver por e-mail: {e}")
-    return resolved
+            return name
+    return usuario
 
 
 def _usuario_para_dados(usuario=None):
@@ -2278,10 +2278,10 @@ def _escolher_usuario_com_dados(candidatos):
     return candidatos[0]
 
 
-def buscar_usuario_por_email(email):
-    """Busca usuário por email (para Google OAuth) — case-insensitive; prefere conta com dados."""
+def listar_usuarios_por_email(email):
+    """Lista cadastros ativos com o mesmo e-mail (case-insensitive)."""
     if not email or not str(email).strip():
-        return None
+        return []
     email_norm = str(email).strip().lower()
     if _is_postgres():
         conn = _get_pg_conn()
@@ -2294,12 +2294,11 @@ def buscar_usuario_por_email(email):
                     WHERE LOWER(TRIM(COALESCE(email, ''))) = %s
                 ''', (email_norm,))
                 rows = c.fetchall()
-                candidatos = [_usuario_dict_from_row(r) for r in rows]
-                return _escolher_usuario_com_dados(candidatos)
+                return [_usuario_dict_from_row(r) for r in rows]
         finally:
             conn.close()
-    else:
-        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+    conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+    try:
         c = conn.cursor()
         c.execute('''
             SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
@@ -2308,9 +2307,15 @@ def buscar_usuario_por_email(email):
             WHERE LOWER(TRIM(COALESCE(email, ''))) = ?
         ''', (email_norm,))
         rows = c.fetchall()
+        return [_usuario_dict_from_row(r) for r in rows]
+    finally:
         conn.close()
-        candidatos = [_usuario_dict_from_row(r) for r in rows]
-        return _escolher_usuario_com_dados(candidatos)
+
+
+def buscar_usuario_por_email(email):
+    """Busca usuário por email (Google OAuth) — prefere cadastro ativo com dados financeiros."""
+    candidatos = listar_usuarios_por_email(email)
+    return _escolher_usuario_com_dados(candidatos)
 
 def vincular_email_usuario(username, email):
     """Grava e-mail no cadastro existente (login Google em conta criada com senha)."""
@@ -10574,24 +10579,111 @@ def obter_controle_para_admin(target_username, limite=200):
         return {"receitas": [], "cartoes": [], "outros_gastos": []}
 
 
-def excluir_conta_usuario(username):
-    """Exclui a conta do usuário (LGPD)"""
-    if _is_postgres():
-        conn = _get_pg_conn()
+def _bancos_usuarios_root():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "bancos_usuarios")
+
+
+def _pastas_dados_usuario(username):
+    """Pastas SQLite do usuário (case-insensitive)."""
+    if not username:
+        return []
+    root = _bancos_usuarios_root()
+    if not os.path.isdir(root):
+        return []
+    key = str(username).strip().lower()
+    pastas = []
+    for name in os.listdir(root):
+        if name.startswith('_'):
+            continue
+        full = os.path.join(root, name)
+        if os.path.isdir(full) and name.lower() == key:
+            pastas.append(full)
+    return pastas
+
+
+def limpar_pastas_orfas_usuarios():
+    """
+    Remove pastas em bancos_usuarios sem cadastro ativo (contas excluídas
+    antes de apagar dados junto com o usuário).
+    """
+    root = _bancos_usuarios_root()
+    if not os.path.isdir(root):
+        return 0
+    removidas = 0
+    for name in os.listdir(root):
+        if name.startswith('_'):
+            continue
+        full = os.path.join(root, name)
+        if not os.path.isdir(full):
+            continue
+        if buscar_usuario_por_username(name):
+            continue
         try:
-            with conn.cursor() as c:
-                # Excluir usuário
-                c.execute('DELETE FROM public.usuarios WHERE username = %s', (username,))
+            shutil.rmtree(full, ignore_errors=True)
+            print(f"[orphan] pasta órfã removida: {name}")
+            removidas += 1
+        except Exception as e:
+            print(f"[orphan] falha ao remover {name}: {e}")
+    return removidas
+
+
+def apagar_dados_armazenamento_usuario(username):
+    """Remove pasta SQLite ou schema PostgreSQL do usuário (LGPD)."""
+    if not username or not str(username).strip():
+        return False
+    u = str(username).strip()
+    try:
+        if _is_postgres():
+            schema = _pg_schema_for_user(u)
+            conn = _get_pg_conn()
+            try:
+                with conn.cursor() as c:
+                    c.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
                 conn.commit()
+                print(f"[excluir] schema PostgreSQL removido: {schema}")
+            finally:
+                conn.close()
+        for pasta in _pastas_dados_usuario(u):
+            shutil.rmtree(pasta, ignore_errors=True)
+            print(f"[excluir] pasta de dados removida: {pasta}")
+        return True
+    except Exception as e:
+        print(f"[excluir] erro ao apagar dados de {u}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def excluir_conta_usuario(username):
+    """Exclui conta, sessões, cache e todos os dados financeiros (LGPD)."""
+    if not username or not str(username).strip():
+        return False
+    u = str(username).strip()
+    try:
+        invalidar_sessoes_usuario(u)
+        limpar_cache_usuario(u)
+        apagar_dados_armazenamento_usuario(u)
+        if _is_postgres():
+            conn = _get_pg_conn()
+            try:
+                with conn.cursor() as c:
+                    c.execute('DELETE FROM public.usuarios WHERE username = %s', (u,))
+                conn.commit()
+                print(f"[excluir] cadastro removido (PG): {u}")
                 return True
-        finally:
-            conn.close()
-    else:
+            finally:
+                conn.close()
         conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
-        c = conn.cursor()
         try:
-            c.execute('DELETE FROM usuarios WHERE username = ?', (username,))
+            c = conn.cursor()
+            c.execute('DELETE FROM usuarios WHERE username = ?', (u,))
             conn.commit()
+            print(f"[excluir] cadastro removido (SQLite): {u}")
             return True
         finally:
             conn.close()
+    except Exception as e:
+        print(f"[excluir] falha ao excluir conta {u}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
