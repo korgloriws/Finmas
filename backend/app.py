@@ -567,7 +567,8 @@ def api_google_callback():
             except Exception as e:
                 print(f"[GOOGLE OAUTH] Aviso ao vincular email para {username}: {e}")
 
-        storage_user = resolver_storage_username(username)
+        perfil_oauth = obter_perfil_usuario(username) or {}
+        storage_user = resolver_storage_username(username, email=email or perfil_oauth.get('email'))
         if storage_user != username:
             print(f"[GOOGLE OAUTH] Storage resolvido: login={username} dados={storage_user}")
         
@@ -5361,17 +5362,19 @@ def api_outros():
                 return jsonify({"message": "Gasto removido com sucesso"})
             return jsonify({"error": "ID é obrigatório"}), 400
         else:
-            usuario, erro = validar_usuario_autenticado(validar_token=True)
-            if erro:
-                return erro[0], erro[1]
+            usuario = get_usuario_atual()
+            if not usuario:
+                return jsonify({"error": "Não autenticado"}), 401
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
+            perfil = obter_perfil_usuario(usuario) or {}
+            storage = resolver_storage_username(usuario, email=perfil.get('email'))
             if cache and usuario:
-                key = f"outros:{usuario}:{mes or ''}:{ano or ''}"
+                key = f"outros:{usuario}:{storage}:{mes or ''}:{ano or ''}"
                 cached = cache.get(key)
                 if cached is not None:
                     return jsonify(cached)
-            outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+            outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
             if cache and usuario:
                 try:
                     cache.set(key, outros, timeout=30)
@@ -5496,11 +5499,14 @@ def api_controle_despesas():
             if cached_payload is not None:
                 return jsonify(cached_payload)
 
-        payload = obter_despesas_controle_mes(mes, ano)
+        perfil = obter_perfil_usuario(usuario) or {}
+        storage = resolver_storage_username(usuario, email=perfil.get('email'))
+        payload = obter_despesas_controle_mes(mes, ano, usuario=storage)
         payload = {
             **payload,
             'mes': mes,
             'ano': ano,
+            'storage_user': storage,
         }
         try:
             if cache and float(payload.get('total_despesas') or 0) > 0:
@@ -5626,7 +5632,9 @@ def api_receitas_despesas():
             if cached is not None:
                 return jsonify(cached)
         df_receita = carregar_receitas_mes_ano(mes, ano)
-        totais_despesas = obter_despesas_controle_mes(mes, ano)
+        perfil = obter_perfil_usuario(usuario) or {}
+        storage = resolver_storage_username(usuario, email=perfil.get('email'))
+        totais_despesas = obter_despesas_controle_mes(mes, ano, usuario=storage)
         despesas = float(totais_despesas.get('total_despesas') or 0)
         
         total_receita = df_receita["valor"].sum() if not df_receita.empty else 0

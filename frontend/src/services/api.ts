@@ -1319,7 +1319,33 @@ const isAbortError = (err: unknown, signal?: AbortSignal): boolean => {
   )
 }
 
-/** Despesas do mês: endpoint dedicado + fallback home/gastos-categoria e /controle/outros. */
+/** Monta payload de despesas a partir do resumo da Home (mesma fonte dos gráficos que funcionam). */
+export const despesasFromHomeResumo = (resumo: Record<string, any>, mes: string, ano: string): DespesasControlePayload => {
+  const outros = asArray<OutroGasto>(resumo?.outros?.registros)
+  const cartoes = asArray<Record<string, unknown>>(resumo?.cartoes?.registros)
+  const total_outros = asNumber(resumo?.outros?.total, outros.reduce((s, o) => s + asNumber(o.valor, 0), 0))
+  const total_cartoes = asNumber(resumo?.cartoes?.total, cartoes.reduce((s, c) => s + asNumber(c.valor, 0), 0))
+  const total_marmitas = asNumber(resumo?.marmitas?.total, 0)
+  return normalizarDespesasControle(
+    {
+      mes,
+      ano,
+      outros,
+      cartoes,
+      total_outros,
+      total_cartoes,
+      total_marmitas,
+      total_despesas: asNumber(
+        resumo?.total_despesas,
+        total_outros + total_cartoes + total_marmitas
+      ),
+    },
+    mes,
+    ano
+  )
+}
+
+/** Despesas do mês: Home/resumo primeiro (padrão Receitas), depois /controle/despesas e /controle/outros. */
 export async function fetchDespesasControleComFallback(
   mes: string,
   ano: string,
@@ -1328,75 +1354,85 @@ export async function fetchDespesasControleComFallback(
   const mesNorm = String(mes).padStart(2, '0')
   const anoNorm = String(ano)
 
-  const fallbackGastos = async (): Promise<DespesasControlePayload> => {
-    try {
-      const g = await homeService.getGastosCategoria(mesNorm, anoNorm, '1m', { signal: options?.signal })
-      const outros = asArray<OutroGasto>(g.outros)
-      const cartoes = asArray<Record<string, unknown>>(g.cartoes)
-      const total_outros = outros.reduce((s, o) => s + asNumber(o.valor, 0), 0)
-      const total_cartoes = cartoes.reduce((s, c) => s + asNumber(c.valor, 0), 0)
-      return normalizarDespesasControle(
-        {
-          mes: mesNorm,
-          ano: anoNorm,
-          outros,
-          cartoes,
-          total_outros,
-          total_cartoes,
-          total_marmitas: 0,
-          total_despesas: total_outros + total_cartoes,
-        },
-        mesNorm,
-        anoNorm
-      )
-    } catch (err) {
-      if (isAbortError(err, options?.signal)) throw err
-      const outros = await controleService.getOutros(mesNorm, anoNorm, { signal: options?.signal })
-      const total_outros = outros.reduce((s, o) => s + asNumber(o.valor, 0), 0)
-      return normalizarDespesasControle(
-        {
-          mes: mesNorm,
-          ano: anoNorm,
-          outros,
-          cartoes: [],
-          total_outros,
-          total_cartoes: 0,
-          total_marmitas: 0,
-          total_despesas: total_outros,
-        },
-        mesNorm,
-        anoNorm
-      )
-    }
+  const carregarViaResumoHome = async (): Promise<DespesasControlePayload | null> => {
+    const resumo = await homeService.getResumo(mesNorm, anoNorm, { signal: options?.signal })
+    const payload = despesasFromHomeResumo(resumo, mesNorm, anoNorm)
+    return despesasControleTemRegistros(payload) ? payload : null
   }
 
-  const carregarDespesasApi = async (jaRetentou = false): Promise<DespesasControlePayload> => {
-    try {
-      return await controleService.getDespesas(mesNorm, anoNorm, { signal: options?.signal })
-    } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (!jaRetentou && status === 401 && !isAbortError(err, options?.signal)) {
-        await new Promise((r) => setTimeout(r, 450))
-        return carregarDespesasApi(true)
-      }
-      throw err
-    }
+  const carregarViaOutros = async (): Promise<DespesasControlePayload> => {
+    const outros = await controleService.getOutros(mesNorm, anoNorm, { signal: options?.signal })
+    const total_outros = outros.reduce((s, o) => s + asNumber(o.valor, 0), 0)
+    return normalizarDespesasControle(
+      {
+        mes: mesNorm,
+        ano: anoNorm,
+        outros,
+        cartoes: [],
+        total_outros,
+        total_cartoes: 0,
+        total_marmitas: 0,
+        total_despesas: total_outros,
+      },
+      mesNorm,
+      anoNorm
+    )
   }
 
   try {
-    const data = await carregarDespesasApi()
-    if (despesasControleTemRegistros(data)) return data
-    const fb = await fallbackGastos()
-    if (despesasControleTemRegistros(fb)) return fb
-    return data
+    const viaResumo = await carregarViaResumoHome()
+    if (viaResumo) return viaResumo
   } catch (err) {
     if (isAbortError(err, options?.signal)) throw err
-    console.warn('[fetchDespesasControleComFallback] controle/despesas indisponível, usando fallback', err)
-    return fallbackGastos()
+    console.warn('[fetchDespesasControleComFallback] home/resumo indisponível', err)
   }
+
+  try {
+    const data = await controleService.getDespesas(mesNorm, anoNorm, { signal: options?.signal })
+    if (despesasControleTemRegistros(data)) return data
+  } catch (err) {
+    if (isAbortError(err, options?.signal)) throw err
+    console.warn('[fetchDespesasControleComFallback] controle/despesas indisponível', err)
+  }
+
+  try {
+    const viaOutros = await carregarViaOutros()
+    if (despesasControleTemRegistros(viaOutros)) return viaOutros
+  } catch (err) {
+    if (isAbortError(err, options?.signal)) throw err
+  }
+
+  try {
+    const g = await homeService.getGastosCategoria(mesNorm, anoNorm, '1m', { signal: options?.signal })
+    const payload = normalizarDespesasControle(
+      {
+        mes: mesNorm,
+        ano: anoNorm,
+        outros: asArray<OutroGasto>(g.outros),
+        cartoes: asArray<Record<string, unknown>>(g.cartoes),
+        total_outros: asArray<OutroGasto>(g.outros).reduce((s, o) => s + asNumber(o.valor, 0), 0),
+        total_cartoes: asArray<Record<string, unknown>>(g.cartoes).reduce((s, c) => s + asNumber(c.valor, 0), 0),
+        total_marmitas: 0,
+        total_despesas: 0,
+      },
+      mesNorm,
+      anoNorm
+    )
+    payload.total_despesas =
+      payload.total_outros + payload.total_cartoes + payload.total_marmitas
+    if (despesasControleTemRegistros(payload)) return payload
+  } catch (err) {
+    if (isAbortError(err, options?.signal)) throw err
+  }
+
+  return normalizarDespesasControle(
+    { mes: mesNorm, ano: anoNorm, outros: [], cartoes: [], total_outros: 0, total_cartoes: 0, total_marmitas: 0, total_despesas: 0 },
+    mesNorm,
+    anoNorm
+  )
 }
 
-/** Totais receitas x despesas com fallback no resumo da Home (deploy antigo ou cache vazio). */
+
 export async function fetchReceitasDespesasComFallback(
   mes: string,
   ano: string,
@@ -1609,7 +1645,10 @@ const normalizarBlocoResumo = (payload: Record<string, any>, key: string) => {
 
 export const homeService = {
   getResumo: async (mes: string, ano: string, options?: { signal?: AbortSignal }): Promise<any> => {
-    const response = await api.get(`/home/resumo?mes=${mes}&ano=${ano}`, { signal: options?.signal })
+    const response = await api.get(`/home/resumo?mes=${mes}&ano=${ano}`, {
+      signal: options?.signal,
+      headers: { 'X-Priority': 'high' },
+    })
     const raw = response.data
     if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).error) {
       throw new Error(String((raw as Record<string, unknown>).error))

@@ -6,7 +6,13 @@ import {
   Trash2, DollarSign, TrendingDown, BarChart3,
   TrendingUp, Edit, Save, X, Plus, Calendar,
 } from 'lucide-react'
-import { controleService, fetchDespesasControleComFallback } from '../../services/api'
+import {
+  controleService,
+  homeService,
+  fetchDespesasControleComFallback,
+  despesasFromHomeResumo,
+  despesasControleTemRegistros,
+} from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { corParaFillGrafico } from '../../utils/controleCorUtils'
@@ -72,12 +78,25 @@ export default function ControleDespesaTab({
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   const { data: despesasMes, isLoading: loadingOutros, isError: despesasErro } = useQuery({
     queryKey: ['controle-despesas', user, filtroMes, filtroAno],
-    queryFn: ({ signal }) => fetchDespesasControleComFallback(filtroMes, filtroAno, { signal }),
+    queryFn: async ({ signal }) => {
+      const mes = String(filtroMes).padStart(2, '0')
+      const ano = String(filtroAno)
+      try {
+        const resumo = await homeService.getResumo(mes, ano, { signal })
+        const fromResumo = despesasFromHomeResumo(resumo, mes, ano)
+        if (despesasControleTemRegistros(fromResumo)) return fromResumo
+      } catch (err) {
+        const e = err as { code?: string; name?: string }
+        if (signal?.aborted || e?.code === 'ERR_CANCELED' || e?.name === 'AbortError') throw err
+      }
+      return fetchDespesasControleComFallback(mes, ano, { signal })
+    },
     enabled: !!user,
     retry: 2,
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',
-    staleTime: 2 * 60 * 1000,
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   })
 
   const outros = despesasMes?.outros

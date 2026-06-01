@@ -1363,11 +1363,43 @@ def limpar_sessoes_expiradas():
         except Exception:
             pass
 
-def resolver_storage_username(username):
+def _sqlite_controle_tem_registros(folder_name: str) -> bool:
+    """Verifica se a pasta do usuário tem despesas/receitas no controle.db (SQLite local)."""
+    if not folder_name:
+        return False
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(current_dir, "bancos_usuarios", folder_name, "controle.db")
+    if not os.path.isfile(db_path):
+        return False
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        c = conn.cursor()
+        total = 0
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='outros_gastos'")
+        if c.fetchone():
+            c.execute('SELECT COUNT(*) FROM outros_gastos')
+            total += int(c.fetchone()[0] or 0)
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='compras_cartao'")
+        if c.fetchone():
+            c.execute('SELECT COUNT(*) FROM compras_cartao')
+            total += int(c.fetchone()[0] or 0)
+        return total > 0
+    except Exception:
+        return False
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def resolver_storage_username(username, email=None):
     """
     Resolve o identificador de armazenamento dos dados do usuário.
-    Evita conta Google (ex.: mateus) apontar para pasta vazia enquanto os dados
-    estão em outra capitalização (ex.: Mateus) no filesystem local.
+    - Case-insensitive (Mateus vs mateus)
+    - Mesmo e-mail em outra conta (Google vs login/senha com pastas diferentes)
     """
     if not username:
         return username
@@ -1381,13 +1413,41 @@ def resolver_storage_username(username):
     if not os.path.isdir(bancos_root):
         return usuario
     key = usuario.lower()
+    resolved = usuario
     for name in os.listdir(bancos_root):
         if name.startswith('_'):
             continue
         full = os.path.join(bancos_root, name)
         if os.path.isdir(full) and name.lower() == key:
-            return name
-    return usuario
+            resolved = name
+            break
+    if _sqlite_controle_tem_registros(resolved):
+        return resolved
+    try:
+        perfil = buscar_usuario_por_username(resolved) or buscar_usuario_por_username(usuario)
+        email_eff = (email or (perfil or {}).get('email') or '').strip()
+        if email_eff:
+            vinculado = buscar_usuario_por_email(email_eff)
+            alt_user = (vinculado or {}).get('username')
+            if alt_user:
+                alt_key = str(alt_user).strip().lower()
+                for name in os.listdir(bancos_root):
+                    if name.startswith('_'):
+                        continue
+                    if name.lower() == alt_key and _sqlite_controle_tem_registros(name):
+                        print(f"[resolver_storage] {usuario} -> {name} (mesmo e-mail)")
+                        return name
+    except Exception as e:
+        print(f"[resolver_storage] aviso ao resolver por e-mail: {e}")
+    return resolved
+
+
+def _usuario_para_dados(usuario=None):
+    """Usuário da sessão ou explícito, com pasta/schema de dados resolvida."""
+    base = (usuario or get_usuario_atual() or '').strip()
+    if not base:
+        return None
+    return resolver_storage_username(base)
 
 
 def get_db_path(usuario, tipo_db):
@@ -8524,9 +8584,9 @@ def _garantir_lista_registros(valor):
     return valor if isinstance(valor, list) else []
 
 
-def carregar_outros_mes_ano(mes, ano):
+def carregar_outros_mes_ano(mes, ano, usuario=None):
     
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(usuario)
     if not usuario:
         return []
 
@@ -8595,9 +8655,9 @@ def carregar_outros_por_intervalo(mes, ano, qtd_meses=1):
     return df.to_dict('records')
 
 
-def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1):
+def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1, usuario=None):
     """Todas as compras de cartão no intervalo de N meses (terminando em mes/ano)."""
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(usuario)
     if not usuario:
         return []
     inicio, fim = _calcular_intervalo_meses(int(ano), int(mes), int(qtd_meses))
@@ -8629,16 +8689,29 @@ def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1):
     return [dict(zip(columns, row)) for row in results]
 
 
-def obter_despesas_controle_mes(mes, ano):
+def obter_despesas_controle_mes(mes, ano, usuario=None):
     """Agrega despesas do mês: outros_gastos, compras de cartão e marmitas."""
-    outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
-    compras = _garantir_lista_registros(carregar_compras_cartao_por_intervalo(mes, ano, 1))
+    usuario_dados = _usuario_para_dados(usuario)
+    if not usuario_dados:
+        return {
+            'outros': [],
+            'cartoes': [],
+            'total_outros': 0.0,
+            'total_cartoes': 0.0,
+            'total_marmitas': 0.0,
+            'total_despesas': 0.0,
+        }
+    outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, usuario_dados))
+    compras = _garantir_lista_registros(carregar_compras_cartao_por_intervalo(mes, ano, 1, usuario_dados))
     total_outros = sum(float(o.get('valor') or 0) for o in outros)
     total_cartoes = sum(float(c.get('valor') or 0) for c in compras)
     total_marmitas = 0.0
     try:
-        for registro in consultar_marmitas(mes, ano) or []:
-            total_marmitas += float(registro[2] or 0)
+        marmitas_raw = consultar_marmitas(mes, ano)
+        if isinstance(marmitas_raw, list):
+            for registro in marmitas_raw:
+                if isinstance(registro, (list, tuple)) and len(registro) > 2:
+                    total_marmitas += float(registro[2] or 0)
     except Exception:
         pass
     return {
