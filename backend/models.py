@@ -8453,11 +8453,10 @@ def _remover_registro_generico(tabela, id_registro, banco="controle"):
 def remover_receita(id_registro):
     """Remover receita - wrapper para compatibilidade"""
     return _remover_registro_generico("receitas", id_registro, "controle")
-def carregar_receitas_mes_ano(mes, ano, pessoa=None):
-   
-    usuario = get_usuario_atual()
+def carregar_receitas_mes_ano(mes, ano, pessoa=None, usuario=None):
+    usuario = _usuario_para_dados(usuario)
     if not usuario:
-        return {"success": False, "message": "Usuário não autenticado"}
+        return pd.DataFrame()
 
     mes_int = int(mes)
     ano_int = int(ano)

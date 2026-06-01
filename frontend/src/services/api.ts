@@ -1345,7 +1345,7 @@ export const despesasFromHomeResumo = (resumo: Record<string, any>, mes: string,
   )
 }
 
-/** Despesas do mês: Home/resumo primeiro (padrão Receitas), depois /controle/despesas e /controle/outros. */
+/** Despesas do mês: mesmo padrão da aba Receitas — /controle/outros, depois home/resumo. */
 export async function fetchDespesasControleComFallback(
   mes: string,
   ano: string,
@@ -1353,12 +1353,6 @@ export async function fetchDespesasControleComFallback(
 ): Promise<DespesasControlePayload> {
   const mesNorm = String(mes).padStart(2, '0')
   const anoNorm = String(ano)
-
-  const carregarViaResumoHome = async (): Promise<DespesasControlePayload | null> => {
-    const resumo = await homeService.getResumo(mesNorm, anoNorm, { signal: options?.signal })
-    const payload = despesasFromHomeResumo(resumo, mesNorm, anoNorm)
-    return despesasControleTemRegistros(payload) ? payload : null
-  }
 
   const carregarViaOutros = async (): Promise<DespesasControlePayload> => {
     const outros = await controleService.getOutros(mesNorm, anoNorm, { signal: options?.signal })
@@ -1379,6 +1373,20 @@ export async function fetchDespesasControleComFallback(
     )
   }
 
+  const carregarViaResumoHome = async (): Promise<DespesasControlePayload | null> => {
+    const resumo = await homeService.getResumo(mesNorm, anoNorm, { signal: options?.signal })
+    const payload = despesasFromHomeResumo(resumo, mesNorm, anoNorm)
+    return (payload.outros?.length || 0) > 0 ? payload : null
+  }
+
+  try {
+    const viaOutros = await carregarViaOutros()
+    if ((viaOutros.outros?.length || 0) > 0) return viaOutros
+  } catch (err) {
+    if (isAbortError(err, options?.signal)) throw err
+    console.warn('[fetchDespesasControleComFallback] controle/outros indisponível', err)
+  }
+
   try {
     const viaResumo = await carregarViaResumoHome()
     if (viaResumo) return viaResumo
@@ -1389,17 +1397,10 @@ export async function fetchDespesasControleComFallback(
 
   try {
     const data = await controleService.getDespesas(mesNorm, anoNorm, { signal: options?.signal })
-    if (despesasControleTemRegistros(data)) return data
+    if ((data.outros?.length || 0) > 0 || despesasControleTemRegistros(data)) return data
   } catch (err) {
     if (isAbortError(err, options?.signal)) throw err
     console.warn('[fetchDespesasControleComFallback] controle/despesas indisponível', err)
-  }
-
-  try {
-    const viaOutros = await carregarViaOutros()
-    if (despesasControleTemRegistros(viaOutros)) return viaOutros
-  } catch (err) {
-    if (isAbortError(err, options?.signal)) throw err
   }
 
   try {

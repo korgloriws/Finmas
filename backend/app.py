@@ -5298,13 +5298,15 @@ def api_receitas():
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
             usuario = get_usuario_atual()
+            perfil = obter_perfil_usuario(usuario) or {}
+            storage = resolver_storage_username(usuario, email=perfil.get('email'))
             cache_key = None
-            if cache and usuario:
-                cache_key = f"receitas:{usuario}:{mes or ''}:{ano or ''}"
+            if cache and storage:
+                cache_key = f"receitas:{storage}:{mes or ''}:{ano or ''}"
                 cached = cache.get(cache_key)
                 if cached is not None:
                     return jsonify(cached)
-            receitas = carregar_receitas_mes_ano(mes, ano)
+            receitas = carregar_receitas_mes_ano(mes, ano, usuario=storage)
             payload = receitas.to_dict('records') if not receitas.empty else []
             if cache and cache_key:
                 try:
@@ -5394,13 +5396,13 @@ def api_outros():
             ano = request.args.get('ano', type=str)
             perfil = obter_perfil_usuario(usuario) or {}
             storage = resolver_storage_username(usuario, email=perfil.get('email'))
-            if cache and usuario:
-                key = f"outros:{usuario}:{storage}:{mes or ''}:{ano or ''}"
+            if cache and storage:
+                key = f"outros:{storage}:{mes or ''}:{ano or ''}"
                 cached = cache.get(key)
                 if cached is not None:
                     return jsonify(cached)
             outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
-            if cache and usuario:
+            if cache and storage:
                 try:
                     cache.set(key, outros, timeout=30)
                 except Exception:
@@ -5685,10 +5687,13 @@ def api_home_resumo():
         if erro:
             return erro[0], erro[1]
         
+        perfil = obter_perfil_usuario(usuario) or {}
+        storage = resolver_storage_username(usuario, email=perfil.get('email'))
+
         def _cache_key():
             mes_q = request.args.get('mes', type=str) or ''
             ano_q = request.args.get('ano', type=str) or ''
-            return f"home_resumo:{usuario}:{mes_q}:{ano_q}"
+            return f"home_resumo:{usuario}:{storage}:{mes_q}:{ano_q}"
         
         if cache:
             cached_payload = cache.get(_cache_key())
@@ -5710,7 +5715,7 @@ def api_home_resumo():
             ativos_por_tipo[tipo] = ativos_por_tipo.get(tipo, 0) + ativo.get('valor_total', 0)
         
 
-        df_receitas = carregar_receitas_mes_ano(mes, ano)
+        df_receitas = carregar_receitas_mes_ano(mes, ano, usuario=storage)
         receitas = df_receitas.to_dict('records') if not df_receitas.empty else []
         total_receitas = df_receitas['valor'].sum() if not df_receitas.empty else 0
         
@@ -5719,7 +5724,7 @@ def api_home_resumo():
         compras_cartao = carregar_compras_cartao_por_intervalo(mes, ano, 1)
         total_cartoes = sum(float(c.get('valor') or 0) for c in compras_cartao)
         
-        outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+        outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
         total_outros = sum(float(outro.get('valor') or 0) for outro in outros)
         
 
@@ -5740,8 +5745,8 @@ def api_home_resumo():
         saldo = calcular_saldo_mes_ano(mes, ano)
         
   
-        df_receita = carregar_receitas_mes_ano(mes, ano)
-        df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano))
+        df_receita = carregar_receitas_mes_ano(mes, ano, usuario=storage)
+        df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano, storage))
         
        
         if not df_receita.empty:

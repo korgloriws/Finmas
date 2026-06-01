@@ -9,9 +9,8 @@ import {
 import {
   controleService,
   homeService,
-  fetchDespesasControleComFallback,
   despesasFromHomeResumo,
-  despesasControleTemRegistros,
+  normalizarDespesasControle,
 } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
@@ -78,25 +77,35 @@ export default function ControleDespesaTab({
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
   const { data: despesasMes, isLoading: loadingOutros, isError: despesasErro } = useQuery({
     queryKey: ['controle-despesas', user, filtroMes, filtroAno],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       const mes = String(filtroMes).padStart(2, '0')
       const ano = String(filtroAno)
-      try {
-        const resumo = await homeService.getResumo(mes, ano, { signal })
-        const fromResumo = despesasFromHomeResumo(resumo, mes, ano)
-        if (despesasControleTemRegistros(fromResumo)) return fromResumo
-      } catch (err) {
-        const e = err as { code?: string; name?: string }
-        if (signal?.aborted || e?.code === 'ERR_CANCELED' || e?.name === 'AbortError') throw err
+
+      const outrosDiretos = await controleService.getOutros(mes, ano)
+      if (Array.isArray(outrosDiretos) && outrosDiretos.length > 0) {
+        const total_outros = outrosDiretos.reduce((s, o) => s + Number(o.valor || 0), 0)
+        return normalizarDespesasControle(
+          {
+            mes,
+            ano,
+            outros: outrosDiretos,
+            cartoes: [],
+            total_outros,
+            total_cartoes: 0,
+            total_marmitas: 0,
+            total_despesas: total_outros,
+          },
+          mes,
+          ano
+        )
       }
-      return fetchDespesasControleComFallback(mes, ano, { signal })
+
+      const resumo = await homeService.getResumo(mes, ano)
+      return despesasFromHomeResumo(resumo, mes, ano)
     },
     enabled: !!user,
-    retry: 2,
+    retry: 1,
     refetchOnWindowFocus: false,
-    refetchOnMount: 'always',
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
   })
 
   const outros = despesasMes?.outros
