@@ -6,7 +6,7 @@ import {
   Trash2, DollarSign, TrendingDown, BarChart3,
   TrendingUp, Edit, Save, X, Plus, Calendar,
 } from 'lucide-react'
-import { controleService } from '../../services/api'
+import { controleService, fetchDespesasControleComFallback } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatCurrency } from '../../utils/formatters'
 import { corParaFillGrafico } from '../../utils/controleCorUtils'
@@ -70,13 +70,17 @@ export default function ControleDespesaTab({
   const queryClient = useQueryClient()
 
   // SEGURANCA: Incluir user em todas as queryKeys para isolamento entre usuários
-  const { data: outros, isLoading: loadingOutros } = useQuery<OutroGasto[]>({
-    queryKey: ['outros', user, filtroMes, filtroAno],
-    queryFn: () => controleService.getOutros(filtroMes, filtroAno),
+  const { data: despesasMes, isLoading: loadingOutros, isError: despesasErro } = useQuery({
+    queryKey: ['controle-despesas', user, filtroMes, filtroAno],
+    queryFn: ({ signal }) => fetchDespesasControleComFallback(filtroMes, filtroAno, { signal }),
     enabled: !!user,
-    retry: 1,
+    retry: 2,
     refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    staleTime: 2 * 60 * 1000,
   })
+
+  const outros = despesasMes?.outros
 
   
 
@@ -86,6 +90,7 @@ export default function ControleDespesaTab({
       controleService.adicionarOutro(nome, valor, opts),
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
@@ -98,6 +103,7 @@ export default function ControleDespesaTab({
       controleService.atualizarOutro(id, nome, valor, opts),
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
@@ -108,6 +114,7 @@ export default function ControleDespesaTab({
     mutationFn: controleService.removerOutro,
     onSuccess: () => {
       // SEGURANCA: Incluir user na invalidação para garantir isolamento
+      queryClient.invalidateQueries({ queryKey: ['controle-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['outros', user] })
       queryClient.invalidateQueries({ queryKey: ['receitas-despesas', user] })
       queryClient.invalidateQueries({ queryKey: ['saldo', user] })
@@ -257,7 +264,9 @@ export default function ControleDespesaTab({
   }, [outros])
 
   // Cálculos
-  const totalDespesas = despesasUnificadas.reduce((total, despesa) => total + despesa.valor, 0)
+  const totalDespesas =
+    despesasMes?.total_despesas ??
+    despesasUnificadas.reduce((total, despesa) => total + Number(despesa.valor || 0), 0)
   const totalDespesasCount = despesasUnificadas.length
   const despesasPagas = despesasUnificadas.length
   const despesasNaoPagas = 0
@@ -674,7 +683,9 @@ export default function ControleDespesaTab({
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-8">
-              Nenhuma despesa encontrada para o período selecionado.
+              {despesasErro
+                ? 'Não foi possível carregar as despesas. Tente recarregar a página.'
+                : 'Nenhuma despesa encontrada para o período selecionado.'}
             </div>
           )}
         </motion.div>

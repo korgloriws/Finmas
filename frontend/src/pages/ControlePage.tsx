@@ -9,7 +9,13 @@ import {
   ArrowUpRight, ArrowDownRight,
   ChefHat, CreditCard, Target, Calendar
 } from 'lucide-react'
-import { controleService, cartaoService, marmitasService } from '../services/api'
+import {
+  controleService,
+  cartaoService,
+  marmitasService,
+  fetchDespesasControleComFallback,
+  fetchReceitasDespesasComFallback,
+} from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import HelpTips from '../components/HelpTips'
 // Lazy loading dos componentes de controle
@@ -118,7 +124,7 @@ function ControlePageContent() {
   // O cancelamento por NavigationGuard funciona normalmente em cada um.
   const { data: receitasDespesas } = useQuery<ReceitasDespesas>({
     queryKey: ['receitas-despesas', user, filtroMes, filtroAno],
-    queryFn: () => controleService.getReceitasDespesas(filtroMes, filtroAno),
+    queryFn: ({ signal }) => fetchReceitasDespesasComFallback(filtroMes, filtroAno, { signal }),
     enabled: !!user && abaAtiva === 'financeiro',
     retry: 1,
     refetchOnWindowFocus: false,
@@ -158,14 +164,17 @@ function ControlePageContent() {
   })
 
   // Dados de abas específicas: sob demanda, com preload leve na aba financeiro.
-  const { data: outros } = useQuery({
-    queryKey: ['outros', user, filtroMes, filtroAno],
-    queryFn: () => controleService.getOutros(filtroMes, filtroAno),
+  const { data: despesasMes } = useQuery({
+    queryKey: ['controle-despesas', user, filtroMes, filtroAno],
+    queryFn: ({ signal }) => fetchDespesasControleComFallback(filtroMes, filtroAno, { signal }),
     enabled: !!user && (abaAtiva === 'despesas' || (abaAtiva === 'financeiro' && carregarDadosSecundarios)),
-    retry: 1,
+    retry: 2,
     refetchOnWindowFocus: false,
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    refetchOnMount: abaAtiva === 'despesas' ? 'always' : false,
+    staleTime: 2 * 60 * 1000,
   })
+
+  const outros = despesasMes?.outros
 
   const { data: cartoes } = useQuery({
     queryKey: ['cartoes-cadastrados', user, filtroMes, filtroAno],
@@ -227,25 +236,41 @@ function ControlePageContent() {
   // Unificar despesas de diferentes fontes
   const despesasUnificadas = useMemo(() => {
     const outrosArray = Array.isArray(outros) ? outros : []
-    const cartoesArray = Array.isArray(cartoes) ? cartoes : []
-    
-    // Converter cartões para formato de despesa
-    const despesasCartoes = cartoesArray.map(cartao => ({
-      id: cartao.id,
-      nome: cartao.nome,
-      valor: (cartao as any).total_compras || 0,
-      categoria: 'cartao',
-      tipo: 'variavel',
-      data: new Date().toISOString().split('T')[0],
-      observacao: `Cartão ${cartao.nome}`,
-      fonte: 'cartao' as const
+    const comprasCartao = Array.isArray(despesasMes?.cartoes) ? despesasMes!.cartoes : []
+
+    const despesasCompras = comprasCartao.map((compra, idx) => ({
+      id: Number(compra.id) || -(idx + 1),
+      nome: String(compra.nome || compra.descricao || 'Compra no cartão'),
+      valor: Number(compra.valor) || 0,
+      categoria: String(compra.categoria || 'cartao'),
+      tipo: String(compra.tipo || 'variavel'),
+      data: String(compra.data || new Date().toISOString().split('T')[0]),
+      observacao: compra.observacao ? String(compra.observacao) : undefined,
+      fonte: 'cartao' as const,
     }))
-    
+
+    const cartoesArray = Array.isArray(cartoes) ? cartoes : []
+    const despesasCartoesCadastro = cartoesArray
+      .filter((cartao) => (cartao as { total_compras?: number }).total_compras)
+      .map((cartao) => ({
+        id: cartao.id,
+        nome: cartao.nome,
+        valor: (cartao as { total_compras?: number }).total_compras || 0,
+        categoria: 'cartao',
+        tipo: 'variavel',
+        data: new Date().toISOString().split('T')[0],
+        observacao: `Cartão ${cartao.nome}`,
+        fonte: 'cartao' as const,
+      }))
+
+    const despesasCartoes =
+      despesasCompras.length > 0 ? despesasCompras : despesasCartoesCadastro
+
     return [
-      ...outrosArray.map(item => ({ ...item, fonte: 'outro' as const })),
-      ...despesasCartoes
+      ...outrosArray.map((item) => ({ ...item, fonte: 'outro' as const })),
+      ...despesasCartoes,
     ]
-  }, [outros, cartoes])
+  }, [outros, despesasMes, cartoes])
 
 
   const totaisPorCategoria = useMemo(() => {

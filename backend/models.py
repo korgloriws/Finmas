@@ -8546,6 +8546,50 @@ def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1):
     return [dict(zip(columns, row)) for row in results]
 
 
+def obter_despesas_controle_mes(mes, ano):
+    """Agrega despesas do mês: outros_gastos, compras de cartão e marmitas."""
+    outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+    compras = _garantir_lista_registros(carregar_compras_cartao_por_intervalo(mes, ano, 1))
+    total_outros = sum(float(o.get('valor') or 0) for o in outros)
+    total_cartoes = sum(float(c.get('valor') or 0) for c in compras)
+    total_marmitas = 0.0
+    try:
+        for registro in consultar_marmitas(mes, ano) or []:
+            total_marmitas += float(registro[2] or 0)
+    except Exception:
+        pass
+    return {
+        'outros': outros,
+        'cartoes': compras,
+        'total_outros': float(total_outros),
+        'total_cartoes': float(total_cartoes),
+        'total_marmitas': float(total_marmitas),
+        'total_despesas': float(total_outros + total_cartoes + total_marmitas),
+    }
+
+
+def carregar_despesas_diarias_mes_ano(mes, ano):
+    """Soma diária de todas as fontes de despesa (outros, cartão, marmitas)."""
+    rows = []
+    for o in _garantir_lista_registros(carregar_outros_mes_ano(mes, ano)):
+        if o.get('data'):
+            rows.append({'data': o['data'], 'valor': float(o.get('valor') or 0)})
+    for c in _garantir_lista_registros(carregar_compras_cartao_por_intervalo(mes, ano, 1)):
+        if c.get('data'):
+            rows.append({'data': c['data'], 'valor': float(c.get('valor') or 0)})
+    try:
+        for registro in consultar_marmitas(mes, ano) or []:
+            if registro[1]:
+                rows.append({'data': registro[1], 'valor': float(registro[2] or 0)})
+    except Exception:
+        pass
+    if not rows:
+        return pd.DataFrame(columns=['data', 'valor'])
+    df = pd.DataFrame(rows)
+    df['data'] = pd.to_datetime(df['data'])
+    return df.groupby('data', as_index=False)['valor'].sum()
+
+
 def atualizar_outro_gasto(id_registro, nome=None, valor=None, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
     
     usuario = get_usuario_atual()
@@ -8957,8 +9001,12 @@ def calcular_saldo_mes_ano(mes, ano, pessoa=None):
         conn.close()
 
     total_receitas = float(df_receitas['total'].iloc[0]) if not df_receitas.empty and df_receitas['total'].iloc[0] is not None else 0.0
-    total_outros = float(df_outros['valor'].sum()) if not df_outros.empty else 0.0
-    total_despesas = total_outros
+    try:
+        totais = obter_despesas_controle_mes(mes, ano)
+        total_despesas = float(totais.get('total_despesas') or 0)
+    except Exception:
+        total_outros = float(df_outros['valor'].sum()) if not df_outros.empty else 0.0
+        total_despesas = total_outros
     return total_receitas - total_despesas
 
 # ==================== FUNÇÕES DE CARTÕES CADASTRADOS ====================

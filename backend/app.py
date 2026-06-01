@@ -28,6 +28,7 @@ from models import (
     adicionar_cartao, atualizar_cartao, remover_cartao, 
     adicionar_outro_gasto, carregar_outros_mes_ano, carregar_outros_por_intervalo,
     carregar_compras_cartao_por_intervalo, _garantir_lista_registros,
+    obter_despesas_controle_mes, carregar_despesas_diarias_mes_ano,
     atualizar_outro_gasto, remover_outro_gasto, 
     calcular_saldo_mes_ano,
     
@@ -5378,21 +5379,22 @@ def api_outros():
                 return jsonify({"message": "Gasto removido com sucesso"})
             return jsonify({"error": "ID é obrigatório"}), 400
         else:
+            usuario, erro = validar_usuario_autenticado(validar_token=True)
+            if erro:
+                return erro[0], erro[1]
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
-            usuario = get_usuario_atual()
             if cache and usuario:
                 key = f"outros:{usuario}:{mes or ''}:{ano or ''}"
                 cached = cache.get(key)
                 if cached is not None:
                     return jsonify(cached)
-                outros = carregar_outros_mes_ano(mes, ano)
+            outros = _garantir_lista_registros(carregar_outros_mes_ano(mes, ano))
+            if cache and usuario:
                 try:
                     cache.set(key, outros, timeout=30)
                 except Exception:
                     pass
-                return jsonify(outros)
-            outros = carregar_outros_mes_ano(mes, ano)
             return jsonify(outros)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5494,6 +5496,41 @@ def api_total_por_pessoa():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@server.route("/api/controle/despesas", methods=["GET"])
+def api_controle_despesas():
+    try:
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
+        mes = request.args.get('mes', type=str)
+        ano = request.args.get('ano', type=str)
+        if not mes or not ano:
+            return jsonify({"error": "Mês e ano são obrigatórios"}), 400
+
+        cache_key = f"controle_despesas:{usuario}:{mes}:{ano}"
+        if cache:
+            cached_payload = cache.get(cache_key)
+            if cached_payload is not None:
+                return jsonify(cached_payload)
+
+        payload = obter_despesas_controle_mes(mes, ano)
+        payload = {
+            **payload,
+            'mes': mes,
+            'ano': ano,
+        }
+        try:
+            if cache:
+                cache.set(cache_key, payload, timeout=180)
+        except Exception:
+            pass
+        return jsonify(payload)
+    except Exception as e:
+        print(f"Erro na API controle/despesas: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 @server.route("/api/controle/evolucao-financeira", methods=["GET"])
 def api_evolucao_financeira():
   
@@ -5503,7 +5540,6 @@ def api_evolucao_financeira():
         
         
         df_receita = carregar_receitas_mes_ano(mes, ano)
-        df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano))
         
     
         if not df_receita.empty:
@@ -5512,15 +5548,11 @@ def api_evolucao_financeira():
         else:
             df_receita_grouped = pd.DataFrame(columns=["data", "receitas"])
         
-      
-        df_outros["data"] = pd.to_datetime(df_outros["data"]) if not df_outros.empty else pd.Series(dtype='datetime64[ns]')
-        df_outros_ = df_outros[["data", "valor"]] if not df_outros.empty else pd.DataFrame(columns=["data", "valor"])
-        df_despesas = df_outros_ if not df_outros_.empty else pd.DataFrame(columns=["data", "valor"])
-        
+        df_despesas = carregar_despesas_diarias_mes_ano(mes, ano)
         if df_despesas.empty:
-            df_despesas_grouped = pd.DataFrame({"data": [], "despesas": []})
+            df_despesas_grouped = pd.DataFrame(columns=["data", "despesas"])
         else:
-            df_despesas_grouped = df_despesas.groupby("data")["valor"].sum().reset_index(name="despesas")
+            df_despesas_grouped = df_despesas.rename(columns={"valor": "despesas"})
         
 
         dias = pd.date_range(
@@ -5612,11 +5644,8 @@ def api_receitas_despesas():
             if cached is not None:
                 return jsonify(cached)
         df_receita = carregar_receitas_mes_ano(mes, ano)
-        df_outros = pd.DataFrame(carregar_outros_mes_ano(mes, ano))
-        
-        despesas = 0
-        if not df_outros.empty:
-            despesas += df_outros["valor"].sum()
+        totais_despesas = obter_despesas_controle_mes(mes, ano)
+        despesas = float(totais_despesas.get('total_despesas') or 0)
         
         total_receita = df_receita["valor"].sum() if not df_receita.empty else 0
         
