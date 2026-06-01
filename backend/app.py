@@ -586,11 +586,11 @@ def api_google_callback():
         if username != username_antes:
             print(f"[GOOGLE OAUTH] Conta unificada: {username_antes} -> {username}")
 
-        storage_user = resolver_storage_username(username, email=email)
+        from models import _usuario_para_dados, verificar_e_corrigir_bancos_usuario
+        storage_user = _usuario_para_dados(username)
         
         # Verificar e corrigir bancos se necessário
         try:
-            from models import verificar_e_corrigir_bancos_usuario
             verificar_e_corrigir_bancos_usuario(storage_user)
         except Exception as e:
             print(f"Erro ao verificar bancos para {username}: {e}")
@@ -5298,15 +5298,15 @@ def api_receitas():
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
             usuario = get_usuario_atual()
-            perfil = obter_perfil_usuario(usuario) or {}
-            storage = resolver_storage_username(usuario, email=perfil.get('email'))
+            from models import _usuario_para_dados
+            dados_user = _usuario_para_dados(usuario)
             cache_key = None
-            if cache and storage:
-                cache_key = f"receitas:{storage}:{mes or ''}:{ano or ''}"
+            if cache and dados_user:
+                cache_key = f"receitas:{dados_user}:{mes or ''}:{ano or ''}"
                 cached = cache.get(cache_key)
                 if cached is not None:
                     return jsonify(cached)
-            receitas = carregar_receitas_mes_ano(mes, ano, usuario=storage)
+            receitas = carregar_receitas_mes_ano(mes, ano, usuario=dados_user)
             payload = receitas.to_dict('records') if not receitas.empty else []
             if cache and cache_key:
                 try:
@@ -5394,23 +5394,27 @@ def api_outros():
                 return jsonify({"error": "Não autenticado"}), 401
             mes = request.args.get('mes', type=str)
             ano = request.args.get('ano', type=str)
-            perfil = obter_perfil_usuario(usuario) or {}
-            storage = resolver_storage_username(usuario, email=perfil.get('email'))
-            if cache and storage:
-                key = f"outros:{storage}:{mes or ''}:{ano or ''}"
+            from models import _usuario_para_dados
+            dados_user = _usuario_para_dados(usuario)
+            if not dados_user:
+                return jsonify({"error": "Usuário sem dados financeiros"}), 401
+            if cache and dados_user:
+                key = f"outros:{dados_user}:{mes or ''}:{ano or ''}"
                 cached = cache.get(key)
                 if cached is not None:
                     return jsonify(cached)
             outros = _serializar_registros_controle(
-                _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, storage))
+                _garantir_lista_registros(carregar_outros_mes_ano(mes, ano, dados_user))
             )
-            if cache and storage:
+            if cache and dados_user:
                 try:
                     cache.set(key, outros, timeout=30)
                 except Exception:
                     pass
             return jsonify(outros)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -5522,20 +5526,20 @@ def api_controle_despesas():
         if not mes or not ano:
             return jsonify({"error": "Mês e ano são obrigatórios"}), 400
 
-        cache_key = f"controle_despesas:{usuario}:{mes}:{ano}"
+        from models import _usuario_para_dados
+        dados_user = _usuario_para_dados(usuario)
+        cache_key = f"controle_despesas:{dados_user}:{mes}:{ano}"
         if cache:
             cached_payload = cache.get(cache_key)
             if cached_payload is not None:
                 return jsonify(cached_payload)
 
-        perfil = obter_perfil_usuario(usuario) or {}
-        storage = resolver_storage_username(usuario, email=perfil.get('email'))
-        payload = obter_despesas_controle_mes(mes, ano, usuario=storage)
+        payload = obter_despesas_controle_mes(mes, ano, usuario=dados_user)
         payload = {
             **payload,
             'mes': mes,
             'ano': ano,
-            'storage_user': storage,
+            'storage_user': dados_user,
         }
         try:
             if cache and float(payload.get('total_despesas') or 0) > 0:
@@ -5660,10 +5664,10 @@ def api_receitas_despesas():
             cached = cache.get(key)
             if cached is not None:
                 return jsonify(cached)
-        df_receita = carregar_receitas_mes_ano(mes, ano)
-        perfil = obter_perfil_usuario(usuario) or {}
-        storage = resolver_storage_username(usuario, email=perfil.get('email'))
-        totais_despesas = obter_despesas_controle_mes(mes, ano, usuario=storage)
+        from models import _usuario_para_dados
+        dados_user = _usuario_para_dados(usuario)
+        df_receita = carregar_receitas_mes_ano(mes, ano, usuario=dados_user)
+        totais_despesas = obter_despesas_controle_mes(mes, ano, usuario=dados_user)
         despesas = float(totais_despesas.get('total_despesas') or 0)
         
         total_receita = df_receita["valor"].sum() if not df_receita.empty else 0
@@ -5689,8 +5693,8 @@ def api_home_resumo():
         if erro:
             return erro[0], erro[1]
         
-        perfil = obter_perfil_usuario(usuario) or {}
-        storage = resolver_storage_username(usuario, email=perfil.get('email'))
+        from models import _usuario_para_dados
+        storage = _usuario_para_dados(usuario)
 
         def _cache_key():
             mes_q = request.args.get('mes', type=str) or ''

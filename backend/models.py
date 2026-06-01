@@ -1206,7 +1206,20 @@ def get_usuario_atual():
                         atualizar_last_seen(username)
                     except Exception:
                         pass
-                    username = canonical_account_username(username)
+                    perfil_sessao = obter_perfil_usuario(username) or {}
+                    email_sessao = (perfil_sessao.get('email') or '').strip()
+                    username_sessao = username
+                    username = canonical_account_username(username, email_sessao)
+                    if username != username_sessao:
+                        try:
+                            c.execute(
+                                'UPDATE public.sessoes SET username = %s WHERE token = %s',
+                                (username, token),
+                            )
+                            conn.commit()
+                            print(f"[sessao] token unificado: {username_sessao} -> {username}")
+                        except Exception as e:
+                            print(f"[sessao] aviso ao unificar username: {e}")
                     if g is not None:
                         try:
                             setattr(g, "_usuario_atual_cached", username)
@@ -1264,7 +1277,20 @@ def get_usuario_atual():
                     atualizar_last_seen(username)
                 except Exception:
                     pass
-                username = canonical_account_username(username)
+                perfil_sessao = obter_perfil_usuario(username) or {}
+                email_sessao = (perfil_sessao.get('email') or '').strip()
+                username_sessao = username
+                username = canonical_account_username(username, email_sessao)
+                if username != username_sessao:
+                    try:
+                        c.execute(
+                            'UPDATE sessoes SET username = ? WHERE token = ?',
+                            (username, token),
+                        )
+                        conn.commit()
+                        print(f"[sessao] token unificado: {username_sessao} -> {username}")
+                    except Exception as e:
+                        print(f"[sessao] aviso ao unificar username: {e}")
                 if g is not None:
                     try:
                         setattr(g, "_usuario_atual_cached", username)
@@ -1548,13 +1574,39 @@ def resolver_storage_username(username, email=None):
     return usuario
 
 
+def _storage_tem_dados_controle(storage_name: str) -> bool:
+    if not storage_name:
+        return False
+    if _is_postgres():
+        return _pg_controle_tem_registros(storage_name)
+    return _sqlite_controle_tem_registros(storage_name)
+
+
 def _usuario_para_dados(usuario=None):
-    """Usuário da sessão ou explícito, com pasta/schema de dados resolvida."""
+    """
+    Pasta/schema onde estão receitas e outros_gastos.
+    Login Google com conta paralela (mesmo e-mail) usa a pasta que tem dados,
+    apenas entre cadastros ativos em usuarios — nunca pasta órfã.
+    """
     base = (usuario or get_usuario_atual() or '').strip()
     if not base:
         return None
     perfil = obter_perfil_usuario(base) or {}
-    return resolver_storage_username(base, email=perfil.get('email'))
+    email = (perfil.get('email') or '').strip()
+    canonical = canonical_account_username(base, email)
+    storage = resolver_storage_username(canonical)
+    if _storage_tem_dados_controle(storage):
+        return storage
+    if email:
+        candidatos = listar_usuarios_por_email(email)
+        escolhido = _escolher_usuario_com_dados(candidatos) if candidatos else None
+        if escolhido and escolhido.get('username'):
+            alt_storage = resolver_storage_username(str(escolhido['username']).strip())
+            if _storage_tem_dados_controle(alt_storage):
+                if alt_storage.lower() != storage.lower():
+                    print(f"[dados_financeiros] {base} -> pasta {alt_storage} (e-mail {email})")
+                return alt_storage
+    return storage
 
 
 def get_db_path(usuario, tipo_db):
@@ -8431,7 +8483,7 @@ def atualizar_receita(id_registro, nome=None, valor=None, data=None, categoria=N
 
 def _remover_registro_generico(tabela, id_registro, banco="controle"):
     """Função genérica para remover registros de qualquer tabela"""
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(get_usuario_atual())
     if not usuario:
         return {"success": False, "message": "Usuário não autenticado"}
 
@@ -8635,7 +8687,7 @@ def remover_cartao(id_registro):
 
 def adicionar_outro_gasto(nome, valor, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
     
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(get_usuario_atual())
     if not usuario:
         return {"success": False, "message": "Usuário não autenticado"}
 
@@ -8761,7 +8813,7 @@ def carregar_outros_mes_ano(mes, ano, usuario=None):
 
 
 def carregar_outros_por_intervalo(mes, ano, qtd_meses=1):
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(get_usuario_atual())
     if not usuario:
         return []
     inicio, fim = _calcular_intervalo_meses(int(ano), int(mes), int(qtd_meses))
@@ -8884,7 +8936,7 @@ def carregar_despesas_diarias_mes_ano(mes, ano):
 
 def atualizar_outro_gasto(id_registro, nome=None, valor=None, data=None, categoria=None, tipo=None, recorrencia=None, parcelas_total=None, parcela_atual=None, grupo_parcela=None, observacao=None):
     
-    usuario = get_usuario_atual()
+    usuario = _usuario_para_dados(get_usuario_atual())
     if not usuario:
         return {"success": False, "message": "Usuário não autenticado"}
 
