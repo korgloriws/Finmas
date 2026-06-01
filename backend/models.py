@@ -1363,14 +1363,42 @@ def limpar_sessoes_expiradas():
         except Exception:
             pass
 
+def resolver_storage_username(username):
+    """
+    Resolve o identificador de armazenamento dos dados do usuário.
+    Evita conta Google (ex.: mateus) apontar para pasta vazia enquanto os dados
+    estão em outra capitalização (ex.: Mateus) no filesystem local.
+    """
+    if not username:
+        return username
+    usuario = str(username).strip()
+    if not usuario:
+        return usuario
+    if _is_postgres():
+        return usuario
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    bancos_root = os.path.join(current_dir, "bancos_usuarios")
+    if not os.path.isdir(bancos_root):
+        return usuario
+    key = usuario.lower()
+    for name in os.listdir(bancos_root):
+        if name.startswith('_'):
+            continue
+        full = os.path.join(bancos_root, name)
+        if os.path.isdir(full) and name.lower() == key:
+            return name
+    return usuario
+
+
 def get_db_path(usuario, tipo_db):
 
     if not usuario:
         raise ValueError("Usuário não especificado")
-    
+
+    usuario = resolver_storage_username(usuario)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
 
     db_dir = os.path.join(current_dir, "bancos_usuarios", usuario)
     os.makedirs(db_dir, exist_ok=True)
@@ -2058,7 +2086,10 @@ def buscar_usuario_por_username(username):
         return None
 
 def buscar_usuario_por_email(email):
-    """Busca usuário por email (para Google OAuth)"""
+    """Busca usuário por email (para Google OAuth) — comparação case-insensitive."""
+    if not email or not str(email).strip():
+        return None
+    email_norm = str(email).strip().lower()
     if _is_postgres():
         conn = _get_pg_conn()
         try:
@@ -2066,8 +2097,9 @@ def buscar_usuario_por_email(email):
                 c.execute('''
                     SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
                            COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
-                    FROM public.usuarios WHERE email = %s
-                ''', (email,))
+                    FROM public.usuarios
+                    WHERE LOWER(TRIM(COALESCE(email, ''))) = %s
+                ''', (email_norm,))
                 row = c.fetchone()
                 if row:
                     return {
@@ -2091,8 +2123,9 @@ def buscar_usuario_por_email(email):
         c.execute('''
             SELECT id, nome, username, senha_hash, pergunta_seguranca, resposta_seguranca_hash, data_cadastro,
                    COALESCE(role, 'usuario') as role, email, COALESCE(auth_provider, 'proprietario') as auth_provider
-            FROM usuarios WHERE email = ?
-        ''', (email,))
+            FROM usuarios
+            WHERE LOWER(TRIM(COALESCE(email, ''))) = ?
+        ''', (email_norm,))
         row = c.fetchone()
         conn.close()
         if row:
@@ -2110,8 +2143,58 @@ def buscar_usuario_por_email(email):
             }
         return None
 
+def vincular_email_usuario(username, email):
+    """Grava e-mail no cadastro existente (login Google em conta criada com senha)."""
+    if not username or not email or not str(email).strip():
+        return
+    email_val = str(email).strip()
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute(
+                    '''
+                    UPDATE public.usuarios
+                    SET email = %s,
+                        auth_provider = CASE
+                            WHEN COALESCE(auth_provider, 'proprietario') = 'proprietario' THEN 'google'
+                            ELSE auth_provider
+                        END
+                    WHERE username = %s
+                      AND (email IS NULL OR TRIM(COALESCE(email, '')) = '')
+                    ''',
+                    (email_val, username),
+                )
+        finally:
+            conn.close()
+        return
+    conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+    try:
+        c = conn.cursor()
+        c.execute(
+            '''
+            UPDATE usuarios
+            SET email = ?,
+                auth_provider = CASE
+                    WHEN COALESCE(auth_provider, 'proprietario') = 'proprietario' THEN 'google'
+                    ELSE auth_provider
+                END
+            WHERE username = ?
+              AND (email IS NULL OR TRIM(COALESCE(email, '')) = '')
+            ''',
+            (email_val, username),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def criar_usuario_google(nome, email, google_id=None):
     """Cria um novo usuário a partir do login Google. Username será derivado do email."""
+    existente = buscar_usuario_por_email(email)
+    if existente and existente.get('username'):
+        return existente['username']
+
     # Gerar username a partir do email (parte antes do @)
     username_base = email.split('@')[0].lower()
     username = username_base

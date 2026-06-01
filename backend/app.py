@@ -48,7 +48,8 @@ from models import (
     verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
     obter_carteira_para_admin, obter_movimentacoes_para_admin, consultar_marmitas_para_admin, obter_controle_para_admin,
     usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
-    buscar_usuario_por_email, criar_usuario_google,
+    buscar_usuario_por_email, criar_usuario_google, vincular_email_usuario,
+    resolver_storage_username,
     obter_historico_carteira_comparado,
     save_rebalance_config,
     get_rebalance_config,
@@ -249,6 +250,57 @@ def _analise_bump_cancel_generation(user_key: str) -> int:
 _SLOW_REQUEST_THRESHOLD_S = float(os.getenv('SLOW_REQUEST_THRESHOLD', '3.0'))
 
 
+def _finmas_is_production():
+    """Mesma regra do login por senha — Fly.io define FLY_APP_NAME sem ENVIRONMENT."""
+    return bool(os.getenv('FLY_APP_NAME')) or os.getenv('ENVIRONMENT') == 'production'
+
+
+def _finmas_cookie_params():
+    """Parâmetros de cookie de sessão alinhados entre login senha e Google OAuth."""
+    is_production = _finmas_is_production()
+    try:
+        forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+    except Exception:
+        forwarded_proto = ''
+    is_secure_req = False
+    try:
+        is_secure_req = bool(request.is_secure) or (forwarded_proto == 'https')
+    except Exception:
+        is_secure_req = forwarded_proto == 'https'
+    cookie_secure = True if is_secure_req else False
+    try:
+        req_origin = (request.headers.get('Origin') or '').strip().lower()
+        host_url = (request.host_url or '').strip().lower()
+    except Exception:
+        req_origin = ''
+        host_url = ''
+    is_cross_site = bool(req_origin and (req_origin not in host_url))
+    if is_production or is_cross_site:
+        cookie_samesite = 'None'
+        cookie_secure = True
+    else:
+        cookie_samesite = 'Lax'
+    cookie_domain = None
+    if is_production:
+        cookie_domain = os.getenv('COOKIE_DOMAIN', '.finmas.com.br')
+    if cookie_samesite == 'None' and not cookie_secure:
+        cookie_secure = True
+    return cookie_samesite, cookie_secure, cookie_domain
+
+
+def _aplicar_cookie_sessao(response, session_token: str):
+    samesite, secure, domain = _finmas_cookie_params()
+    response.set_cookie(
+        'session_token',
+        session_token,
+        httponly=True,
+        samesite=samesite,
+        secure=secure,
+        domain=domain,
+    )
+    return response
+
+
 @server.before_request
 def _finmas_before_request():
     try:
@@ -360,47 +412,7 @@ def api_login():
                 "role": role
             }), 200)
 
-           
-
-            is_production = bool(os.getenv('FLY_APP_NAME')) or os.getenv('ENVIRONMENT') == 'production'
-            try:
-                forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
-            except Exception:
-                forwarded_proto = ''
-            is_secure_req = False
-            try:
-                is_secure_req = bool(request.is_secure) or (forwarded_proto == 'https')
-            except Exception:
-                is_secure_req = (forwarded_proto == 'https')
-            cookie_secure = True if is_secure_req else False
-            
-            try:
-                req_origin = (request.headers.get('Origin') or '').strip().lower()
-                host_url = (request.host_url or '').strip().lower()
-            except Exception:
-                req_origin = ''
-                host_url = ''
-            is_cross_site = bool(req_origin and (req_origin not in host_url))
-            cookie_samesite = 'None' if (is_production and is_cross_site) else 'Lax'
-
-            if cookie_samesite == 'None' and not cookie_secure:
-                cookie_secure = True
-
-            
-            cookie_domain = None
-            if is_production:
-                # Em produção, compartilhar sessão entre finmas.com.br e www.finmas.com.br
-                # evita perda de sessão no retorno do OAuth por variação de host.
-                cookie_domain = os.getenv('COOKIE_DOMAIN', '.finmas.com.br')
-
-            response.set_cookie(
-                'session_token',
-                session_token,
-                httponly=True,
-                samesite=cookie_samesite,
-                secure=cookie_secure,
-                domain=cookie_domain
-            )
+            _aplicar_cookie_sessao(response, session_token)
             
             return response
         else:
@@ -487,7 +499,7 @@ def api_google_login():
         print(f"[GOOGLE OAUTH] Headers: {dict(request.headers)}")
         
         # Determinar URL de callback baseada no ambiente
-        is_production = os.getenv('ENVIRONMENT') == 'production'
+        is_production = _finmas_is_production()
         
         if is_production:
             # Em produção, usar HTTPS e domínio configurado (backend está no mesmo domínio via Nginx)
@@ -550,62 +562,45 @@ def api_google_callback():
                 pass
         else:
             username = usuario['username']
+            try:
+                vincular_email_usuario(username, email)
+            except Exception as e:
+                print(f"[GOOGLE OAUTH] Aviso ao vincular email para {username}: {e}")
+
+        storage_user = resolver_storage_username(username)
+        if storage_user != username:
+            print(f"[GOOGLE OAUTH] Storage resolvido: login={username} dados={storage_user}")
         
         # Verificar e corrigir bancos se necessário
         try:
             from models import verificar_e_corrigir_bancos_usuario
-            verificar_e_corrigir_bancos_usuario(username)
+            verificar_e_corrigir_bancos_usuario(storage_user)
         except Exception as e:
             print(f"Erro ao verificar bancos para {username}: {e}")
             pass
         
         if usuario_bloqueado(username):
-            is_production = os.getenv('ENVIRONMENT') == 'production'
-            frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br') if is_production else 'http://localhost:3000'
+            frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br') if _finmas_is_production() else 'http://localhost:3000'
             return redirect(f"{frontend_url}/login?error=blocked")
         
-        # Criar sessão
+        # Criar sessão (username do cadastro; dados via resolver_storage_username nos models)
         set_usuario_atual(username)
         session_token = criar_sessao(username, duracao_segundos=3600)
+
+        try:
+            if cache:
+                cache.clear()
+        except Exception:
+            pass
         
         # Obter informações do perfil, incluindo role
         perfil = obter_perfil_usuario(username)
         role = perfil.get('role', 'usuario') if perfil else 'usuario'
         
-        # Determinar se é produção para configurar cookies
-        is_production = os.getenv('ENVIRONMENT') == 'production'
-        try:
-            forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
-        except Exception:
-            forwarded_proto = ''
-        is_secure_req = False
-        try:
-            is_secure_req = bool(request.is_secure) or (forwarded_proto == 'https')
-        except Exception:
-            is_secure_req = (forwarded_proto == 'https')
-        cookie_secure = True if is_secure_req else False
-        
-        try:
-            req_origin = (request.headers.get('Origin') or '').strip().lower()
-            host_url = (request.host_url or '').strip().lower()
-        except Exception:
-            req_origin = ''
-            host_url = ''
-        is_cross_site = bool(req_origin and (req_origin not in host_url))
-        # OAuth callback vem de um provedor externo (Google). Em alguns navegadores,
-        # manter Lax aqui pode atrasar/disputar o envio da sessão no primeiro ciclo.
-        # Para fluxo OAuth em produção, forçamos SameSite=None + Secure.
-        if is_production:
-            cookie_samesite = 'None'
-            cookie_secure = True
-        else:
-            cookie_samesite = 'Lax'
-        
         # Redirecionar para o frontend já autenticado por cookie de sessão.
         # Evita depender de token na URL/query string e elimina race no callback
         # do React que estava exigindo F5 em alguns navegadores.
-        is_production = os.getenv('ENVIRONMENT') == 'production'
-        if is_production:
+        if _finmas_is_production():
             frontend_url = os.getenv('FRONTEND_URL', 'https://finmas.com.br')
         else:
             # Em desenvolvimento, SEMPRE usar porta 3000 (configurada no vite.config.ts)
@@ -622,23 +617,10 @@ def api_google_callback():
         print(f"[GOOGLE OAUTH] ========================================")
         
         # Log para debug (remover em produção se necessário)
-        print(f"[GOOGLE OAUTH] Login bem-sucedido para {username} ({email})")
+        print(f"[GOOGLE OAUTH] Login bem-sucedido para {username} ({email}) storage={storage_user}")
         
         response = redirect(redirect_url)
-        cookie_domain = None
-        if is_production:
-            # Em produção, compartilhar sessão entre finmas.com.br e www.finmas.com.br
-            # evita perda de sessão no retorno do OAuth por variação de host.
-            cookie_domain = os.getenv('COOKIE_DOMAIN', '.finmas.com.br')
-
-        response.set_cookie(
-            'session_token',
-            session_token,
-            httponly=True,
-            samesite=cookie_samesite,
-            secure=cookie_secure,
-            domain=cookie_domain
-        )
+        _aplicar_cookie_sessao(response, session_token)
         
         return response
         
@@ -5521,7 +5503,7 @@ def api_controle_despesas():
             'ano': ano,
         }
         try:
-            if cache:
+            if cache and float(payload.get('total_despesas') or 0) > 0:
                 cache.set(cache_key, payload, timeout=180)
         except Exception:
             pass

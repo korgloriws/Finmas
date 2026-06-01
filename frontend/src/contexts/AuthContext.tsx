@@ -72,6 +72,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     checkCurrentUser()
   }, [])
 
+  const invalidarCachesFinanceiros = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['controle-despesas'] })
+    queryClient.invalidateQueries({ queryKey: ['receitas-despesas'] })
+    queryClient.invalidateQueries({ queryKey: ['outros'] })
+    queryClient.invalidateQueries({ queryKey: ['saldo'] })
+    queryClient.invalidateQueries({ queryKey: ['home-gastos-categoria'] })
+    queryClient.invalidateQueries({ queryKey: ['home-resumo'] })
+  }, [queryClient])
+
   const checkCurrentUser = useCallback(async (): Promise<boolean> => {
     try {
       const response = await api.get('/auth/usuario-atual')
@@ -80,6 +89,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
         setAllowedScreens(response.data.allowed_screens ?? null)
+        invalidarCachesFinanceiros()
         return true
       } else {
         setUser(null)
@@ -95,7 +105,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [invalidarCachesFinanceiros])
 
   const refreshAllowedScreens = useCallback(async () => {
     if (!user) return
@@ -124,6 +134,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(response.data.username)
         setUserRole(response.data.role || 'usuario')
         await checkCurrentUser()
+        invalidarCachesFinanceiros()
       } else {
         throw new Error('Erro no login')
       }

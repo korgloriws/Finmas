@@ -1370,8 +1370,21 @@ export async function fetchDespesasControleComFallback(
     }
   }
 
+  const carregarDespesasApi = async (jaRetentou = false): Promise<DespesasControlePayload> => {
+    try {
+      return await controleService.getDespesas(mesNorm, anoNorm, { signal: options?.signal })
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (!jaRetentou && status === 401 && !isAbortError(err, options?.signal)) {
+        await new Promise((r) => setTimeout(r, 450))
+        return carregarDespesasApi(true)
+      }
+      throw err
+    }
+  }
+
   try {
-    const data = await controleService.getDespesas(mesNorm, anoNorm, { signal: options?.signal })
+    const data = await carregarDespesasApi()
     if (despesasControleTemRegistros(data)) return data
     const fb = await fallbackGastos()
     if (despesasControleTemRegistros(fb)) return fb
