@@ -449,6 +449,11 @@ export default function HomePage() {
 
   const carteiraValorPrecoSeries = useMemo(() => {
     if (!historicoCarteira) return [] as Array<number | null>
+    const priceSeries = (historicoCarteira.carteira_price || []).map((v) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    })
+    if (priceSeries.some((v) => v != null)) return priceSeries
     const valoresAbsolutos = (historicoCarteira.carteira_valor || []).map((v) => {
       const n = Number(v)
       return Number.isFinite(n) && n > 0 ? n : null

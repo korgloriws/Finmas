@@ -395,6 +395,13 @@ export const perfilService = {
     const response = await api.put('/perfil/senha', { senha_atual: senhaAtual, nova_senha: novaSenha })
     return response.data
   },
+
+  atualizarUsername: async (novoUsername: string, senhaAtual?: string) => {
+    const payload: { novo_username: string; senha_atual?: string } = { novo_username: novoUsername }
+    if (senhaAtual) payload.senha_atual = senhaAtual
+    const response = await api.put('/perfil/username', payload)
+    return response.data
+  },
   
   excluirConta: async (confirmacao: string) => {
     const response = await api.delete('/perfil/excluir', { data: { confirmacao } })
@@ -1623,6 +1630,7 @@ export type HistoricoCarteiraPayload = {
   cdi: (number | null)[]
   btc?: (number | null)[]
   carteira_valor: number[]
+  patrimonio_datas?: string[]
   carteira_price?: (number | null)[]
 }
 
@@ -1646,12 +1654,14 @@ export const normalizarHistoricoCarteira = (raw: unknown, periodo = 'mensal'): H
     cdi: asArray<number | null>(payload.cdi),
     btc: asArray<number | null>(payload.btc),
     carteira_valor: asArray<number>(payload.carteira_valor),
+    patrimonio_datas: asArray<string>(payload.patrimonio_datas),
     carteira_price: asArray<number | null>(payload.carteira_price),
   }
 }
 
 export const historicoCarteiraTemPontos = (data?: HistoricoCarteiraPayload | null): boolean => {
   if (!data) return false
+  if ((data.patrimonio_datas?.length || 0) > 0) return true
   if ((data.datas?.length || 0) > 0) return true
   if ((data.carteira_valor || []).some((v) => Number(v) > 0)) return true
   const series = data.carteira_price?.length ? data.carteira_price : data.carteira

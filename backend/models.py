@@ -3290,6 +3290,110 @@ def _obter_taxa_media_historica(indexador, data_inicio):
     except Exception as e:
         print(f"DEBUG: Erro geral ao obter taxa média histórica: {e}")
         return 13.0
+# Cache em memória da série IPCA mensal (BCB 433) para evitar N chamadas ao atualizar carteira.
+_IPCA_MENSAL_BCB_CACHE = {"ts": 0.0, "por_mes": {}}
+
+
+def _mapa_ipca_mensal_bcb():
+    """Retorna dict 'YYYY-MM' -> taxa mensal IPCA (%). Atualiza no máximo a cada hora."""
+    import time
+    from datetime import datetime, timedelta
+
+    global _IPCA_MENSAL_BCB_CACHE
+    agora = time.time()
+    if _IPCA_MENSAL_BCB_CACHE["por_mes"] and agora - _IPCA_MENSAL_BCB_CACHE["ts"] < 3600:
+        return _IPCA_MENSAL_BCB_CACHE["por_mes"]
+
+    data_fim = datetime.now().date()
+    data_inicio = data_fim - timedelta(days=365 * 15)
+    serie = obter_serie_bcb(433, data_inicio, data_fim)
+    por_mes = {}
+    for item in serie:
+        try:
+            partes = (item.get("data") or "").split("/")
+            if len(partes) != 3:
+                continue
+            dia, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
+            chave = f"{ano:04d}-{mes:02d}"
+            por_mes[chave] = float(item["valor"])
+        except (ValueError, TypeError, KeyError):
+            continue
+
+    _IPCA_MENSAL_BCB_CACHE = {"ts": agora, "por_mes": por_mes}
+    return por_mes
+
+
+def _meses_ipca_desde(data_adicao_dt, data_fim=None):
+    """Lista chaves YYYY-MM do mês de aplicação até o mês de referência (inclusive)."""
+    from datetime import datetime
+
+    if data_fim is None:
+        data_fim = datetime.now()
+    if hasattr(data_adicao_dt, "date"):
+        inicio = data_adicao_dt.date()
+    else:
+        inicio = data_adicao_dt
+    if hasattr(data_fim, "date"):
+        fim = data_fim.date()
+    else:
+        fim = data_fim
+
+    meses = []
+    ano, mes = inicio.year, inicio.month
+    while (ano, mes) <= (fim.year, fim.month):
+        meses.append(f"{ano:04d}-{mes:02d}")
+        mes += 1
+        if mes > 12:
+            mes = 1
+            ano += 1
+    return meses
+
+
+def _calcular_fator_ipca_historico(data_adicao_dt, fator_percentual_indexador=1.0, taxa_fixa_mensal_pct=0.0):
+    """
+    Compõe IPCA mês a mês (BCB série 433) desde o mês da aplicação.
+    fator_percentual_indexador: ex. 1.1 para 110% do IPCA.
+    taxa_fixa_mensal_pct: adicional mensal em % (IPCA+).
+    """
+    from datetime import datetime
+
+    mapa = _mapa_ipca_mensal_bcb()
+    meses = _meses_ipca_desde(data_adicao_dt)
+    if not meses:
+        return 1.0
+
+    fator = 1.0
+    meses_usados = 0
+    taxas_usadas = []
+    for chave in meses:
+        ipca_m = mapa.get(chave)
+        if ipca_m is None:
+            continue
+        taxa_mes = ipca_m * fator_percentual_indexador + taxa_fixa_mensal_pct
+        fator *= 1.0 + (taxa_mes / 100.0)
+        meses_usados += 1
+        taxas_usadas.append(ipca_m)
+
+    if meses_usados == 0:
+        ipca_atual = _obter_taxa_atual_indexador("IPCA") or 0.5
+        dias_totais = max((datetime.now() - data_adicao_dt).days, 0)
+        meses_aprox = dias_totais / 30.44
+        taxa_mes = ipca_atual * fator_percentual_indexador + taxa_fixa_mensal_pct
+        fator = (1.0 + taxa_mes / 100.0) ** meses_aprox
+        print(
+            f"DEBUG: IPCA histórico indisponível; fallback último mensal {ipca_atual}% "
+            f"por ~{meses_aprox:.1f} meses | fator={fator:.6f}"
+        )
+        return fator
+
+    ipca_medio = sum(taxas_usadas) / len(taxas_usadas) if taxas_usadas else 0.0
+    print(
+        f"DEBUG: IPCA histórico BCB: {meses_usados} meses | média mensal {ipca_medio:.2f}% | "
+        f"indexador×{fator_percentual_indexador:.2f} | fixa_mensal={taxa_fixa_mensal_pct:.4f}% | fator={fator:.6f}"
+    )
+    return fator
+
+
 def _obter_ipca_medio_historico(data_inicio):
     """Obtém o IPCA médio mensal histórico desde uma data específica"""
     try:
@@ -3549,23 +3653,20 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"DEBUG: CDI+ CDI={taxa_cdi_atual}% + fixa={taxa_fixa_anual}% = {taxa_total_anual}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA":
-            # Para IPCA: usar IPCA atual mensal
-            ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
-            meses_desde_adicao = dias_totais / 30.44
-            taxa_mensal_indexada = ipca_atual_mensal * fator_percentual
-            fator_correcao = (1 + taxa_mensal_indexada / 100) ** meses_desde_adicao
-            
-            print(f"DEBUG: IPCA mensal={ipca_atual_mensal}% | indexada={taxa_mensal_indexada}% | meses={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+            # IPCA: compor cada mês com a série mensal histórica do BCB (433).
+            fator_correcao = _calcular_fator_ipca_historico(
+                data_adicao_dt,
+                fator_percentual_indexador=fator_percentual,
+            )
             
         elif indexador == "IPCA+":
-            # IPCA+: IPCA atual + taxa fixa prefixada
-            ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
-            taxa_fixa_mensal = (indexador_pct or 0) / 12  
-            taxa_mensal_total = ipca_atual_mensal + taxa_fixa_mensal
-            meses_desde_adicao = dias_totais / 30.44
-            fator_correcao = (1 + taxa_mensal_total / 100) ** meses_desde_adicao
-            
-            print(f"DEBUG: IPCA+ IPCA={ipca_atual_mensal}% + fixa_mensal={taxa_fixa_mensal}% = {taxa_mensal_total}% | meses={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+            # IPCA+: IPCA histórico mês a mês + spread fixo anual convertido em adicional mensal.
+            taxa_fixa_mensal = (indexador_pct or 0) / 12.0
+            fator_correcao = _calcular_fator_ipca_historico(
+                data_adicao_dt,
+                fator_percentual_indexador=1.0,
+                taxa_fixa_mensal_pct=taxa_fixa_mensal,
+            )
             
         elif indexador == "PREFIXADO":
 
@@ -4173,6 +4274,10 @@ def atualizar_precos_indicadores_carteira():
                 conn.close()
         
         print(f"DEBUG: Atualização PostgreSQL concluída. {atualizados} ativos atualizados, {len(erros)} erros")
+        try:
+            registrar_snapshot_patrimonio_carteira(usuario)
+        except Exception as snap_err:
+            print(f"[patrimonio] aviso snapshot após atualizar preços: {snap_err}")
         return {"success": True, "updated": atualizados, "errors": erros}
     except Exception as e:
         return {"success": False, "message": f"Erro ao atualizar carteira: {str(e)}"}
@@ -4707,6 +4812,10 @@ def adicionar_ativo_carteira(ticker, quantidade, tipo=None, preco_inicial=None, 
             except Exception as e:
                 print(f"DEBUG: Erro ao atualizar preços após adicionar ativo: {e}")
         
+        try:
+            registrar_snapshot_patrimonio_carteira(usuario)
+        except Exception as snap_err:
+            print(f"[patrimonio] aviso snapshot após adicionar ativo: {snap_err}")
         return {"success": True, "message": mensagem}
     except Exception as e:
         return {"success": False, "message": f"Erro ao adicionar ativo: {str(e)}"}
@@ -4731,9 +4840,14 @@ def remover_ativo_carteira(id):
                     if not resultado_movimentacao["success"]:
                         return resultado_movimentacao
                     cursor.execute('DELETE FROM carteira WHERE id = %s', (id,))
-                return {"success": True, "message": "Ativo removido com sucesso"}
+                conn.commit()
             finally:
                 conn.close()
+            try:
+                registrar_snapshot_patrimonio_carteira(usuario)
+            except Exception as snap_err:
+                print(f"[patrimonio] aviso snapshot após remover ativo: {snap_err}")
+            return {"success": True, "message": "Ativo removido com sucesso"}
         db_path = get_db_path(usuario, "carteira")
         conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         cursor = conn.cursor()
@@ -4757,7 +4871,11 @@ def remover_ativo_carteira(id):
         
         conn.commit()
         conn.close()
-        
+
+        try:
+            registrar_snapshot_patrimonio_carteira(usuario)
+        except Exception as snap_err:
+            print(f"[patrimonio] aviso snapshot após remover ativo: {snap_err}")
         return {"success": True, "message": "Ativo removido com sucesso"}
     except Exception as e:
         return {"success": False, "message": f"Erro ao remover ativo: {str(e)}"}
@@ -4836,9 +4954,13 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
                         except Exception as _:
                             pass
                 conn.commit()
-                return {"success": True, "message": "Ativo atualizado com sucesso"}
             finally:
                 conn.close()
+            try:
+                registrar_snapshot_patrimonio_carteira(usuario)
+            except Exception as snap_err:
+                print(f"[patrimonio] aviso snapshot após atualizar ativo: {snap_err}")
+            return {"success": True, "message": "Ativo atualizado com sucesso"}
         db_path = get_db_path(usuario, "carteira")
         conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         try:
@@ -4914,6 +5036,10 @@ def atualizar_ativo_carteira(id, quantidade=None, preco_atual=None, preco_compra
         finally:
             conn.close()
         
+        try:
+            registrar_snapshot_patrimonio_carteira(usuario)
+        except Exception as snap_err:
+            print(f"[patrimonio] aviso snapshot após atualizar ativo: {snap_err}")
         return {"success": True, "message": "Ativo atualizado com sucesso"}
     except Exception as e:
         return {"success": False, "message": f"Erro ao atualizar ativo: {str(e)}"}
@@ -6431,7 +6557,7 @@ def registrar_movimentacao(data, ticker, nome_completo, quantidade, preco, tipo,
             if should_close and local_conn:
                 local_conn.commit()
                 local_conn.close()
-        
+
         return {"success": True, "message": "Movimentação registrada com sucesso"}
     except Exception as e:
         try:
@@ -6542,6 +6668,162 @@ def obter_data_primeira_compra_por_ticker():
     except Exception as e:
         print(f"Erro ao obter data da primeira compra por ticker: {e}")
         return {}
+
+
+def _ler_snapshots_patrimonio_carteira(usuario=None):
+    """Lê snapshots diários gravados em historico_carteira (valor_total real do banco)."""
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return []
+    try:
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as c:
+                    c.execute(
+                        'SELECT data, valor_total FROM historico_carteira ORDER BY data ASC'
+                    )
+                    rows = c.fetchall()
+            finally:
+                conn.close()
+        else:
+            db_path = get_db_path(usuario, 'carteira')
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+            try:
+                c = conn.cursor()
+                c.execute(
+                    'SELECT data, valor_total FROM historico_carteira ORDER BY data ASC'
+                )
+                rows = c.fetchall()
+            finally:
+                conn.close()
+        out = []
+        for data, valor in rows or []:
+            dt = str(data)[:10]
+            try:
+                out.append((dt, float(valor or 0)))
+            except (TypeError, ValueError):
+                continue
+        return out
+    except Exception as e:
+        print(f"[patrimonio] erro ao ler historico_carteira: {e}")
+        return []
+
+
+def registrar_snapshot_patrimonio_carteira(usuario=None):
+    """Grava snapshot diário do patrimônio (soma valor_total da carteira no banco)."""
+    usuario = usuario or get_usuario_atual()
+    if not usuario:
+        return
+    try:
+        carteira = obter_carteira()
+        if not isinstance(carteira, list):
+            return
+        valor = sum(float(a.get('valor_total') or 0) for a in carteira)
+        hoje = datetime.now().strftime('%Y-%m-%d')
+        if _is_postgres():
+            conn = _pg_conn_for_user(usuario)
+            try:
+                with conn.cursor() as c:
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS historico_carteira (
+                            id SERIAL PRIMARY KEY,
+                            data TEXT NOT NULL,
+                            valor_total NUMERIC NOT NULL
+                        )
+                    ''')
+                    c.execute(
+                        "SELECT id FROM historico_carteira WHERE SUBSTRING(data, 1, 10) = %s LIMIT 1",
+                        (hoje,),
+                    )
+                    row = c.fetchone()
+                    if row:
+                        c.execute(
+                            'UPDATE historico_carteira SET data = %s, valor_total = %s WHERE id = %s',
+                            (hoje, valor, row[0]),
+                        )
+                    else:
+                        c.execute(
+                            'INSERT INTO historico_carteira (data, valor_total) VALUES (%s, %s)',
+                            (hoje, valor),
+                        )
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            db_path = get_db_path(usuario, 'carteira')
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+            try:
+                c = conn.cursor()
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS historico_carteira (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        data TEXT NOT NULL,
+                        valor_total REAL NOT NULL
+                    )
+                ''')
+                c.execute(
+                    "SELECT id FROM historico_carteira WHERE SUBSTR(data, 1, 10) = ? LIMIT 1",
+                    (hoje,),
+                )
+                row = c.fetchone()
+                if row:
+                    c.execute(
+                        'UPDATE historico_carteira SET data = ?, valor_total = ? WHERE id = ?',
+                        (hoje, valor, row[0]),
+                    )
+                else:
+                    c.execute(
+                        'INSERT INTO historico_carteira (data, valor_total) VALUES (?, ?)',
+                        (hoje, valor),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+    except Exception as e:
+        print(f"[patrimonio] erro ao registrar snapshot: {e}")
+
+
+def _obter_patrimonio_historico_banco(usuario, carteira_atual_list, data_ini, data_fim):
+    """
+    Patrimônio histórico fiel ao banco: apenas snapshots gravados (historico_carteira)
+  e o valor atual (soma valor_total da carteira).
+    NÃO usa movimentacoes — esse log mistura compra/venda/atualizado e infla o patrimônio.
+    """
+    from collections import OrderedDict
+
+    merged = OrderedDict()
+    for dt, val in _ler_snapshots_patrimonio_carteira(usuario):
+        merged[str(dt)[:10]] = float(val)
+
+    hoje = datetime.now().strftime('%Y-%m-%d')
+    valor_hoje = sum(float(a.get('valor_total') or 0) for a in (carteira_atual_list or []))
+    if valor_hoje > 0:
+        merged[hoje] = valor_hoje
+
+    if not merged:
+        return [], []
+
+    ini = data_ini.replace(hour=0, minute=0, second=0, microsecond=0) if isinstance(data_ini, datetime) else data_ini
+    fim = data_fim.replace(hour=23, minute=59, second=59, microsecond=999999) if isinstance(data_fim, datetime) else data_fim
+
+    datas = []
+    valores = []
+    for dt, val in sorted(merged.items(), key=lambda x: x[0]):
+        try:
+            d = datetime.strptime(dt[:10], '%Y-%m-%d')
+        except Exception:
+            continue
+        if d < ini or d > fim:
+            continue
+        datas.append(dt[:10])
+        valores.append(float(val))
+
+    if not datas and valor_hoje > 0 and ini <= datetime.now() <= fim:
+        datas = [hoje]
+        valores = [valor_hoje]
+
+    return datas, valores
 
 
 def obter_historico_carteira(periodo='mensal'):
@@ -6664,7 +6946,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
     try:
         usuario = get_usuario_atual()
         if not usuario:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "patrimonio_datas": [], "carteira_price": []}
 
         if _is_postgres():
             conn = _pg_conn_for_user(usuario)
@@ -6753,7 +7035,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         tickers_from_carteira = set(carteira_map.keys())
         tickers = sorted(list(tickers_from_mov | tickers_from_carteira))
         if not tickers:
-            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
+            return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "patrimonio_datas": [], "carteira_price": []}
 
         ticker_to_hist = {}
         
@@ -6860,14 +7142,14 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             else:
                 datas_labels.append(pt.strftime('%Y-%m'))
 
-        if carteira_vals:
-            try:
-                carteira_atual = obter_carteira()
-                if isinstance(carteira_atual, list) and carteira_atual:
-                    valor_real_total = sum(float(a.get('valor_total') or 0) for a in carteira_atual)
-                    carteira_vals[-1] = valor_real_total
-            except Exception:
-                pass
+        try:
+            registrar_snapshot_patrimonio_carteira(usuario)
+        except Exception as snap_err:
+            print(f"[patrimonio] aviso snapshot ao montar histórico: {snap_err}")
+
+        patrimonio_datas, patrimonio_vals = _obter_patrimonio_historico_banco(
+            usuario, carteira_atual_list, data_ini, data_fim
+        )
 
         indices_map = {
             'ibov': ['^BVSP', 'BOVA11.SA'],
@@ -7097,12 +7379,13 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
             "ipca": ipca_rebased,
             "cdi": cdi_rebased,
             "btc": btc_rebased,
-            "carteira_valor": series_dict['carteira'],
+            "carteira_valor": patrimonio_vals,
+            "patrimonio_datas": patrimonio_datas,
             "carteira_price": carteira_price_series,
         }
     except Exception as e:
         print(f"Erro em obter_historico_carteira_comparado: {e}")
-        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "carteira_price": []}
+        return {"datas": [], "carteira": [], "ibov": [], "ivvb11": [], "ifix": [], "ipca": [], "cdi": [], "btc": [], "carteira_valor": [], "patrimonio_datas": [], "carteira_price": []}
 
 
 # ==================== FUNÇÕES DE CONTROLE FINANCEIRO ====================
@@ -10155,6 +10438,257 @@ def atualizar_perfil_usuario(username, nome=None, email=None):
             return True
         finally:
             conn.close()
+
+def _validar_formato_username(username: str):
+    u = (username or '').strip()
+    if len(u) < 2:
+        return False, 'Username deve ter pelo menos 2 caracteres'
+    if len(u) > 32:
+        return False, 'Username deve ter no máximo 32 caracteres'
+    if not re.match(r'^[a-zA-Z0-9._-]+$', u):
+        return False, 'Username só pode conter letras, números, ponto, hífen e underscore'
+    if u.startswith('_') or u in ('.', '..', '...'):
+        return False, 'Username inválido'
+    return True, u
+
+
+def _username_ja_cadastrado(username: str, ignorar: str | None = None) -> bool:
+    """Verifica se username já está em uso por outro cadastro ativo (case-insensitive)."""
+    candidato = (username or '').strip()
+    if not candidato:
+        return True
+    ignorar_key = str(ignorar).strip().lower() if ignorar else None
+    if ignorar_key and candidato.lower() == ignorar_key:
+        return False
+    key = candidato.lower()
+    try:
+        if _is_postgres():
+            conn = _get_pg_conn()
+            try:
+                with conn.cursor() as c:
+                    c.execute(
+                        'SELECT username FROM public.usuarios WHERE LOWER(username) = LOWER(%s)',
+                        (candidato,),
+                    )
+                    for (uname,) in c.fetchall():
+                        if not ignorar_key or str(uname).strip().lower() != ignorar_key:
+                            return True
+            finally:
+                conn.close()
+        else:
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+            try:
+                c = conn.cursor()
+                c.execute(
+                    'SELECT username FROM usuarios WHERE LOWER(username) = LOWER(?)',
+                    (candidato,),
+                )
+                for (uname,) in c.fetchall():
+                    if not ignorar_key or str(uname).strip().lower() != ignorar_key:
+                        return True
+            finally:
+                conn.close()
+    except Exception as e:
+        print(f"[username] erro ao verificar duplicata de {candidato}: {e}")
+        if buscar_usuario_por_username(candidato):
+            if not ignorar_key or candidato.lower() != ignorar_key:
+                return True
+    return False
+
+
+def _liberar_pasta_destino_username(new_path: str, new_username: str) -> None:
+    """
+    Remove ou desloca pasta de destino sem cadastro ativo (órfã após rename anterior).
+    Pastas com usuário ativo no banco não são tocadas.
+    """
+    if not os.path.exists(new_path):
+        return
+    nome_pasta = os.path.basename(new_path.rstrip(os.sep))
+    if buscar_usuario_por_username(nome_pasta) or buscar_usuario_por_username(str(new_username).strip()):
+        raise ValueError('Já existem dados armazenados para esse username')
+    try:
+        shutil.rmtree(new_path)
+        print(f"[username] pasta órfã removida: {nome_pasta}")
+        return
+    except OSError as e:
+        print(f"[username] aviso: rmtree órfã {nome_pasta}: {e}")
+    stale = f"{new_path}__orphan_{int(time.time())}"
+    try:
+        os.rename(new_path, stale)
+        print(f"[username] pasta órfã deslocada: {nome_pasta} -> {os.path.basename(stale)}")
+    except OSError as e:
+        raise ValueError(
+            'Não foi possível liberar o username antigo. Reinicie o servidor e tente novamente.'
+        ) from e
+
+
+def _renomear_pasta_dados_sqlite(old_username: str, new_username: str) -> str | None:
+    """
+    Copia a pasta de dados para o novo username.
+    No Windows, move/rename falha com WinError 32 se algum .db estiver aberto pelo servidor;
+    copytree funciona com o arquivo em uso. A pasta antiga é removida depois (best-effort).
+    Retorna o caminho da nova pasta se houve cópia, ou None.
+    """
+    root = _bancos_usuarios_root()
+    if not os.path.isdir(root):
+        return None
+    old_folder = None
+    old_key = str(old_username).strip().lower()
+    for name in os.listdir(root):
+        if name.startswith('_'):
+            continue
+        full = os.path.join(root, name)
+        if os.path.isdir(full) and name.lower() == old_key:
+            old_folder = full
+            break
+    if not old_folder or not os.path.isdir(old_folder):
+        return None
+    new_path = os.path.join(root, str(new_username).strip())
+    if os.path.normcase(old_folder) == os.path.normcase(new_path):
+        return None
+    _liberar_pasta_destino_username(new_path, new_username)
+    shutil.copytree(old_folder, new_path)
+    try:
+        shutil.rmtree(old_folder)
+    except OSError as e:
+        print(f"[username] aviso: pasta antiga mantida ({old_folder}): {e}")
+    return new_path
+
+
+def _renomear_schema_postgres(old_username: str, new_username: str) -> None:
+    old_schema = _pg_schema_for_user(old_username)
+    new_schema = _pg_schema_for_user(new_username)
+    if old_schema == new_schema:
+        return
+    conn = _get_pg_conn()
+    try:
+        with conn.cursor() as c:
+            c.execute(
+                'SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s',
+                (old_schema,),
+            )
+            if not c.fetchone():
+                return
+            c.execute(
+                'SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s',
+                (new_schema,),
+            )
+            if c.fetchone():
+                raise ValueError('Já existem dados armazenados para esse username')
+            c.execute(f'ALTER SCHEMA {old_schema} RENAME TO {new_schema}')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def atualizar_sessao_username(token: str, novo_username: str) -> None:
+    if not token or not novo_username:
+        return
+    _create_sessions_table_if_needed()
+    u = str(novo_username).strip()
+    if _is_postgres():
+        conn = _get_pg_conn()
+        try:
+            with conn.cursor() as c:
+                c.execute(
+                    'UPDATE public.sessoes SET username = %s WHERE token = %s',
+                    (u, token),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+        try:
+            c = conn.cursor()
+            c.execute('UPDATE sessoes SET username = ? WHERE token = ?', (u, token))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def atualizar_username_usuario(username_atual, novo_username, senha_atual=None):
+
+    atual = (username_atual or '').strip()
+    if not atual:
+        return {'success': False, 'message': 'Usuário não autenticado'}
+    ok_fmt, novo_fmt = _validar_formato_username(novo_username)
+    if not ok_fmt:
+        return {'success': False, 'message': novo_fmt}
+    if novo_fmt == atual:
+        return {'success': True, 'username': atual, 'message': 'Username inalterado'}
+    try:
+        limpar_pastas_orfas_usuarios()
+    except Exception as e:
+        print(f"[username] aviso ao limpar órfãs: {e}")
+    if _username_ja_cadastrado(novo_fmt, ignorar=atual):
+        return {'success': False, 'message': 'Este username já está em uso'}
+    perfil = buscar_usuario_por_username(atual)
+    if not perfil:
+        return {'success': False, 'message': 'Usuário não encontrado'}
+    provider = (perfil.get('auth_provider') or 'proprietario').strip().lower()
+    if provider != 'google':
+        if not senha_atual:
+            return {'success': False, 'message': 'Senha atual é obrigatória'}
+        if not verificar_senha(atual, senha_atual):
+            return {'success': False, 'message': 'Senha atual incorreta'}
+    pasta_copiada = None
+    try:
+        if _is_postgres():
+            _renomear_schema_postgres(atual, novo_fmt)
+        else:
+            pasta_copiada = _renomear_pasta_dados_sqlite(atual, novo_fmt)
+        if _is_postgres():
+            conn = _get_pg_conn()
+            try:
+                with conn.cursor() as c:
+                    c.execute(
+                        'UPDATE public.usuarios SET username = %s WHERE username = %s',
+                        (novo_fmt, atual),
+                    )
+                    c.execute(
+                        'UPDATE public.sessoes SET username = %s WHERE username = %s',
+                        (novo_fmt, atual),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            conn = sqlite3.connect(USUARIOS_DB_PATH, check_same_thread=False, timeout=30)
+            try:
+                c = conn.cursor()
+                c.execute('UPDATE usuarios SET username = ? WHERE username = ?', (novo_fmt, atual))
+                c.execute('UPDATE sessoes SET username = ? WHERE username = ?', (novo_fmt, atual))
+                conn.commit()
+            finally:
+                conn.close()
+        limpar_cache_usuario(atual)
+        limpar_cache_usuario(novo_fmt)
+        print(f"[username] renomeado: {atual} -> {novo_fmt}")
+        return {'success': True, 'username': novo_fmt, 'message': 'Username atualizado com sucesso'}
+    except sqlite3.IntegrityError:
+        if pasta_copiada and os.path.isdir(pasta_copiada):
+            shutil.rmtree(pasta_copiada, ignore_errors=True)
+        return {'success': False, 'message': 'Este username já está em uso'}
+    except ValueError as e:
+        if pasta_copiada and os.path.isdir(pasta_copiada):
+            shutil.rmtree(pasta_copiada, ignore_errors=True)
+        return {'success': False, 'message': str(e)}
+    except OSError as e:
+        if pasta_copiada and os.path.isdir(pasta_copiada):
+            shutil.rmtree(pasta_copiada, ignore_errors=True)
+        print(f"[username] erro de arquivo ao renomear {atual}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': 'Não foi possível acessar os arquivos de dados. Tente novamente em instantes.'}
+    except Exception as e:
+        if pasta_copiada and os.path.isdir(pasta_copiada):
+            shutil.rmtree(pasta_copiada, ignore_errors=True)
+        print(f"[username] erro ao renomear {atual}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': 'Erro ao atualizar username'}
+
 
 def atualizar_senha_usuario(username, nova_senha):
     """Atualiza a senha do usuário"""

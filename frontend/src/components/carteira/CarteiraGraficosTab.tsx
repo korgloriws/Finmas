@@ -51,6 +51,7 @@ interface CarteiraGraficosTabProps {
   historicoCarteira: {
     datas: string[]
     carteira_valor: number[]
+    patrimonio_datas?: string[]
     carteira: (number | null)[]
     ibov: (number | null)[]
     ivvb11: (number | null)[]
@@ -244,7 +245,12 @@ export default function CarteiraGraficosTab({
     })
   }, [historicoCarteira, indiceSeries, initialWealth, valorTotal, indiceRef])
 
-  // Patrimônio real (com aportes) — usado só no gráfico de evolução patrimonial
+  // Patrimônio real (com aportes) — espelha o banco (movimentações + snapshots + valor atual)
+  const patrimonioDatas = useMemo(() => {
+    if (!historicoCarteira) return [] as string[]
+    return historicoCarteira.patrimonio_datas || []
+  }, [historicoCarteira])
+
   const carteiraValorPatrimonioSeries = useMemo(() => {
     if (!historicoCarteira) return [] as Array<number | null>
     return (historicoCarteira.carteira_valor || []).map((v) => {
@@ -252,6 +258,12 @@ export default function CarteiraGraficosTab({
       return Number.isFinite(n) ? n : null
     })
   }, [historicoCarteira])
+
+  const patrimonioChartLen = useMemo(() => {
+    return Math.max(patrimonioDatas.length, carteiraValorPatrimonioSeries.length)
+  }, [patrimonioDatas, carteiraValorPatrimonioSeries])
+
+  const patrimonioTemPontos = patrimonioChartLen > 0 && carteiraValorPatrimonioSeries.some((v) => v != null && Number(v) > 0)
 
   // Série de valor (R$) sem aportes: prioriza carteira_price; senão patrimônio positivo; senão rebased × base
   const carteiraValorPrecoSeries = useMemo(() => {
@@ -1300,14 +1312,15 @@ export default function CarteiraGraficosTab({
                 <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
                   <h4 className="text-sm font-medium text-muted-foreground mb-2">Evolução do patrimônio total (com aportes e retiradas)</h4>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Valor real da carteira ao longo do tempo, incluindo novos aportes e saques.
+                    Valor real gravado no banco (snapshots diários da soma valor_total + saldo atual). Não reconstrói histórico a partir de movimentações.
                   </p>
                   <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
+                    {patrimonioTemPontos ? (
                     <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                       <AreaChart
-                        data={Array.from({ length: historicoChartLen }, (_, i) => ({
-                          data: labelHistoricoEm(i),
-                          patrimonio: carteiraValorPatrimonioSeries[i] ?? historicoCarteira?.carteira_valor?.[i] ?? null,
+                        data={Array.from({ length: patrimonioChartLen }, (_, i) => ({
+                          data: patrimonioDatas[i] || `ponto-${i + 1}`,
+                          patrimonio: carteiraValorPatrimonioSeries[i] ?? null,
                         }))}
                         margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
                       >
@@ -1336,9 +1349,14 @@ export default function CarteiraGraficosTab({
                           formatter={(value: any) => [formatCurrency(value), 'Patrimônio']}
                           labelFormatter={(label) => (label ? `Data: ${label}` : '')}
                         />
-                        <Area type="monotone" dataKey="patrimonio" stroke="#0ea5e9" fill="url(#cgPatrimonioVal)" strokeWidth={2.5} name="Patrimônio" isAnimationActive animationDuration={800} animationEasing="ease-out" />
+                        <Area type="monotone" dataKey="patrimonio" stroke="#0ea5e9" fill="url(#cgPatrimonioVal)" strokeWidth={2.5} name="Patrimônio" isAnimationActive animationDuration={800} animationEasing="ease-out" connectNulls={false} />
                       </AreaChart>
                     </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                        Nenhum snapshot patrimonial no período ainda. O histórico é gravado automaticamente ao atualizar preços ou alterar a carteira.
+                      </div>
+                    )}
                   </div>
                 </div>
               </>

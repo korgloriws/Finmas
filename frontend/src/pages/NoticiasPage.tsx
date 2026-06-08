@@ -1,219 +1,378 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
-import { 
-  Newspaper, 
-  ExternalLink, 
-  Clock, 
-  RefreshCw, 
+import {
+  Newspaper,
+  ExternalLink,
+  Clock,
+  RefreshCw,
   Search,
   Tag,
-  Building2
+  Building2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
-import { noticiasService } from '../services/api'
-import { formatDistanceToNow, format } from 'date-fns'
+import { noticiasService, type Noticia } from '../services/api'
+import { format, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import './NoticiasPage.css'
+
+const ITENS_POR_PAGINA = 9
+const LIMITE_FETCH = 72
+
+function NoticiaMeta({ noticia }: { noticia: Noticia }) {
+  return (
+    <div className="noticias-jornal-meta">
+      {noticia.categoria && (
+        <span className="noticias-jornal-tag">{noticia.categoria}</span>
+      )}
+      {noticia.fonte && (
+        <span>
+          <Building2 style={{ width: 10, height: 10, display: 'inline' }} aria-hidden />
+          {noticia.fonte}
+        </span>
+      )}
+      {noticia.data && (
+        <span>
+          <Clock style={{ width: 10, height: 10, display: 'inline' }} aria-hidden />
+          {formatDistanceToNow(new Date(noticia.data), { addSuffix: true, locale: ptBR })}
+          {' · '}
+          {format(new Date(noticia.data), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+        </span>
+      )}
+      <span>
+        <ExternalLink style={{ width: 10, height: 10, display: 'inline' }} aria-hidden />
+        Abrir matéria
+      </span>
+    </div>
+  )
+}
+
+function PaginacaoJornal({
+  pagina,
+  totalPaginas,
+  onPagina,
+}: {
+  pagina: number
+  totalPaginas: number
+  onPagina: (p: number) => void
+}) {
+  if (totalPaginas <= 1) return null
+
+  const paginasVisiveis = useMemo(() => {
+    const max = 7
+    if (totalPaginas <= max) {
+      return Array.from({ length: totalPaginas }, (_, i) => i + 1)
+    }
+    const meio = Math.min(Math.max(pagina, 4), totalPaginas - 3)
+    const start = Math.max(1, meio - 3)
+    const end = Math.min(totalPaginas, start + max - 1)
+    const nums: number[] = []
+    for (let i = start; i <= end; i++) nums.push(i)
+    return nums
+  }, [pagina, totalPaginas])
+
+  return (
+    <nav className="noticias-jornal-pagination" aria-label="Paginação do jornal">
+      <button
+        type="button"
+        className="noticias-jornal-page-btn"
+        disabled={pagina <= 1}
+        onClick={() => onPagina(pagina - 1)}
+        aria-label="Página anterior"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      {paginasVisiveis[0] > 1 && (
+        <>
+          <button type="button" className="noticias-jornal-page-btn" onClick={() => onPagina(1)}>
+            1
+          </button>
+          {paginasVisiveis[0] > 2 && <span className="noticias-jornal-page-info">…</span>}
+        </>
+      )}
+      {paginasVisiveis.map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`noticias-jornal-page-btn${n === pagina ? ' active' : ''}`}
+          onClick={() => onPagina(n)}
+          aria-current={n === pagina ? 'page' : undefined}
+        >
+          {n}
+        </button>
+      ))}
+      {paginasVisiveis[paginasVisiveis.length - 1] < totalPaginas && (
+        <>
+          {paginasVisiveis[paginasVisiveis.length - 1] < totalPaginas - 1 && (
+            <span className="noticias-jornal-page-info">…</span>
+          )}
+          <button
+            type="button"
+            className="noticias-jornal-page-btn"
+            onClick={() => onPagina(totalPaginas)}
+          >
+            {totalPaginas}
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        className="noticias-jornal-page-btn"
+        disabled={pagina >= totalPaginas}
+        onClick={() => onPagina(pagina + 1)}
+        aria-label="Próxima página"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </nav>
+  )
+}
 
 export default function NoticiasPage() {
-  const [limite, setLimite] = useState(20)
+  const [pagina, setPagina] = useState(1)
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null)
   const [filtroFonte, setFiltroFonte] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
 
   const { data: noticias, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['noticias', 'lista', limite],
-    queryFn: () => noticiasService.getNoticias(limite, false),
-    staleTime: 10 * 60 * 1000, // 10 minutos
+    queryKey: ['noticias', 'lista', LIMITE_FETCH],
+    queryFn: () => noticiasService.getNoticias(LIMITE_FETCH, false),
+    staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
-  // Extrair categorias e fontes únicas
-  const categorias = noticias 
-    ? Array.from(new Set(noticias.map(n => n.categoria).filter(Boolean))) as string[]
-    : []
-  
-  const fontes = noticias
-    ? Array.from(new Set(noticias.map(n => n.fonte).filter(Boolean))) as string[]
-    : []
+  const categorias = useMemo(
+    () =>
+      noticias
+        ? (Array.from(new Set(noticias.map((n) => n.categoria).filter(Boolean))) as string[])
+        : [],
+    [noticias]
+  )
 
-  // Filtrar notícias
-  const noticiasFiltradas = noticias?.filter(noticia => {
-    if (filtroCategoria && noticia.categoria !== filtroCategoria) return false
-    if (filtroFonte && noticia.fonte !== filtroFonte) return false
-    if (busca && !noticia.titulo.toLowerCase().includes(busca.toLowerCase())) return false
-    return true
-  }) || []
+  const fontes = useMemo(
+    () =>
+      noticias
+        ? (Array.from(new Set(noticias.map((n) => n.fonte).filter(Boolean))) as string[])
+        : [],
+    [noticias]
+  )
 
-  const handleRefresh = () => {
-    refetch()
-  }
+  const noticiasFiltradas = useMemo(() => {
+    return (
+      noticias?.filter((noticia) => {
+        if (filtroCategoria && noticia.categoria !== filtroCategoria) return false
+        if (filtroFonte && noticia.fonte !== filtroFonte) return false
+        if (busca && !noticia.titulo.toLowerCase().includes(busca.toLowerCase())) return false
+        return true
+      }) || []
+    )
+  }, [noticias, filtroCategoria, filtroFonte, busca])
+
+  const totalPaginas = Math.max(1, Math.ceil(noticiasFiltradas.length / ITENS_POR_PAGINA))
+
+  useEffect(() => {
+    setPagina(1)
+  }, [busca, filtroCategoria, filtroFonte])
+
+  useEffect(() => {
+    if (pagina > totalPaginas) setPagina(totalPaginas)
+  }, [pagina, totalPaginas])
+
+  const noticiasPagina = useMemo(() => {
+    const inicio = (pagina - 1) * ITENS_POR_PAGINA
+    return noticiasFiltradas.slice(inicio, inicio + ITENS_POR_PAGINA)
+  }, [noticiasFiltradas, pagina])
+
+  const manchete = noticiasPagina[0]
+  const secundarias = noticiasPagina.slice(1, 3)
+  const grade = noticiasPagina.slice(3)
+
+  const dataJornal = format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })
+  const edicao = format(new Date(), "'Edição' dd/MM/yyyy — HH'h'mm", { locale: ptBR })
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6 sm:mb-8"
-      >
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-primary text-primary-foreground">
-              <Newspaper className="w-6 h-6 sm:w-8 sm:h-8" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">Notícias do Mercado</h1>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                Acompanhe as últimas notícias dos principais portais financeiros
-              </p>
-            </div>
+    <div className="noticias-jornal-outer container mx-auto px-4 py-6 sm:py-8 max-w-7xl">
+      <article className="noticias-jornal-paper">
+        <header className="noticias-jornal-masthead">
+          <div className="noticias-jornal-brand" aria-label="Finmas Jornal">
+            Finmas Jornal
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={isFetching}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Atualizar</span>
-          </button>
-        </div>
+          <div className="noticias-jornal-subbrand">Mercado · Economia · Investimentos</div>
+          <div className="noticias-jornal-date-line">
+            <span>{dataJornal}</span>
+            <span>{edicao}</span>
+            <span>Pág. {pagina} de {totalPaginas}</span>
+          </div>
+        </header>
 
-        {/* Filtros e Busca */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Busca */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="noticias-jornal-toolbar">
+          <div className="noticias-jornal-search-wrap">
+            <Search aria-hidden />
             <input
-              type="text"
-              placeholder="Buscar notícias..."
+              type="search"
+              className="noticias-jornal-input"
+              placeholder="Buscar manchetes..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Buscar notícias"
             />
           </div>
-
-          {/* Filtro Categoria */}
           {categorias.length > 0 && (
-            <div className="relative">
-              <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="noticias-jornal-search-wrap" style={{ flex: '0 1 160px' }}>
+              <Tag aria-hidden style={{ left: '0.5rem' }} />
               <select
+                className="noticias-jornal-select"
                 value={filtroCategoria || ''}
                 onChange={(e) => setFiltroCategoria(e.target.value || null)}
                 aria-label="Filtrar por categoria"
-                className="pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary appearance-none min-w-[150px]"
               >
-                <option value="">Todas categorias</option>
-                {categorias.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                <option value="">Todas seções</option>
+                {categorias.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
           )}
-
-          {/* Filtro Fonte */}
           {fontes.length > 0 && (
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="noticias-jornal-search-wrap" style={{ flex: '0 1 150px' }}>
+              <Building2 aria-hidden style={{ left: '0.5rem' }} />
               <select
+                className="noticias-jornal-select"
                 value={filtroFonte || ''}
                 onChange={(e) => setFiltroFonte(e.target.value || null)}
                 aria-label="Filtrar por fonte"
-                className="pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary appearance-none min-w-[150px]"
               >
                 <option value="">Todas fontes</option>
-                {fontes.map(fonte => (
-                  <option key={fonte} value={fonte}>{fonte}</option>
+                {fontes.map((fonte) => (
+                  <option key={fonte} value={fonte}>
+                    {fonte}
+                  </option>
                 ))}
               </select>
             </div>
           )}
-        </div>
-      </motion.div>
-
-      {/* Lista de Notícias */}
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-6 animate-pulse">
-              <div className="h-6 bg-muted rounded w-3/4 mb-3"></div>
-              <div className="h-4 bg-muted rounded w-1/2"></div>
-            </div>
-          ))}
-        </div>
-      ) : noticiasFiltradas.length === 0 ? (
-        <div className="text-center py-12">
-          <Newspaper className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-lg text-muted-foreground">Nenhuma notícia encontrada</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {noticiasFiltradas.map((noticia, index) => (
-            <motion.a
-              key={noticia.url}
-              href={noticia.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-              className="block bg-card border border-border rounded-xl p-4 sm:p-6 hover:shadow-lg transition-all group"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg sm:text-xl font-bold mb-2 group-hover:text-primary transition-colors line-clamp-2">
-                    {noticia.titulo}
-                  </h3>
-                  
-                  {noticia.resumo && (
-                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                      {noticia.resumo}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-4 flex-wrap text-xs sm:text-sm text-muted-foreground">
-                    {noticia.categoria && (
-                      <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary">
-                        <Tag className="w-3 h-3" />
-                        {noticia.categoria}
-                      </span>
-                    )}
-                    {noticia.fonte && (
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3 h-3" />
-                        {noticia.fonte}
-                      </span>
-                    )}
-                    {noticia.data && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatDistanceToNow(new Date(noticia.data), {
-                          addSuffix: true,
-                          locale: ptBR
-                        })}
-                        {' • '}
-                        {format(new Date(noticia.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ExternalLink className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0 mt-1" />
-              </div>
-            </motion.a>
-          ))}
-        </div>
-      )}
-
-      {/* Carregar mais */}
-      {noticiasFiltradas.length > 0 && noticiasFiltradas.length >= limite && (
-        <div className="mt-6 text-center">
           <button
-            onClick={() => setLimite(limite + 20)}
-            className="px-6 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            type="button"
+            className="noticias-jornal-btn"
+            onClick={() => refetch()}
+            disabled={isFetching}
           >
-            Carregar mais notícias
+            <RefreshCw
+              size={14}
+              style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }}
+              className={isFetching ? 'animate-spin' : ''}
+            />
+            Atualizar
           </button>
         </div>
-      )}
+
+        {isLoading ? (
+          <div className="noticias-jornal-lead">
+            <div>
+              <div className="noticias-jornal-skeleton noticias-jornal-skel-lead" />
+              <div className="noticias-jornal-skeleton noticias-jornal-skel-line" />
+              <div className="noticias-jornal-skeleton noticias-jornal-skel-line" style={{ width: '90%' }} />
+              <div className="noticias-jornal-skeleton noticias-jornal-skel-line" style={{ width: '70%' }} />
+            </div>
+            <div className="noticias-jornal-skeleton noticias-jornal-skel-block" />
+          </div>
+        ) : noticiasFiltradas.length === 0 ? (
+          <div className="noticias-jornal-empty">
+            <Newspaper size={48} style={{ margin: '0 auto 1rem', opacity: 0.4 }} />
+            <p>Nenhuma manchete encontrada para os filtros selecionados.</p>
+          </div>
+        ) : (
+          <>
+            {manchete && (
+              <section className="noticias-jornal-lead" aria-labelledby="manchete-principal">
+                <a
+                  id="manchete-principal"
+                  href={manchete.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="noticias-jornal-lead-link"
+                >
+                  <h2 className="noticias-jornal-lead-title">{manchete.titulo}</h2>
+                  {manchete.resumo && (
+                    <p className="noticias-jornal-lead-resumo">{manchete.resumo}</p>
+                  )}
+                  <NoticiaMeta noticia={manchete} />
+                </a>
+                {manchete.imagem_url && (
+                  <a
+                    href={manchete.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Imagem da matéria: ${manchete.titulo}`}
+                  >
+                    <img
+                      src={manchete.imagem_url}
+                      alt=""
+                      className="noticias-jornal-lead-img"
+                      loading="lazy"
+                      onError={(e) => {
+                        ;(e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  </a>
+                )}
+              </section>
+            )}
+
+            {secundarias.length > 0 && (
+              <section className="noticias-jornal-secondary" aria-label="Manchetes secundárias">
+                {secundarias.map((noticia) => (
+                  <article key={noticia.url} className="noticias-jornal-secondary-item">
+                    <a
+                      href={noticia.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="noticias-jornal-secondary-link"
+                    >
+                      <h3 className="noticias-jornal-secondary-title">{noticia.titulo}</h3>
+                      {noticia.resumo && (
+                        <p className="noticias-jornal-grid-resumo">{noticia.resumo}</p>
+                      )}
+                      <NoticiaMeta noticia={noticia} />
+                    </a>
+                  </article>
+                ))}
+              </section>
+            )}
+
+            {grade.length > 0 && (
+              <section className="noticias-jornal-grid" aria-label="Demais notícias">
+                {grade.map((noticia) => (
+                  <article key={noticia.url} className="noticias-jornal-grid-item">
+                    <a
+                      href={noticia.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="noticias-jornal-grid-link"
+                    >
+                      <h4 className="noticias-jornal-grid-title">{noticia.titulo}</h4>
+                      {noticia.resumo && (
+                        <p className="noticias-jornal-grid-resumo">{noticia.resumo}</p>
+                      )}
+                      <NoticiaMeta noticia={noticia} />
+                    </a>
+                  </article>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+
+        <footer className="noticias-jornal-footer">
+          <p className="noticias-jornal-page-info">
+            {noticiasFiltradas.length} matérias
+            {busca || filtroCategoria || filtroFonte ? ' (filtradas)' : ''}
+          </p>
+          <PaginacaoJornal pagina={pagina} totalPaginas={totalPaginas} onPagina={setPagina} />
+        </footer>
+      </article>
     </div>
   )
 }

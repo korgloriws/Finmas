@@ -49,13 +49,16 @@ function formatLastSeenShort(lastSeenAt: string | null | undefined): string {
 }
 
 export default function ConfiguracoesPage() {
-  const { user, isAdmin, refreshAllowedScreens } = useAuth()
+  const { user, isAdmin, refreshAllowedScreens, checkCurrentUser } = useAuth()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'perfil' | 'admin'>('perfil')
   
   // Estados do formulário de perfil
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [novoUsername, setNovoUsername] = useState('')
+  const [confirmarNovoUsername, setConfirmarNovoUsername] = useState('')
+  const [senhaAtualUsername, setSenhaAtualUsername] = useState('')
   const [senhaAtual, setSenhaAtual] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
@@ -167,6 +170,31 @@ export default function ConfiguracoesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Erro ao atualizar perfil')
+    },
+  })
+
+  const atualizarUsernameMutation = useMutation({
+    mutationFn: () =>
+      perfilService.atualizarUsername(
+        novoUsername.trim(),
+        perfil?.auth_provider !== 'google' ? senhaAtualUsername : undefined
+      ),
+    onSuccess: async (data) => {
+      const oldUser = user
+      toast.success('Username atualizado com sucesso!')
+      setNovoUsername('')
+      setConfirmarNovoUsername('')
+      setSenhaAtualUsername('')
+      await checkCurrentUser()
+      if (oldUser) {
+        queryClient.removeQueries({
+          predicate: (q) => q.queryKey.some((k) => k === oldUser),
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['perfil', data?.username || novoUsername.trim()] })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Erro ao atualizar username')
     },
   })
 
@@ -286,6 +314,27 @@ export default function ConfiguracoesPage() {
       return
     }
     atualizarPerfilMutation.mutate()
+  }
+
+  const handleAtualizarUsername = () => {
+    const candidato = novoUsername.trim()
+    if (!candidato || !confirmarNovoUsername.trim()) {
+      toast.error('Preencha todos os campos')
+      return
+    }
+    if (candidato !== confirmarNovoUsername.trim()) {
+      toast.error('Os usernames não coincidem')
+      return
+    }
+    if (candidato.length < 2) {
+      toast.error('Username deve ter pelo menos 2 caracteres')
+      return
+    }
+    if (perfil?.auth_provider !== 'google' && !senhaAtualUsername) {
+      toast.error('Digite sua senha atual para confirmar')
+      return
+    }
+    atualizarUsernameMutation.mutate()
   }
 
   const handleAtualizarSenha = () => {
@@ -452,18 +501,6 @@ export default function ConfiguracoesPage() {
                     placeholder="seu@email.com"
                   />
                 </div>
-                <div>
-                  <label htmlFor="username-input" className="block text-sm font-medium mb-1">Username</label>
-                  <input
-                    id="username-input"
-                    type="text"
-                    value={user || ''}
-                    disabled
-                    aria-label="Username (não pode ser alterado)"
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-muted-foreground cursor-not-allowed"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Username não pode ser alterado</p>
-                </div>
                 <button
                   onClick={handleAtualizarPerfil}
                   disabled={atualizarPerfilMutation.isPending}
@@ -471,6 +508,64 @@ export default function ConfiguracoesPage() {
                 >
                   <Save className="w-4 h-4" />
                   {atualizarPerfilMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </div>
+
+            {/* Alterar Username */}
+            <div className="border-t border-border pt-8">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Alterar Username
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Username atual: <span className="font-medium text-foreground">{user}</span>
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="novo-username-input" className="block text-sm font-medium mb-1">Novo Username</label>
+                  <input
+                    id="novo-username-input"
+                    type="text"
+                    value={novoUsername}
+                    onChange={(e) => setNovoUsername(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                    placeholder="Digite o novo username"
+                    autoComplete="username"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="confirmar-username-input" className="block text-sm font-medium mb-1">Confirmar Novo Username</label>
+                  <input
+                    id="confirmar-username-input"
+                    type="text"
+                    value={confirmarNovoUsername}
+                    onChange={(e) => setConfirmarNovoUsername(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                    placeholder="Confirme o novo username"
+                    autoComplete="username"
+                  />
+                </div>
+                {perfil?.auth_provider !== 'google' && (
+                  <div>
+                    <label htmlFor="senha-atual-username-input" className="block text-sm font-medium mb-1">Senha Atual</label>
+                    <input
+                      id="senha-atual-username-input"
+                      type="password"
+                      value={senhaAtualUsername}
+                      onChange={(e) => setSenhaAtualUsername(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                      placeholder="Digite sua senha atual para confirmar"
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={handleAtualizarUsername}
+                  disabled={atualizarUsernameMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {atualizarUsernameMutation.isPending ? 'Atualizando...' : 'Atualizar Username'}
                 </button>
               </div>
             </div>

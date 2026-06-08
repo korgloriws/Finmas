@@ -351,7 +351,7 @@ export default function CarteiraPage() {
   const carteiraLength = carteira?.length ?? 0
 
   const { data: historicoCarteira, isLoading: loadingHistorico, isError: historicoErro, refetch: refetchHistorico } = useQuery({
-    queryKey: ['historico-carteira', user, filtroPeriodo, carteiraLength],
+    queryKey: ['historico-carteira-v2', user, filtroPeriodo, carteiraLength],
     queryFn: ({ signal }) =>
       fetchHistoricoCarteiraComFallback(filtroPeriodo, { signal, carteiraLength }),
     enabled: !!user && !loadingCarteira && (activeTab === 'projecao' || activeTab === 'graficos'),
@@ -364,7 +364,7 @@ export default function CarteiraPage() {
 
 
   const { data: historicoParaCalendario, refetch: refetchHistoricoCalendario } = useQuery({
-    queryKey: ['historico-carteira-calendario', user, carteiraLength],
+    queryKey: ['historico-carteira-calendario-v2', user, carteiraLength],
     queryFn: ({ signal }) =>
       fetchHistoricoCarteiraComFallback('maximo', { signal, carteiraLength }),
     enabled: !!user && !loadingCarteira && activeTab === 'graficos',

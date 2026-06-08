@@ -45,6 +45,7 @@ from models import (
     invalidar_todas_sessoes,
     
     obter_perfil_usuario, atualizar_perfil_usuario, atualizar_senha_usuario,
+    atualizar_username_usuario, atualizar_sessao_username,
     verificar_role, definir_role_usuario, listar_usuarios, excluir_conta_usuario,
     obter_carteira_para_admin, obter_movimentacoes_para_admin, consultar_marmitas_para_admin, obter_controle_para_admin,
     usuario_bloqueado, bloquear_usuario, definir_senha_usuario, obter_allowed_screens, atualizar_allowed_screens,
@@ -718,6 +719,44 @@ def api_atualizar_perfil():
             perfil = obter_perfil_usuario(usuario)
             return jsonify(perfil), 200
         return jsonify({"error": "Erro ao atualizar perfil"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@server.route("/api/perfil/username", methods=["PUT"])
+def api_atualizar_username():
+    """Renomeia o username do usuário atual (login e dados)."""
+    try:
+        usuario, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
+        data = request.get_json() or {}
+        novo_username = data.get('novo_username')
+        senha_atual = data.get('senha_atual')
+
+        if not novo_username or not str(novo_username).strip():
+            return jsonify({"error": "Novo username é obrigatório"}), 400
+
+        result = atualizar_username_usuario(usuario, novo_username, senha_atual=senha_atual)
+        if not result.get('success'):
+            return jsonify({"error": result.get('message', 'Erro ao atualizar username')}), 400
+
+        novo = result['username']
+        token = request.cookies.get('session_token')
+        if token:
+            atualizar_sessao_username(token, novo)
+        set_usuario_atual(novo)
+        try:
+            from flask import g
+            if hasattr(g, '_usuario_atual_cached'):
+                setattr(g, '_usuario_atual_cached', novo)
+        except Exception:
+            pass
+
+        perfil = obter_perfil_usuario(novo)
+        if perfil:
+            return jsonify(perfil), 200
+        return jsonify({"username": novo, "message": result.get('message')}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -5864,6 +5903,7 @@ def _payload_historico_carteira_vazio():
         "cdi": [],
         "btc": [],
         "carteira_valor": [],
+        "patrimonio_datas": [],
         "carteira_price": [],
     }
 
@@ -5893,7 +5933,7 @@ def api_home_evolucao_carteira():
         if periodo not in periodos_validos:
             periodo = "mensal"
 
-        cache_key = f"home_evolucao:{usuario}:{periodo}"
+        cache_key = f"home_evolucao:v2:{usuario}:{periodo}"
         if cache:
             cached_payload = cache.get(cache_key)
             if cached_payload is not None:
