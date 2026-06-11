@@ -3064,9 +3064,9 @@ def obter_taxas_indexadores():
         
         # SELIC (série 432) - fonte principal
         selic = sgs_last(432, use_range=True)
-        # IPCA mensal (série 433) e acumulado 12m (série 4449)
+        # IPCA mensal (série 433) e acumulado 12m (série 13522 — não usar 4449, que é preços monitorados)
         ipca_mensal = sgs_last(433)
-        ipca_12m = sgs_last(4449)
+        ipca_12m = sgs_last(13522)
         # Para comparações anuais (Focus), priorizar IPCA 12m.
         ipca = ipca_12m if ipca_12m is not None else ipca_mensal
         
@@ -3156,6 +3156,64 @@ def obter_serie_bcb(serie_id, data_inicio, data_fim):
     except Exception as e:
         print(f"Erro ao obter série BCB {serie_id}: {e}")
         return []
+
+
+_SERIE_BCB_CACHE = {}
+_SERIE_BCB_CACHE_TTL_SEC = 6 * 3600
+BCB_SERIE_IPCA_MENSAL = 433
+BCB_SERIE_IPCA_12M = 13522
+
+
+def _obter_serie_bcb_cached(serie_id, data_inicio, data_fim):
+    """Cache leve para evitar múltiplas chamadas ao BCB na mesma atualização de carteira."""
+    import time
+    key = (serie_id, data_inicio.isoformat(), data_fim.isoformat())
+    now = time.time()
+    cached = _SERIE_BCB_CACHE.get(key)
+    if cached and (now - cached["ts"]) < _SERIE_BCB_CACHE_TTL_SEC:
+        return cached["data"]
+    serie = obter_serie_bcb(serie_id, data_inicio, data_fim)
+    _SERIE_BCB_CACHE[key] = {"ts": now, "data": serie}
+    return serie
+
+
+def _calcular_fator_ipca_historico(data_inicio_dt, multiplicador_ipca=1.0, spread_mensal_pct=0.0):
+    """
+    Compõe IPCA mês a mês com a série 433 do BCB desde a data de aplicação.
+    multiplicador_ipca: fator sobre o IPCA (ex.: 1.0 = 100%, 1.1 = IPCA+10%).
+    spread_mensal_pct: taxa fixa mensal adicional em % (IPCA+).
+    Retorna (fator, meses) ou (None, 0) se não houver série.
+    """
+    try:
+        from datetime import datetime
+
+        if isinstance(data_inicio_dt, datetime):
+            data_inicio = data_inicio_dt.date()
+        else:
+            data_inicio = data_inicio_dt
+        data_fim = datetime.now().date()
+        if data_inicio >= data_fim:
+            return 1.0, 0
+
+        serie = _obter_serie_bcb_cached(BCB_SERIE_IPCA_MENSAL, data_inicio, data_fim)
+        if not serie:
+            return None, 0
+
+        fator = 1.0
+        meses = 0
+        for item in serie:
+            try:
+                ipca_mes = float(item.get("valor"))
+            except (TypeError, ValueError):
+                continue
+            taxa_mensal = ipca_mes * float(multiplicador_ipca) + float(spread_mensal_pct)
+            fator *= 1.0 + (taxa_mensal / 100.0)
+            meses += 1
+
+        return fator, meses
+    except Exception as e:
+        print(f"Erro ao calcular fator IPCA histórico: {e}")
+        return None, 0
 
 
 def calcular_correcao_monetaria(indice_id, data_inicio_str, data_fim_str, valor_original):
@@ -3290,110 +3348,6 @@ def _obter_taxa_media_historica(indexador, data_inicio):
     except Exception as e:
         print(f"DEBUG: Erro geral ao obter taxa média histórica: {e}")
         return 13.0
-# Cache em memória da série IPCA mensal (BCB 433) para evitar N chamadas ao atualizar carteira.
-_IPCA_MENSAL_BCB_CACHE = {"ts": 0.0, "por_mes": {}}
-
-
-def _mapa_ipca_mensal_bcb():
-    """Retorna dict 'YYYY-MM' -> taxa mensal IPCA (%). Atualiza no máximo a cada hora."""
-    import time
-    from datetime import datetime, timedelta
-
-    global _IPCA_MENSAL_BCB_CACHE
-    agora = time.time()
-    if _IPCA_MENSAL_BCB_CACHE["por_mes"] and agora - _IPCA_MENSAL_BCB_CACHE["ts"] < 3600:
-        return _IPCA_MENSAL_BCB_CACHE["por_mes"]
-
-    data_fim = datetime.now().date()
-    data_inicio = data_fim - timedelta(days=365 * 15)
-    serie = obter_serie_bcb(433, data_inicio, data_fim)
-    por_mes = {}
-    for item in serie:
-        try:
-            partes = (item.get("data") or "").split("/")
-            if len(partes) != 3:
-                continue
-            dia, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
-            chave = f"{ano:04d}-{mes:02d}"
-            por_mes[chave] = float(item["valor"])
-        except (ValueError, TypeError, KeyError):
-            continue
-
-    _IPCA_MENSAL_BCB_CACHE = {"ts": agora, "por_mes": por_mes}
-    return por_mes
-
-
-def _meses_ipca_desde(data_adicao_dt, data_fim=None):
-    """Lista chaves YYYY-MM do mês de aplicação até o mês de referência (inclusive)."""
-    from datetime import datetime
-
-    if data_fim is None:
-        data_fim = datetime.now()
-    if hasattr(data_adicao_dt, "date"):
-        inicio = data_adicao_dt.date()
-    else:
-        inicio = data_adicao_dt
-    if hasattr(data_fim, "date"):
-        fim = data_fim.date()
-    else:
-        fim = data_fim
-
-    meses = []
-    ano, mes = inicio.year, inicio.month
-    while (ano, mes) <= (fim.year, fim.month):
-        meses.append(f"{ano:04d}-{mes:02d}")
-        mes += 1
-        if mes > 12:
-            mes = 1
-            ano += 1
-    return meses
-
-
-def _calcular_fator_ipca_historico(data_adicao_dt, fator_percentual_indexador=1.0, taxa_fixa_mensal_pct=0.0):
-    """
-    Compõe IPCA mês a mês (BCB série 433) desde o mês da aplicação.
-    fator_percentual_indexador: ex. 1.1 para 110% do IPCA.
-    taxa_fixa_mensal_pct: adicional mensal em % (IPCA+).
-    """
-    from datetime import datetime
-
-    mapa = _mapa_ipca_mensal_bcb()
-    meses = _meses_ipca_desde(data_adicao_dt)
-    if not meses:
-        return 1.0
-
-    fator = 1.0
-    meses_usados = 0
-    taxas_usadas = []
-    for chave in meses:
-        ipca_m = mapa.get(chave)
-        if ipca_m is None:
-            continue
-        taxa_mes = ipca_m * fator_percentual_indexador + taxa_fixa_mensal_pct
-        fator *= 1.0 + (taxa_mes / 100.0)
-        meses_usados += 1
-        taxas_usadas.append(ipca_m)
-
-    if meses_usados == 0:
-        ipca_atual = _obter_taxa_atual_indexador("IPCA") or 0.5
-        dias_totais = max((datetime.now() - data_adicao_dt).days, 0)
-        meses_aprox = dias_totais / 30.44
-        taxa_mes = ipca_atual * fator_percentual_indexador + taxa_fixa_mensal_pct
-        fator = (1.0 + taxa_mes / 100.0) ** meses_aprox
-        print(
-            f"DEBUG: IPCA histórico indisponível; fallback último mensal {ipca_atual}% "
-            f"por ~{meses_aprox:.1f} meses | fator={fator:.6f}"
-        )
-        return fator
-
-    ipca_medio = sum(taxas_usadas) / len(taxas_usadas) if taxas_usadas else 0.0
-    print(
-        f"DEBUG: IPCA histórico BCB: {meses_usados} meses | média mensal {ipca_medio:.2f}% | "
-        f"indexador×{fator_percentual_indexador:.2f} | fixa_mensal={taxa_fixa_mensal_pct:.4f}% | fator={fator:.6f}"
-    )
-    return fator
-
-
 def _obter_ipca_medio_historico(data_inicio):
     """Obtém o IPCA médio mensal histórico desde uma data específica"""
     try:
@@ -3653,20 +3607,33 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"DEBUG: CDI+ CDI={taxa_cdi_atual}% + fixa={taxa_fixa_anual}% = {taxa_total_anual}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA":
-            # IPCA: compor cada mês com a série mensal histórica do BCB (433).
-            fator_correcao = _calcular_fator_ipca_historico(
-                data_adicao_dt,
-                fator_percentual_indexador=fator_percentual,
+            # IPCA: compor mês a mês com série histórica 433 (cada mês com taxa real do BCB)
+            fator_correcao, meses_ipca = _calcular_fator_ipca_historico(
+                data_adicao_dt, multiplicador_ipca=fator_percentual
             )
+            if fator_correcao is None:
+                ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
+                meses_desde_adicao = dias_totais / 30.44
+                taxa_mensal_indexada = ipca_atual_mensal * fator_percentual
+                fator_correcao = (1 + taxa_mensal_indexada / 100) ** meses_desde_adicao
+                print(f"DEBUG: IPCA fallback (sem série) mensal={ipca_atual_mensal}% | meses~={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+            else:
+                print(f"DEBUG: IPCA histórico série 433 | mult={fator_percentual:.4f} | meses={meses_ipca} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA+":
-            # IPCA+: IPCA histórico mês a mês + spread fixo anual convertido em adicional mensal.
-            taxa_fixa_mensal = (indexador_pct or 0) / 12.0
-            fator_correcao = _calcular_fator_ipca_historico(
-                data_adicao_dt,
-                fator_percentual_indexador=1.0,
-                taxa_fixa_mensal_pct=taxa_fixa_mensal,
+            # IPCA+: IPCA histórico mês a mês + spread fixo mensal (taxa anual / 12)
+            taxa_fixa_mensal = (indexador_pct or 0) / 12
+            fator_correcao, meses_ipca = _calcular_fator_ipca_historico(
+                data_adicao_dt, multiplicador_ipca=1.0, spread_mensal_pct=taxa_fixa_mensal
             )
+            if fator_correcao is None:
+                ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
+                taxa_mensal_total = ipca_atual_mensal + taxa_fixa_mensal
+                meses_desde_adicao = dias_totais / 30.44
+                fator_correcao = (1 + taxa_mensal_total / 100) ** meses_desde_adicao
+                print(f"DEBUG: IPCA+ fallback IPCA={ipca_atual_mensal}% + fixa={taxa_fixa_mensal}% | meses~={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+            else:
+                print(f"DEBUG: IPCA+ histórico série 433 | fixa_mensal={taxa_fixa_mensal:.4f}% | meses={meses_ipca} | fator={fator_correcao:.6f}")
             
         elif indexador == "PREFIXADO":
 

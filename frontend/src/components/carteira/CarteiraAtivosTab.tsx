@@ -355,20 +355,16 @@ function TabelaAtivosPorTipo({
           {ativosDoTipo.length > 0 ? (
             <>
               {isRendaFixa && (
-                <div className="px-3 sm:px-4 md:px-6 py-3 border-b border-border bg-muted/20 text-xs text-muted-foreground space-y-1">
-                  <div>
-                    Referência BCB: IPCA acumulado 12 meses{' '}
-                    <strong className="text-foreground">
-                      {ipca12mAnual != null ? `${ipca12mAnual.toFixed(2).replace('.', ',')}%` : 'N/D'}
-                    </strong>
-                    {' '}| último IPCA mensal{' '}
-                    <strong className="text-foreground">
-                      {ipcaMensalRaw != null ? `${ipcaMensalRaw.toFixed(2).replace('.', ',')}%` : 'N/D'}
-                    </strong>
-                  </div>
-                  <div>
-                    Títulos IPCA/IPCA+ são valorizados mês a mês com a série histórica do BCB (cada mês com sua taxa real).
-                  </div>
+                <div className="px-3 sm:px-4 md:px-6 py-3 border-b border-border bg-muted/20 text-xs text-muted-foreground">
+                  Referência BCB: IPCA acum. 12 meses{' '}
+                  <strong className="text-foreground">
+                    {ipca12mAnual != null ? `${ipca12mAnual.toFixed(2).replace('.', ',')}% a.a.` : 'N/D'}
+                  </strong>
+                  {' '}| IPCA mensal (último){' '}
+                  <strong className="text-foreground">
+                    {ipcaMensalRaw != null ? `${ipcaMensalRaw.toFixed(2).replace('.', ',')}%` : 'N/D'}
+                  </strong>
+                  . Valorização dos ativos usa IPCA mensal histórico, mês a mês, desde a data de aplicação.
                 </div>
               )}
 

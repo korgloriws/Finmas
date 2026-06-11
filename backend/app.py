@@ -4479,8 +4479,8 @@ def api_indicadores():
 
         selic = sgs_last(432, use_range=True)
         ipca_mensal = sgs_last(433)
-        # Série 4449 = IPCA acumulado em 12 meses (mais comparável ao Boletim Focus anual).
-        ipca_12m = sgs_last(4449)
+        # Série 13522 = IPCA variação acumulada em 12 meses (% a.a. já divulgado pelo IBGE/BCB).
+        ipca_12m = sgs_last(13522)
 
         # Mantém compatibilidade: campo "ipca" passa a priorizar 12m.
         if ipca_12m:

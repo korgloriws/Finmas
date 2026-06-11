@@ -1777,6 +1777,11 @@ export default function GuiaMercadoPage() {
                 INDICATORS={INDICATORS}
                 STRATEGIES={STRATEGIES}
                 StrategyCard={StrategyCard}
+                ASSET_TYPES={ASSET_TYPES}
+                onNavigateGuiaTab={(tab) => {
+                  setActiveTab(tab)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
               />
             )}
 
