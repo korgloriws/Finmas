@@ -1329,7 +1329,7 @@ export const normalizarDespesasControle = (
     total_marmitas: asNumber(payload.total_marmitas, 0),
     total_despesas: asNumber(
       payload.total_despesas,
-      asNumber(payload.total_outros, 0) + asNumber(payload.total_cartoes, 0) + asNumber(payload.total_marmitas, 0)
+      asNumber(payload.total_outros, 0)
     ),
   }
 }
@@ -1368,7 +1368,7 @@ export const despesasFromHomeResumo = (resumo: Record<string, any>, mes: string,
       total_marmitas,
       total_despesas: asNumber(
         resumo?.total_despesas,
-        total_outros + total_cartoes + total_marmitas
+        total_outros
       ),
     },
     mes,
@@ -1450,8 +1450,7 @@ export async function fetchDespesasControleComFallback(
       mesNorm,
       anoNorm
     )
-    payload.total_despesas =
-      payload.total_outros + payload.total_cartoes + payload.total_marmitas
+    payload.total_despesas = payload.total_outros
     if (despesasControleTemRegistros(payload)) return payload
   } catch (err) {
     if (isAbortError(err, options?.signal)) throw err
@@ -1488,9 +1487,7 @@ export async function fetchReceitasDespesasComFallback(
     const receitasResumo = asNumber(resumo?.receitas?.total, 0)
     const despesasResumo = asNumber(
       resumo?.total_despesas,
-      asNumber(resumo?.outros?.total, 0) +
-        asNumber(resumo?.cartoes?.total, 0) +
-        asNumber(resumo?.marmitas?.total, 0)
+      asNumber(resumo?.outros?.total, 0)
     )
     if (receitasResumo > 0 || despesasResumo > 0) {
       return { receitas: receitasResumo, despesas: despesasResumo }

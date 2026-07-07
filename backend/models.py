@@ -9128,7 +9128,11 @@ def carregar_compras_cartao_por_intervalo(mes, ano, qtd_meses=1, usuario=None):
 
 
 def obter_despesas_controle_mes(mes, ano, usuario=None):
-    """Agrega despesas do mês: outros_gastos, compras de cartão e marmitas."""
+    """Agrega despesas do mês por fonte.
+
+    total_despesas reflete apenas outros_gastos (aba Despesas / fluxo de caixa).
+    Compras de cartão e marmitas ficam separadas até virarem despesa registrada.
+    """
     usuario_dados = _usuario_para_dados(usuario)
     if not usuario_dados:
         return {
@@ -9158,25 +9162,16 @@ def obter_despesas_controle_mes(mes, ano, usuario=None):
         'total_outros': float(total_outros),
         'total_cartoes': float(total_cartoes),
         'total_marmitas': float(total_marmitas),
-        'total_despesas': float(total_outros + total_cartoes + total_marmitas),
+        'total_despesas': float(total_outros),
     }
 
 
 def carregar_despesas_diarias_mes_ano(mes, ano):
-    """Soma diária de todas as fontes de despesa (outros, cartão, marmitas)."""
+    """Soma diária de despesas do fluxo de caixa (outros_gastos / aba Despesas)."""
     rows = []
     for o in _garantir_lista_registros(carregar_outros_mes_ano(mes, ano)):
         if o.get('data'):
             rows.append({'data': o['data'], 'valor': float(o.get('valor') or 0)})
-    for c in _garantir_lista_registros(carregar_compras_cartao_por_intervalo(mes, ano, 1)):
-        if c.get('data'):
-            rows.append({'data': c['data'], 'valor': float(c.get('valor') or 0)})
-    try:
-        for registro in consultar_marmitas(mes, ano) or []:
-            if registro[1]:
-                rows.append({'data': registro[1], 'valor': float(registro[2] or 0)})
-    except Exception:
-        pass
     if not rows:
         return pd.DataFrame(columns=['data', 'valor'])
     df = pd.DataFrame(rows)

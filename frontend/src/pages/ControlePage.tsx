@@ -233,44 +233,11 @@ function ControlePageContent() {
   const receitasValor = receitasDespesas?.receitas ?? 0
   const despesasValor = receitasDespesas?.despesas ?? 0
 
-  // Unificar despesas de diferentes fontes
+  // Fluxo de caixa: apenas despesas registradas (aba Despesas / outros_gastos)
   const despesasUnificadas = useMemo(() => {
     const outrosArray = Array.isArray(outros) ? outros : []
-    const comprasCartao = Array.isArray(despesasMes?.cartoes) ? despesasMes!.cartoes : []
-
-    const despesasCompras = comprasCartao.map((compra, idx) => ({
-      id: Number(compra.id) || -(idx + 1),
-      nome: String(compra.nome || compra.descricao || 'Compra no cartão'),
-      valor: Number(compra.valor) || 0,
-      categoria: String(compra.categoria || 'cartao'),
-      tipo: String(compra.tipo || 'variavel'),
-      data: String(compra.data || new Date().toISOString().split('T')[0]),
-      observacao: compra.observacao ? String(compra.observacao) : undefined,
-      fonte: 'cartao' as const,
-    }))
-
-    const cartoesArray = Array.isArray(cartoes) ? cartoes : []
-    const despesasCartoesCadastro = cartoesArray
-      .filter((cartao) => (cartao as { total_compras?: number }).total_compras)
-      .map((cartao) => ({
-        id: cartao.id,
-        nome: cartao.nome,
-        valor: (cartao as { total_compras?: number }).total_compras || 0,
-        categoria: 'cartao',
-        tipo: 'variavel',
-        data: new Date().toISOString().split('T')[0],
-        observacao: `Cartão ${cartao.nome}`,
-        fonte: 'cartao' as const,
-      }))
-
-    const despesasCartoes =
-      despesasCompras.length > 0 ? despesasCompras : despesasCartoesCadastro
-
-    return [
-      ...outrosArray.map((item) => ({ ...item, fonte: 'outro' as const })),
-      ...despesasCartoes,
-    ]
-  }, [outros, despesasMes, cartoes])
+    return outrosArray.map((item) => ({ ...item, fonte: 'outro' as const }))
+  }, [outros])
 
 
   const totaisPorCategoria = useMemo(() => {

@@ -341,14 +341,13 @@ export default function HomePage() {
   const totalReceitas = resumoHome?.receitas?.total || receitas.reduce((total: number, receita: any) => total + (receita?.valor || 0), 0) || 0
   
 
-  const totalCartoes = resumoHome?.cartoes?.total || cartoes.reduce((total: number, cartao: any) => total + (cartao?.valor || 0), 0) || 0
   const totalOutros = resumoHome?.outros?.total || outros.reduce((total: number, outro: any) => total + (outro?.valor || 0), 0) || 0
 
-  
-  
-
-  const totalDespesas = totalCartoes + totalOutros
-  const saldoCalculado = totalReceitas - totalDespesas
+  // Fluxo de caixa: apenas despesas registradas (outros_gastos), não compras de cartão pendentes
+  const totalDespesas =
+    (typeof resumoHome?.total_despesas === 'number' ? resumoHome.total_despesas : undefined) ?? totalOutros
+  const saldoCalculado =
+    (typeof resumoHome?.saldo === 'number' ? resumoHome.saldo : undefined) ?? (totalReceitas - totalDespesas)
   
 
   
@@ -529,11 +528,9 @@ export default function HomePage() {
 
   const totalDespesasAnterior = useMemo(() => {
     if (typeof resumoAnterior?.total_despesas === 'number') return resumoAnterior.total_despesas
-    const cart = resumoAnterior?.cartoes?.registros || []
     const out = resumoAnterior?.outros?.registros || []
-    const marm = resumoAnterior?.marmitas?.registros || []
     const soma = (arr: any[]) => arr.reduce((s, it) => s + (it?.valor || 0), 0)
-    return soma(cart) + soma(out) + soma(marm)
+    return soma(out)
   }, [resumoAnterior])
 
   const saldoAnterior = useMemo(() => {

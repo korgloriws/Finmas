@@ -5875,7 +5875,7 @@ def api_home_resumo():
             'saldo': saldo,
             'evolucao_financeira': evolucao,
             'gastos_mensais': gastos_mensais_data,
-            'total_despesas': total_outros + total_marmitas + total_cartoes
+            'total_despesas': total_outros
         }
         
 
