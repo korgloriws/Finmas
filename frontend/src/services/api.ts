@@ -1624,7 +1624,7 @@ export type HistoricoCarteiraPayload = {
   ivvb11: (number | null)[]
   ifix: (number | null)[]
   ipca: (number | null)[]
-  cdi: (number | null)[]
+  cdi?: (number | null)[]
   btc?: (number | null)[]
   carteira_valor: number[]
   patrimonio_datas?: string[]

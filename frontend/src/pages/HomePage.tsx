@@ -56,6 +56,7 @@ import {
   Legend
 } from '../components/LazyChart'
 import { carteiraService, homeService, controleService, historicoCarteiraTemPontos, fetchHistoricoCarteiraComFallback } from '../services/api'
+import { buildBenchmarkComparison } from '../utils/carteiraBenchmark'
 import { formatCurrency } from '../utils/formatters'
 
 import { lazy, Suspense } from 'react'
@@ -423,48 +424,22 @@ export default function HomePage() {
 
 
   
-  const initialWealth = useMemo(() => {
-    const arr = historicoCarteira?.carteira_valor || []
-    const pickPositive = (values: number[]) => {
-      for (const v of values) {
-        const n = Number(v)
-        if (Number.isFinite(n) && n > 0) return n
-      }
-      return null
-    }
-    const fromStart = pickPositive(arr)
-    if (fromStart != null) return fromStart
-    const fromEnd = pickPositive([...arr].reverse())
-    if (fromEnd != null) return fromEnd
-    if (totalInvestido > 0) return totalInvestido
-    return 0
-  }, [historicoCarteira, totalInvestido])
+  const benchmarkComparison = useMemo(
+    () => buildBenchmarkComparison(historicoCarteira, totalInvestido),
+    [historicoCarteira, totalInvestido]
+  )
 
-  
-  const carteiraRetornoSeries = useMemo(() => {
-    return (historicoCarteira?.carteira_price || historicoCarteira?.carteira || []) as Array<number | null>
-  }, [historicoCarteira])
+  const initialWealth = benchmarkComparison?.baseCapital ?? 0
 
+  const carteiraRetornoSeries = useMemo(
+    () => benchmarkComparison?.carteiraReturnSeries ?? [],
+    [benchmarkComparison]
+  )
 
-  const carteiraValorPrecoSeries = useMemo(() => {
-    if (!historicoCarteira) return [] as Array<number | null>
-    const priceSeries = (historicoCarteira.carteira_price || []).map((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) && n > 0 ? n : null
-    })
-    if (priceSeries.some((v) => v != null)) return priceSeries
-    const valoresAbsolutos = (historicoCarteira.carteira_valor || []).map((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) && n > 0 ? n : null
-    })
-    if (valoresAbsolutos.some((v) => v != null)) return valoresAbsolutos
-    if (initialWealth <= 0) return [] as Array<number | null>
-    const baseSeries = carteiraRetornoSeries || []
-    return baseSeries.map((v) => {
-      if (v == null || isNaN(Number(v))) return null
-      return initialWealth * (Number(v) / 100)
-    })
-  }, [historicoCarteira, carteiraRetornoSeries, initialWealth])
+  const carteiraValorPrecoSeries = useMemo(
+    () => benchmarkComparison?.carteiraRs ?? [],
+    [benchmarkComparison]
+  )
 
   const historicoTemPontos = useMemo(
     () => historicoCarteiraTemPontos(historicoCarteira) || carteiraValorPrecoSeries.some((v) => v != null && Number(v) > 0),
@@ -472,32 +447,20 @@ export default function HomePage() {
   )
 
   const evolucaoCarteiraChartData = useMemo(() => {
-    if (!historicoCarteira || !historicoTemPontos) return []
+    if (!historicoCarteira || !benchmarkComparison || !historicoTemPontos) return []
     const datas = historicoCarteira.datas || []
-    const len = Math.max(
-      datas.length,
-      carteiraValorPrecoSeries.length,
-      historicoCarteira.ibov?.length || 0,
-      historicoCarteira.ivvb11?.length || 0,
-      historicoCarteira.ifix?.length || 0,
-      historicoCarteira.ipca?.length || 0,
-      historicoCarteira.cdi?.length || 0,
-    )
-    const escalaIndice = (v: number | null | undefined) => {
-      if (v == null || initialWealth <= 0) return null
-      const n = Number(v)
-      return Number.isFinite(n) ? initialWealth * (n / 100) : null
-    }
+    const { len, carteiraRs, indicesRs } = benchmarkComparison
     return Array.from({ length: len }, (_, i) => ({
       data: datas[i] || `ponto-${i + 1}`,
-      carteira: carteiraValorPrecoSeries[i] ?? null,
-      ibov: escalaIndice(historicoCarteira.ibov?.[i]),
-      ivvb11: escalaIndice(historicoCarteira.ivvb11?.[i]),
-      ifix: escalaIndice(historicoCarteira.ifix?.[i]),
-      ipca: escalaIndice(historicoCarteira.ipca?.[i]),
-      cdi: escalaIndice(historicoCarteira.cdi?.[i]),
+      carteira: carteiraRs[i] ?? null,
+      ibov: indicesRs.ibov?.[i] ?? null,
+      ivvb11: indicesRs.ivvb11?.[i] ?? null,
+      ifix: indicesRs.ifix?.[i] ?? null,
+      ipca: indicesRs.ipca?.[i] ?? null,
+      cdi: indicesRs.cdi?.[i] ?? null,
+      btc: indicesRs.btc?.[i] ?? null,
     }))
-  }, [historicoCarteira, historicoTemPontos, carteiraValorPrecoSeries, initialWealth])
+  }, [historicoCarteira, benchmarkComparison, historicoTemPontos])
 
   const carteiraTrend = useMemo(() => {
    
@@ -1773,7 +1736,12 @@ export default function HomePage() {
                 </div>
                 <h2 className="text-sm sm:text-lg font-semibold text-foreground">Evolução da Carteira</h2>
               </div>
-              <div className="w-full xs:w-auto xs:ml-auto">
+              <div className="w-full xs:w-auto xs:ml-auto flex flex-col xs:items-end gap-1">
+                {benchmarkComparison && initialWealth > 0 && (
+                  <p className="text-[10px] sm:text-xs text-muted-foreground xs:text-right">
+                    Comparativo com {formatarValor(initialWealth)} no início do período (retorno por preço, sem aportes)
+                  </p>
+                )}
                 <select
                   value={filtroPeriodo}
                   onChange={(e)=>{

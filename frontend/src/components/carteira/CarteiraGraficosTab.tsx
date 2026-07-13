@@ -28,7 +28,8 @@ import {
 } from 'recharts'
 import AtivosDetalhesModal from './AtivosDetalhesModal'
 import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
-import { historicoCarteiraTemPontos } from '../../services/api'
+import { historicoCarteiraTemPontos, type HistoricoCarteiraPayload } from '../../services/api'
+import { buildBenchmarkComparison, lastValidValue } from '../../utils/carteiraBenchmark'
 
 /** Extrai ano e mês de YYYY-MM ou YYYY-MM-DD sem depender de fuso (evita bug com trimestral/semestral/anual/máximo). */
 function parseAnoMesCalendario(dataStr: string): { ano: number; mes: number; chave: string } | null {
@@ -48,19 +49,7 @@ interface CarteiraGraficosTabProps {
   loadingCarteira?: boolean
   loadingHistorico: boolean
   historicoErro?: boolean
-  historicoCarteira: {
-    datas: string[]
-    carteira_valor: number[]
-    patrimonio_datas?: string[]
-    carteira: (number | null)[]
-    ibov: (number | null)[]
-    ivvb11: (number | null)[]
-    ifix: (number | null)[]
-    ipca: (number | null)[]
-    cdi?: (number | null)[]
-    btc?: (number | null)[]
-    carteira_price?: (number | null)[]
-  } | null
+  historicoCarteira: HistoricoCarteiraPayload | null
   /** Histórico em período máximo, usado só no calendário para que os valores por mês não mudem ao trocar o filtro */
   historicoParaCalendario?: { datas: string[]; carteira_valor?: number[]; carteira?: (number | null)[]; carteira_price?: (number | null)[] } | null
   filtroPeriodo: string
@@ -175,22 +164,12 @@ export default function CarteiraGraficosTab({
     setModalAtivos([])
   }
 
-  const initialWealth = useMemo(() => {
-    const arr = historicoCarteira?.carteira_valor || []
-    const pickPositive = (values: number[]) => {
-      for (const v of values) {
-        const n = Number(v)
-        if (Number.isFinite(n) && n > 0) return n
-      }
-      return null
-    }
-    const fromStart = pickPositive(arr)
-    if (fromStart != null) return fromStart
-    const fromEnd = pickPositive([...arr].reverse())
-    if (fromEnd != null) return fromEnd
-    if (valorTotal > 0) return valorTotal
-    return 0
-  }, [historicoCarteira, valorTotal])
+  const benchmarkComparison = useMemo(
+    () => buildBenchmarkComparison(historicoCarteira, valorTotal),
+    [historicoCarteira, valorTotal]
+  )
+
+  const initialWealth = benchmarkComparison?.baseCapital ?? 0
 
   const historicoTemPontos = useMemo(
     () => historicoCarteiraTemPontos(historicoCarteira),
@@ -200,7 +179,6 @@ export default function CarteiraGraficosTab({
   const indiceSeries = useMemo(() => {
     if (!historicoCarteira) return [] as Array<number | null>
     if (indiceRef === 'todos') {
-      // Retornar objeto com todas as séries quando 'todos' estiver selecionado
       return {
         ibov: (historicoCarteira as any).ibov || [],
         ivvb11: (historicoCarteira as any).ivvb11 || [],
@@ -214,36 +192,22 @@ export default function CarteiraGraficosTab({
     return series || []
   }, [historicoCarteira, indiceRef])
 
-  // Série de retorno por preço (exclui aportes/retiradas), rebased (já vem como índice base 100)
-  const carteiraRetornoSeries = useMemo(() => {
-    return (historicoCarteira?.carteira_price || historicoCarteira?.carteira || []) as Array<number | null>
-  }, [historicoCarteira])
+  const carteiraRetornoSeries = useMemo(
+    () => benchmarkComparison?.carteiraReturnSeries ?? [],
+    [benchmarkComparison]
+  )
 
   const indiceValorSeries = useMemo(() => {
-    if (!historicoCarteira) return [] as Array<number | null>
-    const wealthBase = initialWealth > 0 ? initialWealth : valorTotal
-    if (wealthBase <= 0) return [] as Array<number | null>
-    
-    // Se 'todos' estiver selecionado, retornar objeto com todas as séries convertidas
-    if (indiceRef === 'todos' && typeof indiceSeries === 'object' && !Array.isArray(indiceSeries)) {
-      const seriesObj = indiceSeries as Record<string, Array<number | null>>
-      const result: Record<string, Array<number | null>> = {}
-      Object.keys(seriesObj).forEach(key => {
-        result[key] = (seriesObj[key] || []).map((v) => {
-          if (v == null || isNaN(Number(v))) return null
-          return wealthBase * (Number(v) / 100)
-        })
-      })
-      return result
-    }
-    
-    // Caso individual (array)
-    const series = Array.isArray(indiceSeries) ? indiceSeries : []
-    return series.map((v) => {
-      if (v == null || isNaN(Number(v))) return null
-      return wealthBase * (Number(v) / 100)
-    })
-  }, [historicoCarteira, indiceSeries, initialWealth, valorTotal, indiceRef])
+    if (!benchmarkComparison) return [] as Array<number | null> | Record<string, Array<number | null>>
+    if (indiceRef === 'todos') return benchmarkComparison.indicesRs
+    return benchmarkComparison.indicesRs[indiceRef] || []
+  }, [benchmarkComparison, indiceRef])
+
+  const indicePctSeries = useMemo(() => {
+    if (!benchmarkComparison) return [] as Array<number | null> | Record<string, Array<number | null>>
+    if (indiceRef === 'todos') return benchmarkComparison.indicesPct
+    return benchmarkComparison.indicesPct[indiceRef] || []
+  }, [benchmarkComparison, indiceRef])
 
   // Patrimônio real (com aportes) — espelha o banco (movimentações + snapshots + valor atual)
   const patrimonioDatas = useMemo(() => {
@@ -265,49 +229,50 @@ export default function CarteiraGraficosTab({
 
   const patrimonioTemPontos = patrimonioChartLen > 0 && carteiraValorPatrimonioSeries.some((v) => v != null && Number(v) > 0)
 
-  // Série de valor (R$) sem aportes: prioriza carteira_price; senão patrimônio positivo; senão rebased × base
-  const carteiraValorPrecoSeries = useMemo(() => {
-    if (!historicoCarteira) return [] as Array<number | null>
-    const priceSeries = (historicoCarteira.carteira_price || []).map((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) && n > 0 ? n : null
-    })
-    if (priceSeries.some((v) => v != null)) return priceSeries
-    const valoresAbsolutos = (historicoCarteira.carteira_valor || []).map((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) && n > 0 ? n : null
-    })
-    if (valoresAbsolutos.some((v) => v != null)) return valoresAbsolutos
-    const wealthBase = initialWealth > 0 ? initialWealth : valorTotal
-    if (wealthBase <= 0) return [] as Array<number | null>
-    const baseSeries = carteiraRetornoSeries || []
-    return baseSeries.map((v) => {
-      if (v == null || isNaN(Number(v))) return null
-      return wealthBase * (Number(v) / 100)
-    })
-  }, [historicoCarteira, carteiraRetornoSeries, initialWealth, valorTotal])
+  // Carteira em R$ no mesmo capital inicial dos índices (retorno por preço, sem aportes)
+  const carteiraValorPrecoSeries = useMemo(
+    () => benchmarkComparison?.carteiraRs ?? [],
+    [benchmarkComparison]
+  )
+
+  const carteiraPctSeries = useMemo(
+    () => benchmarkComparison?.carteiraPct ?? [],
+    [benchmarkComparison]
+  )
+
+  const carteiraComparativoInicial = useMemo(() => {
+    if (!benchmarkComparison) return initialWealth || 0
+    const anchor = benchmarkComparison.anchorIdx
+    return carteiraValorPrecoSeries[anchor] ?? benchmarkComparison.baseCapital
+  }, [benchmarkComparison, carteiraValorPrecoSeries, initialWealth])
+
+  const carteiraComparativoAtual = useMemo(
+    () => lastValidValue(carteiraValorPrecoSeries) ?? carteiraComparativoInicial,
+    [carteiraValorPrecoSeries, carteiraComparativoInicial]
+  )
+
+  const carteiraComparativoDelta = carteiraComparativoAtual - carteiraComparativoInicial
+  const carteiraComparativoPct = carteiraComparativoInicial > 0
+    ? ((carteiraComparativoAtual / carteiraComparativoInicial) - 1) * 100
+    : 0
 
   const historicoChartLen = useMemo(() => {
+    if (benchmarkComparison?.len) return benchmarkComparison.len
     if (!historicoCarteira) return 0
     return Math.max(
       historicoCarteira.datas?.length || 0,
-      carteiraValorPrecoSeries.length,
       carteiraValorPatrimonioSeries.length,
       historicoCarteira.carteira_valor?.length || 0,
-      historicoCarteira.carteira?.length || 0,
-      historicoCarteira.carteira_price?.length || 0,
     )
-  }, [historicoCarteira, carteiraValorPrecoSeries, carteiraValorPatrimonioSeries])
+  }, [benchmarkComparison, historicoCarteira, carteiraValorPatrimonioSeries])
 
   const labelHistoricoEm = (i: number) => historicoCarteira?.datas?.[i] || `ponto-${i + 1}`
 
   const comparativoResumo = useMemo(() => {
-    // Não mostrar resumo quando 'todos' estiver selecionado (múltiplos benchmarks)
-    if (indiceRef === 'todos') return null
-    
-    // Usar carteiraValorPrecoSeries (sem aportes) em vez de carteira_valor (com aportes)
-    const carteiraArr = carteiraValorPrecoSeries || []
-    const indiceArr = Array.isArray(indiceValorSeries) ? indiceValorSeries : []
+    if (indiceRef === 'todos' || !benchmarkComparison) return null
+
+    const carteiraArr = benchmarkComparison.carteiraRs
+    const indiceArr = benchmarkComparison.indicesRs[indiceRef] || []
     if (!carteiraArr.length || !indiceArr.length) return null as null | {
       indiceNome: string
       indiceInicial: number
@@ -318,26 +283,24 @@ export default function CarteiraGraficosTab({
       deltaCarteira: number
       gapAbsoluto: number
     }
-    const carteiraInicial = carteiraArr.find((v) => typeof v === 'number' && v !== null) || initialWealth || 0
-    // Saldo em tempo real do banco para comparar com os índices (evita atraso do último ponto da série)
-    const carteiraFinal = valorTotal > 0 ? valorTotal : ([...carteiraArr].reverse().find((v) => typeof v === 'number' && v !== null) || initialWealth || 0)
-    const indiceInicial = indiceArr.find((v) => typeof v === 'number' && v !== null) || 0
-    const indiceFinal = [...indiceArr].reverse().find((v) => typeof v === 'number' && v !== null) || 0
-    const deltaIndice = (indiceFinal || 0) - (indiceInicial || 0)
-    const deltaCarteira = (carteiraFinal || 0) - (carteiraInicial || 0)
-    const gapAbsoluto = (carteiraFinal || 0) - (indiceFinal || 0)
+
+    const anchor = benchmarkComparison.anchorIdx
+    const carteiraInicial = carteiraArr[anchor] ?? benchmarkComparison.baseCapital
+    const indiceInicial = indiceArr[anchor] ?? benchmarkComparison.baseCapital
+    const carteiraFinal = lastValidValue(carteiraArr) ?? carteiraInicial
+    const indiceFinal = lastValidValue(indiceArr) ?? indiceInicial
     const nomeMap: Record<string, string> = { ibov: 'IBOV', ivvb11: 'IVVB11', ifix: 'IFIX', ipca: 'IPCA', cdi: 'CDI', btc: 'Bitcoin' }
     return {
       indiceNome: nomeMap[indiceRef],
-      indiceInicial: indiceInicial || 0,
-      indiceFinal: indiceFinal || 0,
+      indiceInicial,
+      indiceFinal,
       carteiraInicial,
       carteiraFinal,
-      deltaIndice,
-      deltaCarteira,
-      gapAbsoluto,
+      deltaIndice: indiceFinal - indiceInicial,
+      deltaCarteira: carteiraFinal - carteiraInicial,
+      gapAbsoluto: carteiraFinal - indiceFinal,
     }
-  }, [historicoCarteira, indiceValorSeries, indiceRef, carteiraValorPrecoSeries, initialWealth, valorTotal])
+  }, [benchmarkComparison, indiceRef])
 
   // Calcular Tracking Error e Beta (apenas quando benchmark específico selecionado)
   const metricasAvancadas = useMemo(() => {
@@ -918,51 +881,27 @@ export default function CarteiraGraficosTab({
                 {/* Resumo estatístico e comparativo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Inicial (preço)</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Capital inicial (comparativo)</div>
                     <div className="text-base md:text-lg font-bold text-foreground">
-                      {formatCurrency(carteiraValorPrecoSeries?.[0] || initialWealth || 0)}
+                      {formatCurrency(carteiraComparativoInicial)}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Patrimônio Atual (preço)</div>
+                    <div className="text-xs md:text-sm text-muted-foreground">Carteira hoje (mesmo critério)</div>
                     <div className="text-base md:text-lg font-bold text-foreground">
-                      {formatCurrency(valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0))}
+                      {formatCurrency(carteiraComparativoAtual)}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (R$) — preço</div>
-                    <div className={`text-base md:text-lg font-bold ${
-                      (() => {
-                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)
-                        return atual > inicial
-                      })()
-                        ? 'text-green-600' 
-                        : 'text-red-600'
-                    }`}>
-                      {(() => {
-                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] || initialWealth || 0)
-                        const diferenca = atual - inicial
-                        return `${diferenca >= 0 ? '+' : ''}${formatCurrency(diferenca, '')}`
-                      })()}
+                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (R$) — sem aportes</div>
+                    <div className={`text-base md:text-lg font-bold ${carteiraComparativoDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {`${carteiraComparativoDelta >= 0 ? '+' : ''}${formatCurrency(carteiraComparativoDelta, '')}`}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3 md:p-4">
-                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (%) — preço (sem aportes)</div>
-                    <div className={`text-base md:text-lg font-bold ${
-                      (() => {
-                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] ?? initialWealth)
-                        return inicial > 0 && atual >= inicial ? 'text-green-600' : 'text-red-600'
-                      })()
-                    }`}>
-                      {(() => {
-                        const inicial = carteiraValorPrecoSeries?.[0] || initialWealth || 0
-                        const atual = valorTotal > 0 ? valorTotal : (carteiraValorPrecoSeries?.[carteiraValorPrecoSeries.length - 1] ?? initialWealth)
-                        const pct = inicial > 0 ? ((atual / inicial) - 1) * 100 : 0
-                        return `${pct >= 0 ? '+' : ''}${formatPercentage(pct)}`
-                      })()}
+                    <div className="text-xs md:text-sm text-muted-foreground">Ganho/Perda (%) — sem aportes</div>
+                    <div className={`text-base md:text-lg font-bold ${carteiraComparativoPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {`${carteiraComparativoPct >= 0 ? '+' : ''}${formatPercentage(carteiraComparativoPct)}`}
                     </div>
                   </div>
                 </div>
@@ -1097,7 +1036,7 @@ export default function CarteiraGraficosTab({
                         <span className="text-muted-foreground/80 font-normal"> (sem aportes)</span>
                       </h4>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Evolução ponto a ponto no período. Alterne entre valor em R$ e retorno em %.
+                        Mesmo capital inicial ({formatCurrency(benchmarkComparison?.baseCapital || initialWealth || 0)}) no início do período. Alterne entre valor em R$ e retorno em %.
                       </p>
                     </div>
                     <div className="flex rounded-lg border border-border p-0.5 bg-muted/30">
@@ -1125,33 +1064,26 @@ export default function CarteiraGraficosTab({
                           data: d,
                           carteira_valor: carteiraValorPrecoSeries?.[i] ?? null,
                           carteira_idx: (carteiraRetornoSeries?.[i] ?? null),
-                          carteira_pct: typeof carteiraRetornoSeries?.[i] === 'number' ? Number(carteiraRetornoSeries[i]) - 100 : null,
+                          carteira_pct: carteiraPctSeries?.[i] ?? null,
                         }
                         if (indiceRef === 'todos' && typeof indiceValorSeries === 'object' && !Array.isArray(indiceValorSeries)) {
                           const seriesObj = indiceValorSeries as Record<string, Array<number | null>>
+                          const pctObj = indicePctSeries as Record<string, Array<number | null>>
                           dataPoint.ibov_valor = seriesObj.ibov?.[i] ?? null
                           dataPoint.ivvb11_valor = seriesObj.ivvb11?.[i] ?? null
                           dataPoint.ifix_valor = seriesObj.ifix?.[i] ?? null
                           dataPoint.ipca_valor = seriesObj.ipca?.[i] ?? null
                           dataPoint.cdi_valor = seriesObj.cdi?.[i] ?? null
                           dataPoint.btc_valor = seriesObj.btc?.[i] ?? null
-                          dataPoint.ibov_idx = (historicoCarteira?.ibov?.[i] ?? null) as number | null
-                          dataPoint.ivvb11_idx = (historicoCarteira?.ivvb11?.[i] ?? null) as number | null
-                          dataPoint.ifix_idx = (historicoCarteira?.ifix?.[i] ?? null) as number | null
-                          dataPoint.ipca_idx = (historicoCarteira?.ipca?.[i] ?? null) as number | null
-                          dataPoint.cdi_idx = (historicoCarteira?.cdi?.[i] ?? null) as number | null
-                          dataPoint.btc_idx = (historicoCarteira?.btc?.[i] ?? null) as number | null
-                          dataPoint.ibov_pct = typeof historicoCarteira?.ibov?.[i] === 'number' ? Number(historicoCarteira.ibov[i]) - 100 : null
-                          dataPoint.ivvb11_pct = typeof historicoCarteira?.ivvb11?.[i] === 'number' ? Number(historicoCarteira.ivvb11[i]) - 100 : null
-                          dataPoint.ifix_pct = typeof historicoCarteira?.ifix?.[i] === 'number' ? Number(historicoCarteira.ifix[i]) - 100 : null
-                          dataPoint.ipca_pct = typeof historicoCarteira?.ipca?.[i] === 'number' ? Number(historicoCarteira.ipca[i]) - 100 : null
-                          dataPoint.cdi_pct = typeof historicoCarteira?.cdi?.[i] === 'number' ? Number(historicoCarteira.cdi[i]) - 100 : null
-                          dataPoint.btc_pct = typeof historicoCarteira?.btc?.[i] === 'number' ? Number(historicoCarteira.btc[i]) - 100 : null
+                          dataPoint.ibov_pct = pctObj.ibov?.[i] ?? null
+                          dataPoint.ivvb11_pct = pctObj.ivvb11?.[i] ?? null
+                          dataPoint.ifix_pct = pctObj.ifix?.[i] ?? null
+                          dataPoint.ipca_pct = pctObj.ipca?.[i] ?? null
+                          dataPoint.cdi_pct = pctObj.cdi?.[i] ?? null
+                          dataPoint.btc_pct = pctObj.btc?.[i] ?? null
                         } else {
                           dataPoint.indice_valor = Array.isArray(indiceValorSeries) ? (indiceValorSeries[i] ?? null) : null
-                          dataPoint.indice_idx = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
-                          const idxValue = (historicoCarteira?.[indiceRef as keyof typeof historicoCarteira]?.[i] ?? null) as number | null
-                          dataPoint.indice_pct = typeof idxValue === 'number' ? Number(idxValue) - 100 : null
+                          dataPoint.indice_pct = Array.isArray(indicePctSeries) ? (indicePctSeries[i] ?? null) : null
                         }
                         return dataPoint
                       })}
