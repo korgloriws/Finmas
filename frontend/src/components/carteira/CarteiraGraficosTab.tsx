@@ -30,6 +30,7 @@ import AtivosDetalhesModal from './AtivosDetalhesModal'
 import DistribuicaoCarteiraECharts from '../home/DistribuicaoCarteiraECharts'
 import { historicoCarteiraTemPontos, type HistoricoCarteiraPayload } from '../../services/api'
 import { buildBenchmarkComparison, lastValidValue } from '../../utils/carteiraBenchmark'
+import { PERIODOS_HISTORICO_CARTEIRA, labelPeriodoHistorico } from '../../utils/periodoHistorico'
 
 /** Extrai ano e mês de YYYY-MM ou YYYY-MM-DD sem depender de fuso (evita bug com trimestral/semestral/anual/máximo). */
 function parseAnoMesCalendario(dataStr: string): { ano: number; mes: number; chave: string } | null {
@@ -50,10 +51,16 @@ interface CarteiraGraficosTabProps {
   loadingHistorico: boolean
   historicoErro?: boolean
   historicoCarteira: HistoricoCarteiraPayload | null
+  /** Histórico do gráfico de patrimônio (filtro independente do comparativo) */
+  historicoPatrimonio?: HistoricoCarteiraPayload | null
+  loadingHistoricoPatrimonio?: boolean
+  historicoPatrimonioErro?: boolean
   /** Histórico em período máximo, usado só no calendário para que os valores por mês não mudem ao trocar o filtro */
   historicoParaCalendario?: { datas: string[]; carteira_valor?: number[]; carteira?: (number | null)[]; carteira_price?: (number | null)[] } | null
   filtroPeriodo: string
   setFiltroPeriodo: (value: string) => void
+  filtroPeriodoPatrimonio?: string
+  setFiltroPeriodoPatrimonio?: (value: string) => void
   ativosPorTipo: Record<string, number>
   /** Proventos recebidos por ativo (dividendos/juros) para gráfico Top 10 */
   proventosRecebidos?: Array<{
@@ -75,14 +82,19 @@ export default function CarteiraGraficosTab({
   loadingHistorico,
   historicoErro = false,
   historicoCarteira,
+  historicoPatrimonio = null,
+  loadingHistoricoPatrimonio = false,
+  historicoPatrimonioErro = false,
   historicoParaCalendario = null,
   filtroPeriodo,
   setFiltroPeriodo,
+  filtroPeriodoPatrimonio = 'max',
+  setFiltroPeriodoPatrimonio,
   ativosPorTipo,
   proventosRecebidos = [],
   loadingProventos = false,
   proventosErro = false,
-  filtroProventosGraficos = 'total',
+  filtroProventosGraficos = 'mes',
   setFiltroProventosGraficos,
 }: CarteiraGraficosTabProps) {
   const [indiceRef, setIndiceRef] = useState<'ibov' | 'ivvb11' | 'ifix' | 'ipca' | 'cdi' | 'btc' | 'todos'>('ibov')
@@ -209,25 +221,27 @@ export default function CarteiraGraficosTab({
     return benchmarkComparison.indicesPct[indiceRef] || []
   }, [benchmarkComparison, indiceRef])
 
-  // Patrimônio real (com aportes) — espelha o banco (movimentações + snapshots + valor atual)
-  const patrimonioDatas = useMemo(() => {
-    if (!historicoCarteira) return [] as string[]
-    return historicoCarteira.patrimonio_datas || []
-  }, [historicoCarteira])
+  // Patrimônio com aportes: só a série do filtro próprio (nunca o histórico do comparativo)
+  const patrimonioChartData = useMemo(() => {
+    if (!historicoPatrimonio) return [] as Array<{ data: string; patrimonio: number | null }>
+    const datas = historicoPatrimonio.datas || []
+    const valores = historicoPatrimonio.carteira_valor || []
+    const len = Math.max(datas.length, valores.length)
+    if (len <= 0) return []
 
-  const carteiraValorPatrimonioSeries = useMemo(() => {
-    if (!historicoCarteira) return [] as Array<number | null>
-    return (historicoCarteira.carteira_valor || []).map((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) ? n : null
-    })
-  }, [historicoCarteira])
+    const out: Array<{ data: string; patrimonio: number | null }> = []
+    for (let i = 0; i < len; i++) {
+      const raw = i < valores.length ? valores[i] : null
+      const n = Number(raw)
+      out.push({
+        data: datas[i] || historicoPatrimonio.patrimonio_datas?.[i] || `ponto-${i + 1}`,
+        patrimonio: Number.isFinite(n) && n > 0 ? n : null,
+      })
+    }
+    return out
+  }, [historicoPatrimonio])
 
-  const patrimonioChartLen = useMemo(() => {
-    return Math.max(patrimonioDatas.length, carteiraValorPatrimonioSeries.length)
-  }, [patrimonioDatas, carteiraValorPatrimonioSeries])
-
-  const patrimonioTemPontos = patrimonioChartLen > 0 && carteiraValorPatrimonioSeries.some((v) => v != null && Number(v) > 0)
+  const patrimonioTemPontos = patrimonioChartData.some((p) => p.patrimonio != null && Number(p.patrimonio) > 0)
 
   // Carteira em R$ no mesmo capital inicial dos índices (retorno por preço, sem aportes)
   const carteiraValorPrecoSeries = useMemo(
@@ -261,10 +275,9 @@ export default function CarteiraGraficosTab({
     if (!historicoCarteira) return 0
     return Math.max(
       historicoCarteira.datas?.length || 0,
-      carteiraValorPatrimonioSeries.length,
       historicoCarteira.carteira_valor?.length || 0,
     )
-  }, [benchmarkComparison, historicoCarteira, carteiraValorPatrimonioSeries])
+  }, [benchmarkComparison, historicoCarteira])
 
   const labelHistoricoEm = (i: number) => historicoCarteira?.datas?.[i] || `ponto-${i + 1}`
 
@@ -827,36 +840,29 @@ export default function CarteiraGraficosTab({
                   <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
                   <TrendingUp className="w-6 h-6 text-primary" />
                 </div>
-                  <h3 className="text-lg md:text-xl font-semibold text-foreground">Evolução do Patrimônio</h3>
+                  <h3 className="text-lg md:text-xl font-semibold text-foreground">Comparativo com benchmarks</h3>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Período: {(() => {
-                    const periodos: Record<string, string> = {
-                      'semanal': 'Semanal',
-                      'mensal': 'Mensal',
-                      'trimestral': 'Trimestral',
-                      'semestral': 'Semestral',
-                      'anual': 'Anual',
-                      'maximo': 'Máximo'
-                    }
-                    return periodos[filtroPeriodo] || 'Mensal'
-                  })()}
+                  Período: {labelPeriodoHistorico(filtroPeriodo)}
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <select
-                  value={filtroPeriodo}
-                  onChange={(e) => setFiltroPeriodo(e.target.value as any)}
-                  className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm min-w-0 w-full sm:w-auto"
-                  aria-label="Filtrar por período"
-                >
-                  <option value="semanal">Semanal</option>
-                  <option value="mensal">Mensal</option>
-                  <option value="trimestral">Trimestral</option>
-                  <option value="semestral">Semestral</option>
-                  <option value="anual">Anual</option>
-                  <option value="maximo">Máximo</option>
-                </select>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-wrap" role="group" aria-label="Filtrar por período">
+                  {PERIODOS_HISTORICO_CARTEIRA.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setFiltroPeriodo(p.value)}
+                      className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded transition-all duration-200 ${
+                        filtroPeriodo === p.value
+                          ? 'bg-primary text-primary-foreground shadow-md'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <select
                   value={indiceRef}
                   onChange={(e) => setIndiceRef(e.target.value as any)}
@@ -1239,58 +1245,6 @@ export default function CarteiraGraficosTab({
                     </ResponsiveContainer>
                   </div>
                 </div>
-
-                {/* Gráfico: Evolução do patrimônio total (com aportes) — complementar ao comparativo sem aportes */}
-                <div className="bg-muted/30 rounded-lg p-3 md:p-4 mb-4">
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Evolução do patrimônio total (com aportes e retiradas)</h4>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Valor real gravado no banco (snapshots diários da soma valor_total + saldo atual). Não reconstrói histórico a partir de movimentações.
-                  </p>
-                  <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
-                    {patrimonioTemPontos ? (
-                    <ResponsiveContainer width="100%" height="100%" minHeight={260}>
-                      <AreaChart
-                        data={Array.from({ length: patrimonioChartLen }, (_, i) => ({
-                          data: patrimonioDatas[i] || `ponto-${i + 1}`,
-                          patrimonio: carteiraValorPatrimonioSeries[i] ?? null,
-                        }))}
-                        margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
-                      >
-                        <defs>
-                          <linearGradient id="cgPatrimonioVal" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35}/>
-                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis
-                          dataKey="data"
-                          stroke="hsl(var(--muted-foreground))"
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(v) => {
-                            if (!v || typeof v !== 'string') return v
-                            const parts = String(v).split('-')
-                            if (parts.length >= 3) return `${parts[2]}/${parts[1]}`
-                            if (parts.length === 2) return `${parts[1]}/${parts[0]?.slice?.(2) ?? parts[0]}`
-                            return v
-                          }}
-                        />
-                        <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} width={56} tickFormatter={(v) => formatCurrency(v, '')} domain={['auto', 'auto']} />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))', fontSize: '12px' }}
-                          formatter={(value: any) => [formatCurrency(value), 'Patrimônio']}
-                          labelFormatter={(label) => (label ? `Data: ${label}` : '')}
-                        />
-                        <Area type="monotone" dataKey="patrimonio" stroke="#0ea5e9" fill="url(#cgPatrimonioVal)" strokeWidth={2.5} name="Patrimônio" isAnimationActive animationDuration={800} animationEasing="ease-out" connectNulls={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-sm text-muted-foreground text-center px-4">
-                        Nenhum snapshot patrimonial no período ainda. O histórico é gravado automaticamente ao atualizar preços ou alterar a carteira.
-                      </div>
-                    )}
-                  </div>
-                </div>
               </>
             ) : (
             <div className="h-64 flex flex-col items-center justify-center gap-2 text-muted-foreground text-center px-4">
@@ -1306,6 +1260,89 @@ export default function CarteiraGraficosTab({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Gráfico: Evolução do patrimônio total (com aportes) — filtro e query independentes */}
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="p-2 rounded-lg bg-sky-500/10 flex-shrink-0">
+                    <TrendingUp className="w-5 h-5 text-sky-500" />
+                  </div>
+                  <h3 className="text-lg md:text-xl font-semibold text-foreground">Evolução do patrimônio (com aportes)</h3>
+                </div>
+                <p className="text-xs text-muted-foreground sm:pl-12">
+                  Independente da comparação com índices. Preferência por snapshots do banco; sem snapshot na data, usa patrimônio reconstruído com aportes e retiradas.
+                </p>
+              </div>
+              {setFiltroPeriodoPatrimonio && (
+                <div className="flex items-center gap-1 flex-wrap flex-shrink-0" role="group" aria-label="Período do gráfico de patrimônio">
+                  {PERIODOS_HISTORICO_CARTEIRA.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setFiltroPeriodoPatrimonio(p.value)}
+                      className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded transition-all duration-200 ${
+                        filtroPeriodoPatrimonio === p.value
+                          ? 'bg-primary text-primary-foreground shadow-md'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="w-full min-h-[260px] h-64 sm:h-72 md:h-[320px] overflow-visible">
+              {loadingHistoricoPatrimonio ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="animate-pulse h-48 w-full bg-muted rounded-lg" />
+                </div>
+              ) : patrimonioTemPontos ? (
+                <ResponsiveContainer width="100%" height="100%" minHeight={260}>
+                  <AreaChart
+                    key={`patrimonio-${filtroPeriodoPatrimonio}-${patrimonioChartData.length}`}
+                    data={patrimonioChartData}
+                    margin={{ top: 12, right: 20, left: 12, bottom: 28 }}
+                  >
+                    <defs>
+                      <linearGradient id="cgPatrimonioVal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis
+                      dataKey="data"
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => {
+                        if (!v || typeof v !== 'string') return v
+                        const parts = String(v).split('-')
+                        if (parts.length >= 3) return `${parts[2]}/${parts[1]}`
+                        if (parts.length === 2) return `${parts[1]}/${parts[0]?.slice?.(2) ?? parts[0]}`
+                        return v
+                      }}
+                    />
+                    <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} width={56} tickFormatter={(v) => formatCurrency(v, '')} domain={['auto', 'auto']} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                      formatter={(value: any) => [formatCurrency(value), 'Patrimônio']}
+                      labelFormatter={(label) => (label ? `Data: ${label}` : '')}
+                    />
+                    <Area type="monotone" dataKey="patrimonio" stroke="#0ea5e9" fill="url(#cgPatrimonioVal)" strokeWidth={2.5} name="Patrimônio" isAnimationActive animationDuration={800} animationEasing="ease-out" connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                  {historicoPatrimonioErro
+                    ? 'Não foi possível carregar o patrimônio neste período.'
+                    : 'Sem pontos de patrimônio neste período. Tente Máx ou atualize os preços da carteira.'}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Calendário de desempenho mensal (sem aportes) */}

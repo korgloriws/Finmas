@@ -8,148 +8,26 @@ import {
   Sparkles,
   TrendingUp,
   ArrowLeft,
-  BarChart3,
-  CalendarDays,
-  Trophy,
-  Target,
-  ScanLine,
-  Receipt,
-  Brain,
-  Calculator,
-  Zap,
   Sun,
   Moon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import FinmasLogo from '../components/FinmasLogo'
+import {
+  TELAS_PREMIUM,
+  PRECO_MENSAL,
+  PRECO_ANUAL_TOTAL,
+  PRECO_ANUAL_MES,
+  formatarMoedaMarketing,
+  GMAIL_SUPORTE,
+  VENDAS_HERO_PILLS,
+  PLANO_MENSAL_ITENS,
+  PLANO_ANUAL_ITENS,
+} from '../content/marketingContent'
 
-/** Link para abrir Gmail com destinatário do administrador (contato / vendas). */
-const GMAIL_SUPORTE = 'https://mail.google.com/mail/?view=cm&to=finmasfinanceiro@gmail.com'
-
-/** Fonte única: telas e abas premium. Usado nos cards da página e no admin (Configurações). */
-const telasPremium = [
-  {
-    id: 'analise',
-    path: '/analise',
-    icon: BarChart3,
-    titulo: 'Análise de oportunidades',
-    desc: 'Tela exclusiva para encontrar os melhores ativos com base em critérios que você define.',
-    itens: [
-      'Filtros por tipo (ações, FIIs, BDRs), dividend yield, P/VPA, liquidez e mais',
-      'Lista ranqueada com indicadores fundamentais e técnicos',
-      'Comparação lado a lado entre ativos',
-      'Exportação e acompanhamento dos que mais interessam',
-    ],
-  },
-  {
-    id: 'agenda-dividendos',
-    path: '/agenda-dividendos',
-    icon: CalendarDays,
-    titulo: 'Agenda de dividendos',
-    desc: 'Visualize todos os proventos previstos da sua carteira e do mercado em um calendário.',
-    itens: [
-      'Calendário mensal e anual de dividendos e JCP',
-      'Proventos por ativo, data de pagamento e valor estimado',
-      'Filtros por tipo de ativo e período',
-      'Previsão de rendimento passivo',
-    ],
-  },
-  {
-    id: 'rankings',
-    path: '/rankings',
-    icon: Trophy,
-    titulo: 'Rankings',
-    desc: 'Veja como sua carteira se compara a outros investidores e descubra os ativos mais populares.',
-    itens: [
-      'Rankings por volume de investidores e valor aplicado',
-      'Top ativos em ações, FIIs e BDRs',
-      'Comparação da sua alocação com a média do mercado',
-      'Insights para diversificação',
-    ],
-  },
-  {
-    id: 'conceitos',
-    path: '/detalhes/conceitos',
-    icon: Target,
-    titulo: 'Conceitos (Detalhes)',
-    desc: 'Na tela de detalhes do ativo, a aba Conceitos traz preço justo Graham, método Bazin e indicador Fear & Greed.',
-    itens: [
-      'Preço justo de Graham — LPA, crescimento e taxa de juros para estimativa de valor',
-      'Método Bazin — Teto por dividendos com DY desejada',
-      'Indicador Fear & Greed — Score de momentum e distância do topo',
-    ],
-  },
-  {
-    id: 'radar-dividendos',
-    path: '/detalhes/radar-dividendos',
-    icon: ScanLine,
-    titulo: 'Radar de Dividendos (Detalhes)',
-    desc: 'Na tela de detalhes do ativo, a aba Radar de Dividendos mostra histórico, próximos proventos e padrão de pagamentos.',
-    itens: [
-      'Total histórico e próximos dividendos — Quantidade paga, soma total e lista dos próximos com datas',
-      'Média por dividendo — Média histórica e futura para planejar receita',
-      'Padrão de meses — Em quais meses o ativo costuma pagar e timeline consolidada',
-    ],
-  },
-  {
-    id: 'carteira-impostos',
-    path: '/carteira?tab=impostos',
-    icon: Receipt,
-    titulo: 'Impostos (Carteira)',
-    desc: 'Na tela da carteira, a aba Impostos calcula IR sobre vendas e proventos com base nas suas movimentações.',
-    itens: [
-      'IR sobre vendas — Ganho de capital com preço médio FIFO, day trade, isenção e alíquotas por tipo de ativo',
-      'IR sobre proventos — Dividendos, JCP e retenção na fonte',
-      'Filtros por período e tipo, com exportação para Excel',
-    ],
-  },
-  {
-    id: 'carteira-insights',
-    path: '/carteira?tab=insights',
-    icon: Brain,
-    titulo: 'Insights (Carteira)',
-    desc: 'Na tela da carteira, a aba Insights traz análise de correlação entre ativos e sugestões automáticas.',
-    itens: [
-      'Matriz de correlação entre os ativos da carteira para diversificação',
-      'Insights e alertas com base na composição e performance',
-      'Período configurável (6 meses, 1 ano ou 2 anos)',
-    ],
-  },
-  {
-    id: 'carteira-projecao',
-    path: '/carteira?tab=projecao',
-    icon: Calculator,
-    titulo: 'Projeção (Carteira)',
-    desc: 'Na tela da carteira, a aba Projeção projeta evolução do patrimônio com dividendos e metas.',
-    itens: [
-      'Projeção de valor com ou sem dividendos e aportes periódicos',
-      'Metas de renda e patrimônio — em quanto tempo alcançar seu alvo',
-      'Gráficos e metas de aporte mensal ou anual',
-    ],
-  },
-  {
-    id: 'carteira-simulador',
-    path: '/carteira?tab=simulador',
-    icon: Zap,
-    titulo: 'Simulador (Carteira)',
-    desc: 'Na tela da carteira, a aba Simulador testa choques de CDI, IPCA e SELIC e simula cenários.',
-    itens: [
-      'Choques de indexadores (CDI, IPCA, SELIC) na renda fixa',
-      'Cenários predefinidos: otimista, pessimista, crise, inflação alta',
-      'Monte Carlo — simulações probabilísticas para o longo prazo',
-    ],
-  },
-]
-
-const PRECO_MENSAL = 29.9
-const DESCONTO_ANUAL = 0.1
-const PRECO_ANUAL_TOTAL = PRECO_MENSAL * 12 * (1 - DESCONTO_ANUAL)
-const PRECO_ANUAL_MES = PRECO_ANUAL_TOTAL / 12
-
-function formatarMoeda(val: number) {
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
-}
+/** @deprecated use TELAS_PREMIUM from marketingContent — mantido para compatibilidade com referências externas */
+export const telasPremium = TELAS_PREMIUM
 
 const fadeInUp = {
   initial: { opacity: 0, y: 24 },
@@ -300,7 +178,7 @@ export default function VendasPage() {
                 transition={{ delay: 0.5, duration: 0.5 }}
                 className="text-xl sm:text-2xl text-muted-foreground mb-4 max-w-2xl mx-auto font-medium"
               >
-                Análise, dividendos, rankings, impostos e projeção da carteira em um só lugar.
+                Análise, dividendos, notícias, comparativo vs índices, impostos e projeção da carteira em um só lugar.
               </motion.p>
               <motion.p
                 initial={{ opacity: 0, y: 16 }}
@@ -308,7 +186,7 @@ export default function VendasPage() {
                 transition={{ delay: 0.65, duration: 0.5 }}
                 className="text-lg text-primary font-semibold mb-10"
               >
-                A partir de {formatarMoeda(PRECO_ANUAL_MES)}/mês no plano anual
+                A partir de {formatarMoedaMarketing(PRECO_ANUAL_MES)}/mês no plano anual
               </motion.p>
 
               {/* Pills de destaque */}
@@ -318,7 +196,7 @@ export default function VendasPage() {
                 transition={{ delay: 0.8, duration: 0.4 }}
                 className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-10"
               >
-                {['Análise', 'Dividendos', 'Impostos', 'Projeção', 'Categorias dinâmicas', 'Guia fiscal'].map((label, i) => (
+                {VENDAS_HERO_PILLS.map((label, i) => (
                   <motion.span
                     key={label}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -368,7 +246,7 @@ export default function VendasPage() {
               </p>
             </motion.div>
             <div className="grid md:grid-cols-3 gap-6">
-              {telasPremium.map((tela, i) => (
+              {TELAS_PREMIUM.map((tela, i) => (
                 <motion.div
                   key={tela.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -429,21 +307,14 @@ export default function VendasPage() {
                   <span className="text-sm font-medium text-muted-foreground">Mensal</span>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-3xl font-bold text-foreground">
-                      {formatarMoeda(PRECO_MENSAL)}
+                      {formatarMoedaMarketing(PRECO_MENSAL)}
                     </span>
                     <span className="text-muted-foreground">/mês</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">Cobrança mensal</p>
                 </div>
                 <ul className="space-y-3">
-                  {[
-                    'Análise de oportunidades',
-                    'Agenda de dividendos',
-                    'Rankings',
-                    'Conceitos e Radar de Dividendos (Detalhes)',
-                    'Impostos, Insights, Projeção e Simulador (Carteira)',
-                    'Fluxos premium para gestão mais avançada da carteira após o planejamento fiscal no guia',
-                  ].map((x) => (
+                  {PLANO_MENSAL_ITENS.map((x) => (
                     <li key={x} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-primary flex-shrink-0" />
                       {x}
@@ -469,16 +340,16 @@ export default function VendasPage() {
                   <span className="text-sm font-medium text-primary">Anual</span>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-3xl font-bold text-foreground">
-                      {formatarMoeda(PRECO_ANUAL_MES)}
+                      {formatarMoedaMarketing(PRECO_ANUAL_MES)}
                     </span>
                     <span className="text-muted-foreground">/mês</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {formatarMoeda(PRECO_ANUAL_TOTAL)}/ano · Economize {formatarMoeda(PRECO_MENSAL * 12 - PRECO_ANUAL_TOTAL)}
+                    {formatarMoedaMarketing(PRECO_ANUAL_TOTAL)}/ano · Economize {formatarMoedaMarketing(PRECO_MENSAL * 12 - PRECO_ANUAL_TOTAL)}
                   </p>
                 </div>
                 <ul className="space-y-3">
-                  {['Tudo do plano mensal', '12 meses pelo preço de 10,8', 'Melhor custo-benefício'].map((x) => (
+                  {PLANO_ANUAL_ITENS.map((x) => (
                     <li key={x} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-primary flex-shrink-0" />
                       {x}

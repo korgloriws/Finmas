@@ -5,21 +5,21 @@ import {
   Wallet,
   Calculator,
   BookOpen,
-  TrendingUp,
   Target,
   ArrowRight,
   Check,
-  DollarSign,
-  PieChart,
-  Calendar,
-  Newspaper,
-  Search,
-  Scale,
   Moon,
   Sun,
 } from 'lucide-react'
 import FinmasLogo from '../components/FinmasLogo'
 import { useTheme } from '../contexts/ThemeContext'
+import {
+  LANDING_FEATURES,
+  LANDING_TARGET_AUDIENCE,
+  LANDING_PREMIUM_HIGHLIGHTS,
+  SEO_TITLE,
+  SEO_DESCRIPTION,
+} from '../content/marketingContent'
 
 const fadeInUp = {
   initial: { opacity: 0, y: 24 },
@@ -27,155 +27,6 @@ const fadeInUp = {
   viewport: { once: true, margin: '-40px' },
   transition: { duration: 0.5 },
 }
-
-const FEATURES: Array<{ icon: typeof Wallet; title: string; description: string; details?: string[] }> = [
-  {
-    icon: Wallet,
-    title: 'Carteira de investimentos',
-    description: 'Centralize todos os seus investimentos em uma única tela: ações, FIIs, BDRs, ETFs, criptomoedas e renda fixa. Importe posições direto da B3, acompanhe valorização por período, proventos recebidos e a receber, gráficos de evolução e rebalanceamento para manter sua alocação alinhada às metas.',
-    details: [
-      
-      'Valorização por período (dia, mês, ano) e evolução do patrimônio',
-      'Proventos (dividendos, JCP): histórico e previsão',
-      'Gráficos de evolução e composição da carteira',
-      'Rebalanceamento e metas de alocação por tipo de ativo',
-      'Ajuste de preços e registro de vendas (premium: impostos, preço médio)',
-    ],
-  },
-  {
-    icon: Search,
-    title: 'Detalhes dos ativos',
-    description: 'Para cada ativo, veja fundamentos, histórico de preços, dividendos e indicadores como P/L, P/VP, ROE e DY em uma única página. Análise aprofundada para decidir com base em dados. Assinantes têm ainda Conceitos (preço justo Graham, método Bazin, Fear & Greed) e Radar de Dividendos.',
-    details: [
-      'Fundamentos e indicadores: P/L, P/VP, ROE, DY, EV/EBIT',
-      'Histórico de preços e de dividendos',
-      'Conceitos: preço justo Graham, Bazin, indicador Fear & Greed (premium)',
-      'Radar de Dividendos e eventos (premium)',
-      'Links para pesquisa e documentação',
-    ],
-  },
-  {
-    icon: PieChart,
-    title: 'Análise de oportunidades',
-    description: 'Listas ranqueadas com filtros por tipo (ações, FIIs, BDRs), dividend yield, P/VPA, liquidez e outros critérios. Compare ativos lado a lado e use rankings do mercado para apoiar suas decisões de compra e venda.',
-    details: [
-      'Filtros por tipo de ativo, DY, P/VPA, liquidez e mais',
-      'Listas ranqueadas com indicadores fundamentais e técnicos',
-      'Comparação lado a lado entre dois ou mais ativos',
-      'Rankings de ativos mais negociados e valorizados',
-      'Exportação e lista de acompanhamento',
-    ],
-  },
-  {
-    icon: Calculator,
-    title: 'Controle financeiro',
-    description: 'Registre receitas e despesas, acompanhe fluxo de caixa e controle cartões e compras parceladas. Agora com categorias personalizáveis (incluindo cores sólidas e degradê) para organizar melhor sua visão por tipo de gasto.',
-    details: [
-      'Receitas e despesas por categoria e período',
-      'Categorias de gastos personalizáveis com cor sólida, degradê e CSS avançado',
-      'Edição e remoção de categorias com reaproveitamento nos formulários e gráficos',
-      'Fluxo de caixa e saldo em tempo real',
-      'Controle de cartões e compras parceladas',
-      'Visão mensal e por período personalizado',
-      'Mesma plataforma da carteira — visão integrada',
-    ],
-  },
-  {
-    icon: BookOpen,
-    title: 'Guia do mercado',
-    description: 'Conteúdo educativo sobre classes de ativos (renda variável, renda fixa, Tesouro Direto), riscos, estratégias (Buy & Hold, Value, Dividendos) e boas práticas. Agora inclui também Guia Fiscal com alíquotas por classe, DARF e eficiência tributária legal.',
-    details: [
-      'Guia geral e por classe: ações, FIIs, renda fixa, internacional, Tesouro',
-      'Guia Fiscal: alíquotas, DARF, benefícios por classe e checklist por perfil',
-      'Riscos e como mitigá-los',
-      'Estratégias e indicadores explicados de forma clara',
-      'Notas de mercado (não-técnicas) opcionais',
-      'Acesso gratuito, sem cadastro',
-    ],
-  },
-  {
-    icon: TrendingUp,
-    title: 'Hub de calculadoras financeiras',
-    description: 'Um ambiente único com várias calculadoras para tomada de decisão: juros compostos, comparações e simulações práticas para diferentes cenários do investidor. Acesso 100% gratuito.',
-    details: [
-      'Juros compostos com aporte único ou recorrente',
-      'Comparativos e simulações em uma experiência centralizada',
-      'Apoio a diferentes cenários de planejamento financeiro',
-      'Acesso gratuito, sem cadastro',
-    ],
-  },
-  {
-    icon: DollarSign,
-    title: 'Conversor de moedas',
-    description: 'Converta valores entre real, dólar, euro e outras moedas com cotações atualizadas. Rápido, prático e sem cadastro. Ideal para quem acompanha ativos em dólar ou planeja viagens. Acesso 100% gratuito.',
-    details: [
-      'Múltiplas moedas e cotações atualizadas',
-      'Conversão bidirecional e histórico recente',
-      'Acesso gratuito, sem cadastro',
-    ],
-  },
-  {
-    icon: Scale,
-    title: 'Correção monetária',
-    description: 'Aplique índices como IPCA, IGP-M e outros para corrigir valores no tempo: contratos, aluguéis, valores históricos. Veja quanto um valor do passado vale hoje e simule correções. Acesso 100% gratuito.',
-    details: [
-      'Índices: IPCA, IGP-M e outros disponíveis',
-      'Correção entre duas datas ou projeção',
-      'Acesso gratuito, sem cadastro',
-    ],
-  },
-  {
-    icon: Calendar,
-    title: 'Agenda de dividendos',
-    description: 'Calendário de proventos (dividendos, JCP) e eventos corporativos dos ativos da sua carteira e do mercado. Veja datas de pagamento, valor estimado e não perca declarações. Premium.',
-    details: [
-      'Proventos previstos por ativo e por mês',
-      'Datas de pagamento e de declaração (ex-data)',
-      'Eventos corporativos relevantes',
-      'Filtros por período e tipo de ativo',
-    ],
-  },
-  {
-    icon: Newspaper,
-    title: 'Notícias e rankings',
-    description: 'Notícias do mercado financeiro de fontes selecionadas e rankings de ativos (mais negociados, maior valorização). Mantenha-se informado sem sair do sistema. Premium.',
-    details: [
-      'Notícias agregadas de fontes confiáveis',
-      'Rankings por volume e valor de investidores',
-      'Acesso integrado ao restante do sistema',
-    ],
-  },
-]
-
-const TARGET_AUDIENCE: Array<{ title: string; description: string }> = [
-  {
-    title: 'Carteira e controle financeiro juntos',
-    description: 'Para quem quer investimentos e finanças do dia a dia na mesma plataforma, em qualquer nível de experiência: organize posições (ações, FIIs, BDRs, ETFs, renda fixa), acompanhe valorização e proventos, registre receitas e despesas e tenha visão clara do patrimônio e do fluxo de caixa.',
-  },
-  {
-    title: 'Quem acompanha dividendos, valorização e alocação',
-    description: 'Se seu foco é longo prazo, renda passiva ou crescimento: acompanhe proventos recebidos e a receber, valorização por período, gráficos de evolução e use rebalanceamento e metas de alocação para manter a carteira alinhada ao que você planejou.',
-  },
-  {
-    title: 'Visão integrada do patrimônio e do fluxo',
-    description: 'Saber quanto está aplicado, quanto entra e sai no mês e como fica o saldo — sem depender de planilhas soltas. Controle de cartões e parcelas, categorias de receita e despesa e tudo integrado à visão da carteira.',
-  },
-  {
-    title: 'Ferramentas em português para o mercado brasileiro',
-    description: 'Interface e conteúdo em português, pensados para B3, índices locais (IPCA, IGP-M), cotações em R$, impostos e regulamentação brasileira. Guia do mercado, calculadoras e correção monetária disponíveis gratuitamente.',
-  },
-]
-
-const PREMIUM_HIGHLIGHTS = [
-  'Conceitos (aba em Detalhes) – conteúdo exclusivo',
-  'Radar de Dividendos (aba em Detalhes)',
-  'Impostos, Insights, Projeção e Simulador na Carteira',
-  'Mais profundidade operacional para quem já domina o guia gratuito (incluindo o novo módulo fiscal)',
-  'Acesso completo a todas as telas do sistema',
-]
-
-const SEO_TITLE = 'Finmas – Gestão de investimentos e controle financeiro'
-const SEO_DESCRIPTION = 'Plataforma completa para acompanhar carteira de investimentos, análise de ativos e controle financeiro. Inclui ferramentas gratuitas como guia do mercado com módulo fiscal, juros compostos, conversor de moedas e correção monetária.'
 
 export default function LandingPage() {
   const { isDark, toggleTheme } = useTheme()
@@ -287,7 +138,7 @@ export default function LandingPage() {
               transition={{ delay: 0.4, duration: 0.5 }}
               className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto mb-6 leading-relaxed font-medium"
             >
-              Pensado para quem investe: centralize sua carteira de ações, FIIs, BDRs, ETFs e renda fixa; acompanhe valorização, proventos e indicadores; controle receitas, despesas e fluxo de caixa com categorias personalizadas; e use ferramentas gratuitas como guia do mercado com módulo fiscal, hub de calculadoras, conversor de moedas e correção monetária.
+              Pensado para quem investe: centralize sua carteira, compare a evolução com índices (IBOV, IVVB11, IFIX, IPCA, CDI, Bitcoin), controle receitas e despesas com saldo mensal coerente e use gratuitamente o guia do mercado (com módulo fiscal) e o hub de calculadoras.
             </motion.p>
             <motion.p
               initial={{ opacity: 0, y: 16 }}
@@ -333,9 +184,9 @@ export default function LandingPage() {
         <div className="container max-w-5xl mx-auto px-4 relative">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             {[
-              { icon: Wallet, text: 'Carteira unificada' },
+              { icon: Wallet, text: 'Carteira + comparativo índices' },
               { icon: Calculator, text: 'Investimentos e finanças juntos' },
-              { icon: BookOpen, text: 'Ferramentas gratuitas incluídas' },
+              { icon: BookOpen, text: 'Guia e calculadoras grátis' },
               { icon: Target, text: 'Feito para investidores' },
             ].map(({ icon: Icon, text }, i) => (
               <motion.div
@@ -370,7 +221,7 @@ export default function LandingPage() {
             </p>
           </motion.div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {FEATURES.map(({ icon: Icon, title, description, details }, i) => (
+            {LANDING_FEATURES.map(({ icon: Icon, title, description, details, badge }, i) => (
               <motion.div
                 key={title}
                 initial={{ opacity: 0, y: 20 }}
@@ -380,11 +231,18 @@ export default function LandingPage() {
                 whileHover={{ y: -6, transition: { duration: 0.2 } }}
                 className="group p-6 rounded-2xl border border-border dark:border-white/20 bg-card/95 dark:bg-card/90 backdrop-blur-sm hover:border-primary/50 hover:shadow-xl hover:shadow-primary/10 dark:hover:shadow-primary/20 flex flex-col transition-all duration-300"
               >
-                <div className="flex items-center gap-3 mb-3">
-                  <motion.span className="p-2.5 rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 group-hover:scale-105 transition-all duration-300">
-                    <Icon size={22} />
-                  </motion.span>
-                  <h3 className="text-lg font-bold text-foreground">{title}</h3>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <motion.span className="p-2.5 rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 group-hover:scale-105 transition-all duration-300 shrink-0">
+                      <Icon size={22} />
+                    </motion.span>
+                    <h3 className="text-lg font-bold text-foreground">{title}</h3>
+                  </div>
+                  {badge && (
+                    <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-muted text-muted-foreground shrink-0">
+                      {badge}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed mb-4">{description}</p>
                 {details && details.length > 0 && (
@@ -416,7 +274,7 @@ export default function LandingPage() {
             </p>
           </motion.div>
           <ul className="grid sm:grid-cols-2 max-w-4xl mx-auto gap-6 text-left list-none p-0 m-0">
-            {TARGET_AUDIENCE.map(({ title, description }, i) => (
+            {LANDING_TARGET_AUDIENCE.map(({ title, description }, i) => (
               <li key={title}>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -456,7 +314,7 @@ export default function LandingPage() {
               Além das ferramentas gratuitas e da carteira básica, assinantes têm acesso a:
             </p>
             <ul className="space-y-3 mb-10 text-left max-w-md mx-auto">
-              {PREMIUM_HIGHLIGHTS.map((item) => (
+              {LANDING_PREMIUM_HIGHLIGHTS.map((item) => (
                 <li key={item} className="flex items-center gap-3">
                   <Check className="w-5 h-5 text-primary shrink-0" aria-hidden />
                   <span className="text-foreground">{item}</span>

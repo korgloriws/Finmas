@@ -5928,12 +5928,16 @@ def api_home_evolucao_carteira():
         if erro:
             return erro[0], erro[1]
 
-        periodo = request.args.get("periodo", default="mensal", type=str) or "mensal"
-        periodos_validos = ("mensal", "semanal", "trimestral", "semestral", "anual", "maximo")
+        periodo = request.args.get("periodo", default="1m", type=str) or "1m"
+        periodos_validos = (
+            "1d", "1w", "1m", "3m", "6m", "1y", "5y", "max",
+            # aliases legados
+            "diario", "semanal", "mensal", "trimestral", "semestral", "anual", "maximo",
+        )
         if periodo not in periodos_validos:
-            periodo = "mensal"
+            periodo = "1m"
 
-        cache_key = f"home_evolucao:v2:{usuario}:{periodo}"
+        cache_key = f"home_evolucao:v4:{usuario}:{periodo}"
         if cache:
             cached_payload = cache.get(cache_key)
             if cached_payload is not None:

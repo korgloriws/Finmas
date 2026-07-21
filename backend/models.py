@@ -6793,6 +6793,61 @@ def _obter_patrimonio_historico_banco(usuario, carteira_atual_list, data_ini, da
     return datas, valores
 
 
+def _alinhar_patrimonio_aos_pontos(pontos, patrimonio_datas, patrimonio_vals, carteira_vals_fallback=None):
+    """
+    Patrimônio em R$ (com aportes) na mesma grade do comparativo.
+
+    Base: valor absoluto do período (qtd até a data × preço) — garante que o filtro
+    mensal/trimestral/máximo altere a densidade e o intervalo do gráfico.
+
+    Overlay: se existir snapshot do banco na data do ponto (ou no mesmo mês, quando
+    o rótulo é mensal), usa o snapshot naquele ponto.
+    """
+    if not pontos:
+        return []
+
+    fallback = list(carteira_vals_fallback or [])
+    snap_by_day = {}
+    snap_by_month = {}
+    for i, dt in enumerate(patrimonio_datas or []):
+        try:
+            d = datetime.strptime(str(dt)[:10], '%Y-%m-%d')
+            v = float(patrimonio_vals[i]) if i < len(patrimonio_vals) else None
+            if v is None or v <= 0:
+                continue
+            snap_by_day[d.strftime('%Y-%m-%d')] = v
+            # último snapshot do mês
+            snap_by_month[d.strftime('%Y-%m')] = v
+        except Exception:
+            continue
+
+    aligned = []
+    for i, pt in enumerate(pontos):
+        day_key = pt.strftime('%Y-%m-%d')
+        month_key = pt.strftime('%Y-%m')
+
+        snap = snap_by_day.get(day_key)
+        if snap is None:
+            # pontos mensais caem no fim do mês — aceita snapshot do mesmo YYYY-MM
+            snap = snap_by_month.get(month_key)
+
+        if snap is not None:
+            aligned.append(float(snap))
+            continue
+
+        fb = None
+        if i < len(fallback):
+            try:
+                fb_n = float(fallback[i])
+                if fb_n > 0:
+                    fb = fb_n
+            except (TypeError, ValueError):
+                fb = None
+        aligned.append(fb)
+
+    return aligned
+
+
 def obter_historico_carteira(periodo='mensal'):
     
     try:
@@ -6892,15 +6947,25 @@ def _month_end(dt: datetime) -> datetime:
 def _gerar_pontos_tempo(gran: str, data_inicio: datetime, data_fim: datetime) -> list:
 
     pontos = []
+    start_day = datetime(data_inicio.year, data_inicio.month, data_inicio.day)
+    end_day = datetime(data_fim.year, data_fim.month, data_fim.day)
+
+    if gran == 'diario':
+        atual = start_day
+        while atual <= end_day:
+            pontos.append(datetime(atual.year, atual.month, atual.day))
+            atual = atual + timedelta(days=1)
+        return pontos
+
     if gran == 'semanal':
         # Normalizar para a segunda-feira da semana de data_inicio
-        start_day = datetime(data_inicio.year, data_inicio.month, data_inicio.day)
         start_monday = start_day - timedelta(days=start_day.weekday())
         atual = datetime(start_monday.year, start_monday.month, start_monday.day)
-        while atual <= data_fim:
+        while atual <= end_day:
             pontos.append(datetime(atual.year, atual.month, atual.day))
             atual = atual + timedelta(days=7)
         return pontos
+
     # Default: pontos mensais
     atual = datetime(data_inicio.year, data_inicio.month, 1)
     fim = datetime(data_fim.year, data_fim.month, 1)
@@ -6908,6 +6973,45 @@ def _gerar_pontos_tempo(gran: str, data_inicio: datetime, data_fim: datetime) ->
         pontos.append(_month_end(atual))
         atual = (atual.replace(day=28) + timedelta(days=4)).replace(day=1)
     return pontos
+
+
+def _resolver_periodo_historico(agregacao: str, data_primeira: datetime, data_fim: datetime):
+    """
+    Converte período da UI (1d/1w/1m/3m/6m/1y/5y/max ou aliases antigos)
+    em (data_ini, gran). gran: diario | semanal | mensal
+    """
+    key = (agregacao or '1m').strip().lower()
+    aliases = {
+        'diario': '1d', 'daily': '1d', 'dia': '1d',
+        'semanal': '1w', 'semana': '1w',
+        'mensal': '1m', 'mes': '1m',
+        'trimestral': '3m',
+        'semestral': '6m',
+        'anual': '1y', 'ano': '1y', '1a': '1y', '1ano': '1y',
+        '5anos': '5y', '5a': '5y',
+        'maximo': 'max', 'máximo': 'max',
+    }
+    key = aliases.get(key, key)
+
+    # (dias para trás ou None = desde a primeira movimentação, granularidade)
+    specs = {
+        '1d': (1, 'diario'),
+        '1w': (7, 'diario'),
+        '1m': (31, 'diario'),
+        '3m': (92, 'diario'),
+        '6m': (182, 'semanal'),
+        '1y': (365, 'semanal'),
+        '5y': (365 * 5, 'mensal'),
+        'max': (None, 'mensal'),
+    }
+    days_back, gran = specs.get(key, (31, 'diario'))
+    if days_back is None:
+        data_ini = data_primeira
+    else:
+        data_ini = max(data_primeira, data_fim - timedelta(days=days_back))
+    return data_ini, gran, key
+
+
 def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
     
     try:
@@ -6973,29 +7077,10 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                         if d < data_primeira:
                             data_primeira = d
 
-        # Período = intervalo de tempo; granularidade = densidade dos pontos (para o gráfico mostrar subidas e quedas).
-        if agregacao == 'maximo':
-            data_ini = data_primeira
-            gran = 'mensal'
-        elif agregacao == 'anual':
-            data_ini = max(data_primeira, data_fim - timedelta(days=365))
-            gran = 'mensal'
-        elif agregacao == 'semestral':
-            data_ini = max(data_primeira, data_fim - timedelta(days=182))
-            gran = 'mensal'
-        elif agregacao == 'trimestral':
-            data_ini = max(data_primeira, data_fim - timedelta(days=92))
-            gran = 'mensal'
-        elif agregacao == 'mensal':
-            data_ini = max(data_primeira, data_fim - timedelta(days=31))
-            gran = 'semanal'
-        elif agregacao == 'semanal':
-            data_ini = data_primeira
-            gran = 'semanal'
-        else:
-            data_ini = data_primeira
-            gran = 'mensal'
+        # Período = intervalo; gran = densidade dos pontos (diario / semanal / mensal)
+        data_ini, gran, _periodo_norm = _resolver_periodo_historico(agregacao, data_primeira, data_fim)
         pontos = _gerar_pontos_tempo(gran, data_ini, data_fim)
+        label_diario = gran in ('diario', 'semanal')
 
         # Tickers = união dos que têm movimentações e dos que estão na carteira atual (para refletir saldo real)
         tickers_from_mov = {m[1] for m in movimentos} if movimentos else set()
@@ -7104,7 +7189,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                     continue
                 total += q * price
             carteira_vals.append(total)
-            if gran == 'semanal':
+            if label_diario:
                 datas_labels.append(pt.strftime('%Y-%m-%d'))
             else:
                 datas_labels.append(pt.strftime('%Y-%m'))
@@ -7114,9 +7199,21 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
         except Exception as snap_err:
             print(f"[patrimonio] aviso snapshot ao montar histórico: {snap_err}")
 
-        patrimonio_datas, patrimonio_vals = _obter_patrimonio_historico_banco(
+        # Snapshots no intervalo do filtro. carteira_valor SEMPRE na grade `pontos`
+        # (mesma densidade/período do comparativo): base = carteira_vals (com aportes),
+        # overlay = snapshot quando existir.
+        patrimonio_datas_raw, patrimonio_vals_raw = _obter_patrimonio_historico_banco(
             usuario, carteira_atual_list, data_ini, data_fim
         )
+        patrimonio_vals = _alinhar_patrimonio_aos_pontos(
+            pontos, patrimonio_datas_raw, patrimonio_vals_raw, carteira_vals
+        )
+        # Se alinhamento ficou vazio, usa direto o absoluto do período
+        if not any(v is not None and float(v) > 0 for v in (patrimonio_vals or [])):
+            patrimonio_vals = [
+                (float(v) if v is not None and float(v) > 0 else None) for v in carteira_vals
+            ]
+        patrimonio_datas = list(datas_labels)
 
         indices_map = {
             'ibov': ['^BVSP', 'BOVA11.SA'],
@@ -7319,7 +7416,7 @@ def obter_historico_carteira_comparado(agregacao: str = 'mensal'):
                
                 carteira_price_base.append(base_val)
 
-        if gran == 'semanal':
+        if label_diario:
             labels_full = [pt.strftime('%Y-%m-%d') for pt in pontos]
         else:
             labels_full = [pt.strftime('%Y-%m') for pt in pontos]

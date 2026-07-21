@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { carteiraService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { PERIODOS_HISTORICO_CARTEIRA, labelPeriodoHistorico } from '../../utils/periodoHistorico'
 import { 
   Calculator, 
   TrendingUp, 
@@ -423,20 +424,24 @@ export default function CarteiraProjecaoTab({
           <h2 className="text-2xl font-bold">Calculadora de Projeção</h2>
         </div>
         {filtroPeriodo && setFiltroPeriodo && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium">Período de análise:</label>
-            <select
-              value={filtroPeriodo}
-              onChange={(e) => setFiltroPeriodo(e.target.value)}
-              className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm"
-              aria-label="Período de análise para cálculo de crescimento"
-            >
-              <option value="mensal">Mensal</option>
-              <option value="trimestral">Trimestral</option>
-              <option value="semestral">Semestral</option>
-              <option value="anual">Anual</option>
-              <option value="maximo">Máximo</option>
-            </select>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-sm font-medium whitespace-nowrap">Período de análise:</label>
+            <div className="flex items-center gap-1 flex-wrap" role="group" aria-label="Período de análise para cálculo de crescimento">
+              {PERIODOS_HISTORICO_CARTEIRA.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setFiltroPeriodo(p.value)}
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded transition-all duration-200 ${
+                    filtroPeriodo === p.value
+                      ? 'bg-primary text-primary-foreground shadow-md'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1237,11 +1242,7 @@ export default function CarteiraProjecaoTab({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Período de análise:</span>
               <span className="font-medium">
-                {filtroPeriodo === 'mensal' ? 'Mensal' :
-                 filtroPeriodo === 'trimestral' ? 'Trimestral' :
-                 filtroPeriodo === 'semestral' ? 'Semestral' :
-                 filtroPeriodo === 'anual' ? 'Anual' :
-                 filtroPeriodo === 'maximo' ? 'Máximo' : 'Últimos 12 meses'}
+                {labelPeriodoHistorico(filtroPeriodo || '1y')}
               </span>
             </div>
              <div className="flex justify-between">

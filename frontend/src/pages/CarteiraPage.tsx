@@ -187,9 +187,11 @@ export default function CarteiraPage() {
     'Criptomoeda': true,
     'Fixa': true
   })
-  const [filtroPeriodo, setFiltroPeriodo] = useState<'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'maximo'>('mensal')
+  const [filtroPeriodo, setFiltroPeriodo] = useState<'1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'>('1m')
+  /** Período independente do gráfico de patrimônio (com aportes) — padrão Máx para histórico completo */
+  const [filtroPeriodoPatrimonio, setFiltroPeriodoPatrimonio] = useState<'1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'>('max')
   const [filtroProventos, setFiltroProventos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('mes')
-  const [filtroProventosGraficos, setFiltroProventosGraficos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('total')
+  const [filtroProventosGraficos, setFiltroProventosGraficos] = useState<'mes' | '6meses' | '1ano' | '5anos' | 'total'>('mes')
 
   const queryClient = useQueryClient()
 
@@ -351,7 +353,7 @@ export default function CarteiraPage() {
   const carteiraLength = carteira?.length ?? 0
 
   const { data: historicoCarteira, isLoading: loadingHistorico, isError: historicoErro, refetch: refetchHistorico } = useQuery({
-    queryKey: ['historico-carteira-v2', user, filtroPeriodo, carteiraLength],
+    queryKey: ['historico-carteira-comparativo-v4', user, filtroPeriodo, carteiraLength],
     queryFn: ({ signal }) =>
       fetchHistoricoCarteiraComFallback(filtroPeriodo, { signal, carteiraLength }),
     enabled: !!user && !loadingCarteira && (activeTab === 'projecao' || activeTab === 'graficos'),
@@ -362,11 +364,23 @@ export default function CarteiraPage() {
     refetchOnMount: activeTab === 'graficos' || activeTab === 'projecao' ? 'always' : false,
   })
 
+  // Histórico só do gráfico de patrimônio — queryKey isolada do comparativo.
+  const { data: historicoPatrimonio, isLoading: loadingHistoricoPatrimonio, isError: historicoPatrimonioErro, refetch: refetchHistoricoPatrimonio } = useQuery({
+    queryKey: ['historico-carteira-patrimonio-v4', user, filtroPeriodoPatrimonio, carteiraLength],
+    queryFn: ({ signal }) =>
+      fetchHistoricoCarteiraComFallback(filtroPeriodoPatrimonio, { signal, carteiraLength }),
+    enabled: !!user && !loadingCarteira && activeTab === 'graficos',
+    retry: 2,
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: 'always',
+  })
 
   const { data: historicoParaCalendario, refetch: refetchHistoricoCalendario } = useQuery({
     queryKey: ['historico-carteira-calendario-v2', user, carteiraLength],
     queryFn: ({ signal }) =>
-      fetchHistoricoCarteiraComFallback('maximo', { signal, carteiraLength }),
+      fetchHistoricoCarteiraComFallback('max', { signal, carteiraLength }),
     enabled: !!user && !loadingCarteira && activeTab === 'graficos',
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -379,9 +393,10 @@ export default function CarteiraPage() {
     if (activeTab === 'graficos') {
       refetchCarteira()
       refetchHistorico()
+      refetchHistoricoPatrimonio()
       refetchHistoricoCalendario()
     }
-  }, [activeTab, refetchCarteira, refetchHistorico, refetchHistoricoCalendario])
+  }, [activeTab, refetchCarteira, refetchHistorico, refetchHistoricoPatrimonio, refetchHistoricoCalendario])
 
   const adicionarMutation = useMutation({
     mutationFn: ({ ticker, quantidade, tipo, preco_inicial, nome_personalizado, indexador, indexador_pct, data_aplicacao, vencimento, isento_ir }: { ticker: string; quantidade: number; tipo: string; preco_inicial?: number; nome_personalizado?: string; indexador?: 'CDI'|'IPCA'|'SELIC'|'PREFIXADO'|'CDI+'|'IPCA+'; indexador_pct?: number; data_aplicacao?: string; vencimento?: string; isento_ir?: boolean }) =>
@@ -390,7 +405,9 @@ export default function CarteiraPage() {
       // Invalidar e forçar refetch imediato das queries ativas
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
-      queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-comparativo-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-patrimonio-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-calendario-v2'] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
       queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
@@ -426,7 +443,9 @@ export default function CarteiraPage() {
     onSuccess: () => {
       // Invalidar e forçar refetch imediato das queries ativas
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
-      queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-comparativo-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-patrimonio-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-calendario-v2'] })
       queryClient.invalidateQueries({ queryKey: ['proventos', user] })
       queryClient.invalidateQueries({ queryKey: ['proventos-recebidos', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
@@ -500,7 +519,9 @@ export default function CarteiraPage() {
       queryClient.invalidateQueries({ queryKey: ['carteira', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes', user] })
       queryClient.invalidateQueries({ queryKey: ['movimentacoes-all', user] })
-      queryClient.invalidateQueries({ queryKey: ['historico-carteira', user] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-comparativo-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-patrimonio-v4'] })
+      queryClient.invalidateQueries({ queryKey: ['historico-carteira-calendario-v2'] })
       queryClient.invalidateQueries({ queryKey: ['carteira-valorizacao-periodo'] })
       queryClient.invalidateQueries({ queryKey: ['home-resumo', user] })
       queryClient.invalidateQueries({ queryKey: ['home-hero', user] })
@@ -968,9 +989,14 @@ export default function CarteiraPage() {
             loadingHistorico={loadingHistorico}
             historicoErro={historicoErro}
             historicoCarteira={historicoCarteira ?? null}
+            historicoPatrimonio={historicoPatrimonio ?? null}
+            loadingHistoricoPatrimonio={loadingHistoricoPatrimonio}
+            historicoPatrimonioErro={historicoPatrimonioErro}
             historicoParaCalendario={historicoParaCalendario ?? null}
             filtroPeriodo={filtroPeriodo}
-            setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
+            setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as typeof filtroPeriodo)}
+            filtroPeriodoPatrimonio={filtroPeriodoPatrimonio}
+            setFiltroPeriodoPatrimonio={(value: string) => setFiltroPeriodoPatrimonio(value as typeof filtroPeriodoPatrimonio)}
             ativosPorTipo={ativosPorTipo}
             proventosRecebidos={proventosRecebidosGraficos ?? []}
             loadingProventos={loadingProventosGraficos}
@@ -1234,7 +1260,7 @@ export default function CarteiraPage() {
             loadingHistoricoCarteira={loadingHistorico}
             proventosRecebidos={proventosRecebidos || []}
             filtroPeriodo={filtroPeriodo}
-            setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as "mensal" | "trimestral" | "semestral" | "anual" | "maximo")}
+            setFiltroPeriodo={(value: string) => setFiltroPeriodo(value as typeof filtroPeriodo)}
           />
         )}
 

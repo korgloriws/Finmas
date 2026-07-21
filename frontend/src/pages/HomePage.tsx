@@ -57,6 +57,7 @@ import {
 } from '../components/LazyChart'
 import { carteiraService, homeService, controleService, historicoCarteiraTemPontos, fetchHistoricoCarteiraComFallback } from '../services/api'
 import { buildBenchmarkComparison } from '../utils/carteiraBenchmark'
+import { PERIODOS_HISTORICO_CARTEIRA, type PeriodoHistoricoCarteira } from '../utils/periodoHistorico'
 import { formatCurrency } from '../utils/formatters'
 
 import { lazy, Suspense } from 'react'
@@ -211,7 +212,7 @@ export default function HomePage() {
   const loadingResumo = loadingHeroRaw && !resumoHome
 
 
-  const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'semanal' | 'trimestral' | 'semestral' | 'anual'>('mensal')
+  const [filtroPeriodo, setFiltroPeriodo] = useState<PeriodoHistoricoCarteira>('1m')
   const [gastosPeriodo, setGastosPeriodo] = useState<'1m' | '3m' | '6m'>('1m')
   
 
@@ -1742,21 +1743,22 @@ export default function HomePage() {
                     Comparativo com {formatarValor(initialWealth)} no início do período (retorno por preço, sem aportes)
                   </p>
                 )}
-                <select
-                  value={filtroPeriodo}
-                  onChange={(e)=>{
-                    const val = e.target.value as any
-                    setFiltroPeriodo(val)
-                  }}
-                  className="w-full xs:w-auto px-2 py-1.5 sm:px-3 sm:py-2 border border-border rounded-lg bg-background text-foreground text-xs sm:text-sm"
-                  aria-label="Período do gráfico"
-                >
-                  <option value="mensal">Mensal</option>
-                  <option value="semanal">Semanal</option>
-                  <option value="trimestral">Trimestral</option>
-                  <option value="semestral">Semestral</option>
-                  <option value="anual">Anual</option>
-                </select>
+                <div className="flex items-center gap-1 flex-wrap justify-end" role="group" aria-label="Período do gráfico">
+                  {PERIODOS_HISTORICO_CARTEIRA.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setFiltroPeriodo(p.value)}
+                      className={`px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium rounded transition-all duration-200 ${
+                        filtroPeriodo === p.value
+                          ? 'bg-primary text-primary-foreground shadow-md'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             
