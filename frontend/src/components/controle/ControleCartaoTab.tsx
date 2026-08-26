@@ -220,7 +220,7 @@ export default function ControleCartaoTab({
   // Queries
   const { data: cartoes, isLoading: cartoesLoading } = useQuery<CartaoCadastrado[]>({
     queryKey: ['cartoes-cadastrados', user, filtroMes, filtroAno],
-    queryFn: () => cartaoService.getCartoesCadastrados(),
+    queryFn: () => cartaoService.getCartoesCadastrados(filtroMes, filtroAno),
     enabled: !!user,
     retry: 1,
     refetchOnWindowFocus: false,

@@ -53,7 +53,8 @@ export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
     pl_max: 15,
     pvp_max: 2,
     net_debt_ebitda_max: 3,
-    liq_min: 100000
+    liq_min: 100000,
+    periodo_indicadores: 'atual',
   })
 
   const [filtrosBdrs, setFiltrosBdrs] = useState<FiltrosAnalise>({
@@ -63,13 +64,15 @@ export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
     pl_max: 25,
     pvp_max: 2,
     net_debt_ebitda_max: 3,
-    liq_min: 10000
+    liq_min: 100000,
+    periodo_indicadores: 'atual',
   })
 
   const [filtrosFiis, setFiltrosFiis] = useState<FiltrosAnalise>({
     dy_min: 12,
     dy_max: 15,
-    liq_min: 500000
+    liq_min: 500000,
+    periodo_indicadores: 'atual',
   })
 
   const getTodosAtivos = () => {

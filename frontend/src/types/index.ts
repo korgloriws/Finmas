@@ -12,10 +12,29 @@ export interface AtivoInfo {
   pais: string
 }
 
+/** Janela temporal dos indicadores DY/ROE (Análise e Detalhes). */
+export type PeriodoIndicadores = 'atual' | '6m' | '1a' | '3a' | '5a'
+
+export interface IndicadoresPeriodo {
+  dy: number | null
+  roe: number | null
+  pl?: number | null
+  pvp?: number | null
+  liquidez?: number | null
+  dy_fonte?: string
+  roe_fonte?: string
+  pl_fonte?: string
+  pvp_fonte?: string
+  liquidez_fonte?: string
+}
+
 export interface AtivoDetalhes {
   info: Record<string, any>
   historico: Array<Record<string, any>>
   dividends: Record<string, any>
+  /** DY/ROE pré-calculados por período (visão geral nos Detalhes). */
+  indicadores_por_periodo?: Partial<Record<PeriodoIndicadores, IndicadoresPeriodo>>
+  fii?: Record<string, any>
 }
 
 export interface ImovelPortfolio {
@@ -213,6 +232,15 @@ export interface AtivoAnalise {
   tipo: string
   liquidez_diaria: number
   volume_medio: number
+  /** Metadados FII (quando disponíveis) */
+  tipo_fii?: string | null
+  segmento_fii?: string | null
+  /** Snapshot “agora” (antes de reescrever DY/ROE pelo período). */
+  dy_atual?: number
+  roe_atual?: number
+  periodo_indicadores?: PeriodoIndicadores | string
+  dy_fonte?: string
+  roe_fonte?: string
 }
 
 export interface ResumoAnalise {
@@ -239,7 +267,13 @@ export interface FiltrosAnalise {
   liq_min?: number
   tipo_fii?: string
   segmento_fii?: string
+  /** Segmentos de FII a ocultar (diversificação / evitar relacionados) */
+  segmentos_excluir?: string[]
   setor?: string
+  /** Setores a ocultar em ações/BDRs (diversificação / evitar relacionados) */
+  setores_excluir?: string[]
+  /** Janela de DY/ROE: agora, 6m, 1a, 3a, 5a (opcional; padrão atual). */
+  periodo_indicadores?: PeriodoIndicadores
 }
 
 // ==================== TIPOS DE CARTÕES ====================
@@ -257,6 +291,8 @@ export interface CartaoCadastrado {
   mes_pagamento?: number
   ano_pagamento?: number
   data_pagamento?: string
+  /** Total de compras no período (quando GET envia mes/ano) */
+  total_compras?: number
 }
 
 export interface CompraCartao {

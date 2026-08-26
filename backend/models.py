@@ -1898,8 +1898,440 @@ def obter_preco_atual(ticker, max_retentativas=3):
     
     return None
 
-def obter_informacoes(ticker, tipo_ativo):
-    """Obtém informações do ativo no yfinance. Uma única tentativa por ticker (sem retentativas)."""
+
+# Períodos dos indicadores (DY/ROE) usados na Análise e Detalhes
+PERIODO_INDICADORES_MESES = {
+    'atual': None,
+    '6m': 6,
+    '1a': 12,
+    '3a': 36,
+    '5a': 60,
+}
+
+
+def _timestamp_cutoff_meses(meses, index_tz=None):
+    """Cutoff aproximado (meses * 30.44 dias) compatível com índice tz-aware do yfinance."""
+    import pandas as pd
+    from datetime import datetime, timedelta
+    base = datetime.utcnow() - timedelta(days=int(meses * 30.44))
+    ts = pd.Timestamp(base)
+    if index_tz is not None:
+        try:
+            ts = ts.tz_localize(index_tz) if ts.tzinfo is None else ts.tz_convert(index_tz)
+        except Exception:
+            try:
+                ts = pd.Timestamp(base, tz=index_tz)
+            except Exception:
+                pass
+    return ts
+
+
+def calcular_dy_periodo_pct(acao, preco_atual, meses):
+    """
+    DY anualizado médio no período, em %.
+    - 6m: soma dos dividendos da janela anualizada (×12/meses)
+    - 1a+: média anual = (soma / anos) / preço × 100
+    """
+    try:
+        preco = float(preco_atual or 0)
+        if preco <= 0 or not meses:
+            return None
+        dividends = acao.dividends
+        if dividends is None or getattr(dividends, 'empty', True):
+            return 0.0
+        cutoff = _timestamp_cutoff_meses(meses, getattr(dividends.index, 'tz', None))
+        janela = dividends[dividends.index >= cutoff]
+        soma = float(janela.sum()) if len(janela) else 0.0
+        if meses < 12:
+            dy = (soma / preco) * (12.0 / float(meses)) * 100.0
+        else:
+            anos = float(meses) / 12.0
+            dy = (soma / anos / preco) * 100.0
+        return round(dy, 2)
+    except Exception as e:
+        print(f"[AVISO] calcular_dy_periodo_pct: {e}")
+        return None
+
+
+def _serie_linha_financeira(df, candidatos):
+    if df is None or getattr(df, 'empty', True):
+        return None
+    for nome in candidatos:
+        for idx in df.index:
+            if nome.lower() in str(idx).lower():
+                return df.loc[idx]
+    return None
+
+
+def calcular_roe_periodo_pct(acao, meses):
+
+    try:
+        if not meses:
+            return None
+        ni_names = [
+            'Net Income',
+            'Net Income Common Stockholders',
+            'Net Income Continuous Operations',
+            'Net Income From Continuing Operation Net Minority Interest',
+        ]
+        eq_names = [
+            'Stockholders Equity',
+            'Total Stockholder Equity',
+            'Common Stock Equity',
+            'Total Equity Gross Minority Interest',
+            "Stockholders' Equity",
+        ]
+
+        if meses >= 36:
+            fin = acao.financials
+            bs = acao.balance_sheet
+            ni = _serie_linha_financeira(fin, ni_names)
+            eq = _serie_linha_financeira(bs, eq_names)
+            if ni is None or eq is None:
+                return None
+            anos = max(1, int(round(meses / 12.0)))
+            cols = list(ni.keys())[:anos]
+            roes = []
+            for col in cols:
+                try:
+                    n = float(ni[col])
+                    e = float(eq[col])
+                    if e:
+                        roes.append((n / e) * 100.0)
+                except Exception:
+                    continue
+            if not roes:
+                return None
+            import math
+            media = sum(roes) / len(roes)
+            if math.isnan(media) or math.isinf(media):
+                return None
+            return round(media, 2)
+
+        fin = acao.quarterly_financials
+        bs = acao.quarterly_balance_sheet
+        ni = _serie_linha_financeira(fin, ni_names)
+        eq = _serie_linha_financeira(bs, eq_names)
+        if ni is None or eq is None:
+            return None
+        n_q = max(1, int(round(meses / 3.0)))
+        cols = list(ni.keys())[:n_q]
+        nis = []
+        eqs = []
+        for col in cols:
+            try:
+                nis.append(float(ni[col]))
+            except Exception:
+                pass
+            try:
+                e = float(eq[col])
+                if e:
+                    eqs.append(e)
+            except Exception:
+                pass
+        if not nis or not eqs:
+            return None
+        ni_sum = sum(nis)
+        eq_avg = sum(eqs) / len(eqs)
+        if eq_avg == 0:
+            return None
+        fator = 4.0 / float(len(nis)) if len(nis) < 4 else 1.0
+        import math
+        valor = (ni_sum * fator / eq_avg) * 100.0
+        if math.isnan(valor) or math.isinf(valor):
+            return None
+        return round(valor, 2)
+    except Exception as e:
+        print(f"[AVISO] calcular_roe_periodo_pct: {e}")
+        return None
+
+
+def _yf_period_str(meses):
+    if not meses:
+        return '1y'
+    if meses <= 6:
+        return '6mo'
+    if meses <= 12:
+        return '1y'
+    if meses <= 36:
+        return '3y'
+    return '5y'
+
+
+def _preco_asof_historico(hist, dt):
+    """Close mais próximo em/antes da data do balanço."""
+    import pandas as pd
+    if hist is None or getattr(hist, 'empty', True) or dt is None:
+        return None
+    try:
+        ts = pd.Timestamp(dt)
+        idx_tz = getattr(hist.index, 'tz', None)
+        if idx_tz is not None:
+            ts = ts.tz_localize(idx_tz) if ts.tzinfo is None else ts.tz_convert(idx_tz)
+        sub = hist[hist.index <= ts]
+        if sub.empty:
+            return None
+        return float(sub['Close'].iloc[-1])
+    except Exception:
+        return None
+
+
+def _numero_ok(v):
+    import math
+    if v is None:
+        return False
+    try:
+        f = float(v)
+        return not (math.isnan(f) or math.isinf(f))
+    except (TypeError, ValueError):
+        return False
+
+
+def calcular_liquidez_periodo(acao, meses, hist=None):
+    """Liquidez diária média (Close × Volume) no período."""
+    try:
+        if not meses:
+            return None
+        if hist is None:
+            hist = acao.history(period=_yf_period_str(meses))
+        if hist is None or getattr(hist, 'empty', True):
+            return None
+        cutoff = _timestamp_cutoff_meses(meses, getattr(hist.index, 'tz', None))
+        janela = hist[hist.index >= cutoff]
+        if janela.empty:
+            return None
+        liq = float((janela['Close'] * janela['Volume']).mean())
+        return round(liq, 2) if _numero_ok(liq) else None
+    except Exception as e:
+        print(f"[AVISO] calcular_liquidez_periodo: {e}")
+        return None
+
+
+def calcular_pl_periodo(acao, meses, shares_outstanding=None, hist=None):
+    """
+    P/L médio no período:
+    - <3a: média dos P/L TTM em cada trimestre (preço / (soma 4 trimestres NI / shares))
+    - >=3a: média anual preço fim de exercício / (NI anual / shares)
+    """
+    try:
+        if not meses:
+            return None
+        shares = float(shares_outstanding or 0)
+        if shares <= 0:
+            return None
+        if hist is None:
+            hist = acao.history(period=_yf_period_str(meses))
+
+        ni_names = [
+            'Net Income From Continuing Operation Net Minority Interest',
+            'Net Income Common Stockholders',
+            'Net Income Continuous Operations',
+            'Net Income',
+        ]
+
+        if meses >= 36:
+            fin = acao.financials
+            ni = _serie_linha_financeira(fin, ni_names)
+            if ni is None:
+                return None
+            anos = max(1, int(round(meses / 12.0)))
+            cols = list(ni.keys())[:anos]
+            pes = []
+            for col in cols:
+                try:
+                    n = float(ni[col])
+                    if not _numero_ok(n) or n <= 0:
+                        continue
+                    px = _preco_asof_historico(hist, col)
+                    if px and px > 0:
+                        pe = px / (n / shares)
+                        if _numero_ok(pe) and pe > 0:
+                            pes.append(pe)
+                except Exception:
+                    continue
+            if not pes:
+                return None
+            media = sum(pes) / len(pes)
+            return round(media, 2) if _numero_ok(media) else None
+
+        fin = acao.quarterly_financials
+        ni = _serie_linha_financeira(fin, ni_names)
+        if ni is None:
+            return None
+        cols = list(ni.keys())
+        n_q = max(1, int(round(meses / 3.0)))
+        pes = []
+        for i in range(min(n_q, max(0, len(cols) - 3))):
+            window = cols[i:i + 4]
+            if len(window) < 4:
+                continue
+            try:
+                vals = []
+                for c in window:
+                    v = float(ni[c])
+                    if not _numero_ok(v):
+                        vals = []
+                        break
+                    vals.append(v)
+                if len(vals) < 4:
+                    continue
+                ttm = sum(vals)
+                if ttm <= 0:
+                    continue
+                px = _preco_asof_historico(hist, window[0])
+                if px and px > 0:
+                    pe = px / (ttm / shares)
+                    if _numero_ok(pe) and pe > 0:
+                        pes.append(pe)
+            except Exception:
+                continue
+        if not pes:
+            return None
+        media = sum(pes) / len(pes)
+        return round(media, 2) if _numero_ok(media) else None
+    except Exception as e:
+        print(f"[AVISO] calcular_pl_periodo: {e}")
+        return None
+
+
+def calcular_pvp_periodo(acao, meses, shares_outstanding=None, hist=None):
+    """P/VP médio no período (preço / VPA em cada data de balanço na janela)."""
+    try:
+        if not meses:
+            return None
+        shares = float(shares_outstanding or 0)
+        if shares <= 0:
+            return None
+        if hist is None:
+            hist = acao.history(period=_yf_period_str(meses))
+
+        eq_names = [
+            'Common Stock Equity',
+            'Stockholders Equity',
+            'Total Stockholder Equity',
+            'Total Equity Gross Minority Interest',
+            "Stockholders' Equity",
+        ]
+        if meses >= 36:
+            bs = acao.balance_sheet
+            n = max(1, int(round(meses / 12.0)))
+        else:
+            bs = acao.quarterly_balance_sheet
+            n = max(1, int(round(meses / 3.0)))
+
+        eq = _serie_linha_financeira(bs, eq_names)
+        if eq is None:
+            return None
+        cols = list(eq.keys())[:n]
+        pvps = []
+        for col in cols:
+            try:
+                e = float(eq[col])
+                if not _numero_ok(e) or e <= 0:
+                    continue
+                px = _preco_asof_historico(hist, col)
+                if px and px > 0:
+                    pvp = px / (e / shares)
+                    if _numero_ok(pvp) and pvp > 0:
+                        pvps.append(pvp)
+            except Exception:
+                continue
+        if not pvps:
+            return None
+        media = sum(pvps) / len(pvps)
+        return round(media, 2) if _numero_ok(media) else None
+    except Exception as e:
+        print(f"[AVISO] calcular_pvp_periodo: {e}")
+        return None
+
+
+def calcular_indicadores_por_periodo(acao, info):
+    """Calcula DY/ROE/P/L/P/VP/liquidez para todos os períodos (Detalhes)."""
+    import math
+
+    def _safe(v, fallback=0.0):
+        if v is None:
+            return fallback
+        try:
+            f = float(v)
+            if math.isnan(f) or math.isinf(f):
+                return fallback
+            return f
+        except (TypeError, ValueError):
+            return fallback
+
+    preco = info.get('currentPrice') or info.get('regularMarketPrice') or 0.0
+    shares = info.get('sharesOutstanding') or info.get('impliedSharesOutstanding') or 0
+    roe_raw = info.get('returnOnEquity') or 0.0
+    dy_raw = info.get('dividendYield')
+    pl_raw = info.get('trailingPE')
+    pvp_raw = info.get('priceToBook')
+    avg_vol = info.get('averageVolume') or 0
+
+    roe_atual = round(_safe(roe_raw) * 100, 2) if roe_raw else 0.0
+    if dy_raw is None:
+        dy_atual = 0.0
+    else:
+        dy_f = _safe(dy_raw)
+        dy_atual = round(dy_f * 100, 2) if 0 < dy_f < 1 else round(dy_f, 2)
+
+    pl_atual = _safe(pl_raw, None)
+    pvp_atual = _safe(pvp_raw, None)
+    liq_atual = round(_safe(preco) * _safe(avg_vol), 2)
+
+    out = {
+        'atual': {
+            'dy': dy_atual,
+            'roe': roe_atual,
+            'pl': pl_atual,
+            'pvp': pvp_atual,
+            'liquidez': liq_atual,
+            'dy_fonte': 'atual',
+            'roe_fonte': 'atual',
+            'pl_fonte': 'atual',
+            'pvp_fonte': 'atual',
+            'liquidez_fonte': 'atual',
+        },
+    }
+    for key, meses in PERIODO_INDICADORES_MESES.items():
+        if not meses:
+            continue
+        hist = None
+        try:
+            hist = acao.history(period=_yf_period_str(meses))
+        except Exception:
+            hist = None
+        dy = calcular_dy_periodo_pct(acao, preco, meses)
+        roe = calcular_roe_periodo_pct(acao, meses)
+        pl = calcular_pl_periodo(acao, meses, shares, hist=hist)
+        pvp = calcular_pvp_periodo(acao, meses, shares, hist=hist)
+        liq = calcular_liquidez_periodo(acao, meses, hist=hist)
+
+        dy_ok = _numero_ok(dy)
+        roe_ok = _numero_ok(roe)
+        pl_ok = _numero_ok(pl)
+        pvp_ok = _numero_ok(pvp)
+        liq_ok = _numero_ok(liq)
+
+        out[key] = {
+            'dy': round(_safe(dy, dy_atual), 2) if dy_ok else dy_atual,
+            'roe': round(_safe(roe, roe_atual), 2) if roe_ok else roe_atual,
+            'pl': round(_safe(pl), 2) if pl_ok else pl_atual,
+            'pvp': round(_safe(pvp), 2) if pvp_ok else pvp_atual,
+            'liquidez': round(_safe(liq, liq_atual), 2) if liq_ok else liq_atual,
+            'dy_fonte': key if dy_ok else 'atual',
+            'roe_fonte': key if roe_ok else 'atual',
+            'pl_fonte': key if pl_ok else 'atual',
+            'pvp_fonte': key if pvp_ok else 'atual',
+            'liquidez_fonte': key if liq_ok else 'atual',
+        }
+    return out
+
+
+def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
+    """Obtém informações do ativo no yfinance. Uma única tentativa por ticker (sem retentativas).
+    periodo_indicadores: 'atual' | '6m' | '1a' | '3a' | '5a' — redefine DY/ROE/P/L/P/VP/liquidez na análise.
+    """
     def to_float_or_inf(valor):
         try:
             result = float(valor)
@@ -1908,7 +2340,7 @@ def obter_informacoes(ticker, tipo_ativo):
             return None
 
     try:
-        print(f"[YF] Buscando informacoes para {ticker}...")
+        print(f"[YF] Buscando informacoes para {ticker} (periodo={periodo_indicadores})...")
         acao = yf.Ticker(ticker)
         info = acao.info
 
@@ -1930,26 +2362,69 @@ def obter_informacoes(ticker, tipo_ativo):
         roe_raw = info.get("returnOnEquity", 0.0)
         dividend_yield_api = info.get("dividendYield")
         average_volume = info.get("averageVolume") or 0
-        liquidez_diaria = preco_atual * average_volume
+        liquidez_diaria_atual = preco_atual * average_volume
+        shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding") or 0
 
         trailing_pe_raw = info.get("trailingPE")
         price_to_book_raw = info.get("priceToBook")
 
-        pl = to_float_or_inf(trailing_pe_raw)
-        if pl is None:
-            pl = float('inf') if tipo_ativo != 'FII' else 0.0
-        pvp = to_float_or_inf(price_to_book_raw)
-        if pvp is None:
-            pvp = float('inf') if tipo_ativo != 'FII' else 0.0
+        pl_atual = to_float_or_inf(trailing_pe_raw)
+        if pl_atual is None:
+            pl_atual = float('inf') if tipo_ativo != 'FII' else 0.0
+        pvp_atual = to_float_or_inf(price_to_book_raw)
+        if pvp_atual is None:
+            pvp_atual = float('inf') if tipo_ativo != 'FII' else 0.0
 
-        roe = round(roe_raw * 100, 2) if roe_raw else 0.0
+        roe_atual = round(roe_raw * 100, 2) if roe_raw else 0.0
 
         if dividend_yield_api is None:
-            dividend_yield = 0.0
+            dy_atual = 0.0
         elif tipo_ativo == 'FII':
-            dividend_yield = round((dividend_yield_api * 100) if dividend_yield_api < 1 else dividend_yield_api, 2)
+            dy_atual = round((dividend_yield_api * 100) if dividend_yield_api < 1 else dividend_yield_api, 2)
         else:
-            dividend_yield = round(dividend_yield_api, 6)
+            # Yahoo pode devolver fração (0.12) ou percentual (12); normalizar para %
+            dy_atual = round(dividend_yield_api * 100, 2) if 0 < dividend_yield_api < 1 else round(float(dividend_yield_api or 0), 2)
+
+        periodo = (periodo_indicadores or 'atual').strip().lower()
+        meses = PERIODO_INDICADORES_MESES.get(periodo)
+        dy_fonte = 'atual'
+        roe_fonte = 'atual'
+        pl_fonte = 'atual'
+        pvp_fonte = 'atual'
+        liq_fonte = 'atual'
+        dividend_yield = dy_atual
+        roe = roe_atual
+        pl = pl_atual
+        pvp = pvp_atual
+        liquidez_diaria = liquidez_diaria_atual
+
+        if meses:
+            hist = None
+            try:
+                hist = acao.history(period=_yf_period_str(meses))
+            except Exception:
+                hist = None
+
+            dy_calc = calcular_dy_periodo_pct(acao, preco_atual, meses)
+            if _numero_ok(dy_calc):
+                dividend_yield = dy_calc
+                dy_fonte = periodo
+            roe_calc = calcular_roe_periodo_pct(acao, meses)
+            if _numero_ok(roe_calc):
+                roe = roe_calc
+                roe_fonte = periodo
+            pl_calc = calcular_pl_periodo(acao, meses, shares, hist=hist)
+            if _numero_ok(pl_calc):
+                pl = pl_calc
+                pl_fonte = periodo
+            pvp_calc = calcular_pvp_periodo(acao, meses, shares, hist=hist)
+            if _numero_ok(pvp_calc):
+                pvp = pvp_calc
+                pvp_fonte = periodo
+            liq_calc = calcular_liquidez_periodo(acao, meses, hist=hist)
+            if _numero_ok(liq_calc):
+                liquidez_diaria = liq_calc
+                liq_fonte = periodo
 
         setor = info.get("sector", "").strip() or "Desconhecido"
 
@@ -1960,19 +2435,32 @@ def obter_informacoes(ticker, tipo_ativo):
             "industria": info.get("industry", ""),
             "website": info.get("website", ""),
             "roe": roe,
+            "roe_atual": roe_atual,
             "preco_atual": preco_atual,
             "dividend_yield": dividend_yield,
+            "dy_atual": dy_atual,
             "pl": pl,
+            "pl_atual": pl_atual if pl_atual != float('inf') else None,
             "pvp": pvp,
+            "pvp_atual": pvp_atual if pvp_atual != float('inf') else None,
             "pais": info.get("country", ""),
             "tipo": tipo_ativo,
             "liquidez_diaria": liquidez_diaria,
+            "liquidez_atual": liquidez_diaria_atual,
             "volume_medio": average_volume,
+            "periodo_indicadores": periodo if meses else 'atual',
+            "dy_fonte": dy_fonte,
+            "roe_fonte": roe_fonte,
+            "pl_fonte": pl_fonte,
+            "pvp_fonte": pvp_fonte,
+            "liquidez_fonte": liq_fonte,
         }
 
     except Exception as e:
         print(f" Erro ao obter informações para {ticker}: {e}")
         return None
+
+
 def aplicar_filtros_acoes(dados):
 
     return sorted([
@@ -2541,6 +3029,29 @@ def atualizar_pergunta_seguranca(username, pergunta, resposta):
         finally:
             conn.close()
 
+def _norm_texto_filtro(valor):
+    return (str(valor) if valor is not None else '').strip().casefold()
+
+
+def _setor_bate(ativo_setor, filtro_setor):
+    """Match case-insensitive de setor/segmento."""
+    if not filtro_setor or not str(filtro_setor).strip():
+        return True
+    return _norm_texto_filtro(ativo_setor) == _norm_texto_filtro(filtro_setor)
+
+
+def _setor_na_lista_exclusao(ativo_setor, setores_excluir):
+    if not setores_excluir:
+        return False
+    alvo = _norm_texto_filtro(ativo_setor)
+    if not alvo:
+        return False
+    for item in setores_excluir:
+        if item and _norm_texto_filtro(item) == alvo:
+            return True
+    return False
+
+
 def processar_ativos_com_filtros_geral(
     lista_ativos,
     tipo_ativo,
@@ -2551,12 +3062,15 @@ def processar_ativos_com_filtros_geral(
     pvp_max,
     liq_min=None,
     setor=None,
+    setores_excluir=None,
+    periodo_indicadores='atual',
     should_cancel=None,
 ):
     """Processa lista de ativos com filtros. Requisições em paralelo ao yfinance para evitar timeout (504); retorna todos os ativos filtrados."""
     if not lista_ativos:
         return []
 
+    periodo = (periodo_indicadores or 'atual').strip().lower()
     # Paralelizar para concluir em tempo hábil (evitar 504 em proxy/load balancer)
     dados = []
     max_workers = min(len(lista_ativos), 40)
@@ -2564,7 +3078,7 @@ def processar_ativos_com_filtros_geral(
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
         future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, tipo_ativo): ticker
+            executor.submit(obter_informacoes, ticker, tipo_ativo, periodo): ticker
             for ticker in lista_ativos
         }
         pending = set(future_to_ticker.keys())
@@ -2597,7 +3111,8 @@ def processar_ativos_com_filtros_geral(
             (pl_min or 0) <= ativo['pl'] <= (pl_max or float('inf')) and
             ativo['pvp'] <= (pvp_max or float('inf')) and
             (ativo.get('liquidez_diaria', 0) > (liq_min or 0)) and
-            (not setor or ativo.get('setor', '').strip() == setor.strip())
+            _setor_bate(ativo.get('setor'), setor) and
+            not _setor_na_lista_exclusao(ativo.get('setor'), setores_excluir)
         )
     ]
     # Retornar todos os ativos filtrados (lista completa), ordenados por dividend_yield
@@ -2611,6 +3126,8 @@ def processar_ativos_acoes_com_filtros(
     pvp_max,
     liq_min=None,
     setor=None,
+    setores_excluir=None,
+    periodo_indicadores='atual',
     should_cancel=None,
 ):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
@@ -2625,6 +3142,8 @@ def processar_ativos_acoes_com_filtros(
         pvp_max,
         liq_threshold,
         setor,
+        setores_excluir,
+        periodo_indicadores,
         should_cancel=should_cancel,
     )
 
@@ -2636,6 +3155,8 @@ def processar_ativos_bdrs_com_filtros(
     pvp_max,
     liq_min=None,
     setor=None,
+    setores_excluir=None,
+    periodo_indicadores='atual',
     should_cancel=None,
 ):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
@@ -2650,22 +3171,34 @@ def processar_ativos_bdrs_com_filtros(
         pvp_max,
         liq_threshold,
         setor,
+        setores_excluir,
+        periodo_indicadores,
         should_cancel=should_cancel,
     )
 
-def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, segmento_fii=None, should_cancel=None):
+def processar_ativos_fiis_com_filtros(
+    dy_min,
+    dy_max,
+    liq_min,
+    tipo_fii=None,
+    segmento_fii=None,
+    segmentos_excluir=None,
+    periodo_indicadores='atual',
+    should_cancel=None,
+):
     """Processa lista de FIIs com filtros. Requisições em paralelo ao yfinance; retorna todos os FIIs filtrados."""
     fiis = LISTA_FIIS
     if not fiis:
         return []
 
+    periodo = (periodo_indicadores or 'atual').strip().lower()
     dados = []
     max_workers = min(len(fiis), 40)
     client_gone = False
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
         future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, 'FII'): ticker
+            executor.submit(obter_informacoes, ticker, 'FII', periodo): ticker
             for ticker in fiis
         }
         pending = set(future_to_ticker.keys())
@@ -2699,7 +3232,8 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
         )
     ]
 
-    if tipo_fii or segmento_fii:
+    precisa_meta = bool(tipo_fii or segmento_fii or segmentos_excluir)
+    if precisa_meta:
         filtrados_final = []
         for ativo in filtrados:
             ticker = ativo.get('ticker', '')
@@ -2712,31 +3246,28 @@ def processar_ativos_fiis_com_filtros(dy_min, dy_max, liq_min, tipo_fii=None, se
                     ativo_tipo = metadata.get('tipo')
                     ativo_segmento = metadata.get('segmento')
 
-                    if tipo_fii and ativo_tipo != tipo_fii:
+                    if tipo_fii and not _setor_bate(ativo_tipo, tipo_fii):
                         continue
 
-                    if segmento_fii and ativo_segmento != segmento_fii:
+                    if segmento_fii and not _setor_bate(ativo_segmento, segmento_fii):
+                        continue
+
+                    if _setor_na_lista_exclusao(ativo_segmento, segmentos_excluir):
                         continue
 
                     # Adicionar metadados ao ativo
                     ativo['tipo_fii'] = ativo_tipo
                     ativo['segmento_fii'] = ativo_segmento
+                    # "setor" espelha o segmento para leitura uniforme na lista
+                    if ativo_segmento:
+                        ativo['setor'] = ativo_segmento
 
                 else:
-                    # Se não conseguiu obter metadados, incluir apenas se não há filtros específicos
-                    if not tipo_fii and not segmento_fii:
-                        ativo['tipo_fii'] = None
-                        ativo['segmento_fii'] = None
-                    else:
-                        continue
+                    # Sem metadados: não passa em filtros setoriais
+                    continue
 
             except Exception:
-                # Em caso de erro, incluir apenas se não há filtros específicos
-                if not tipo_fii and not segmento_fii:
-                    ativo['tipo_fii'] = None
-                    ativo['segmento_fii'] = None
-                else:
-                    continue
+                continue
 
             filtrados_final.append(ativo)
 
@@ -3162,6 +3693,8 @@ _SERIE_BCB_CACHE = {}
 _SERIE_BCB_CACHE_TTL_SEC = 6 * 3600
 BCB_SERIE_IPCA_MENSAL = 433
 BCB_SERIE_IPCA_12M = 13522
+BCB_SERIE_CDI_DIARIO = 12   # % a.d.
+BCB_SERIE_SELIC_DIARIO = 11  # % a.d.
 
 
 def _obter_serie_bcb_cached(serie_id, data_inicio, data_fim):
@@ -3177,21 +3710,56 @@ def _obter_serie_bcb_cached(serie_id, data_inicio, data_fim):
     return serie
 
 
-def _calcular_fator_ipca_historico(data_inicio_dt, multiplicador_ipca=1.0, spread_mensal_pct=0.0):
+def _to_date_rf(value):
+    """Converte string/datetime/date em date; None se inválido."""
+    from datetime import date as date_cls
+    if value is None:
+        return None
+    if isinstance(value, date_cls) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    try:
+        s = str(value).strip().replace('Z', '')
+        if not s:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(s[:26] if 'T' in s else s[:19], fmt).date()
+            except Exception:
+                continue
+        try:
+            return datetime.fromisoformat(s[:19]).date()
+        except Exception:
+            return None
+    except Exception:
+        return None
+
+
+def _ativo_eh_renda_fixa(ativo):
+    """Detecta renda fixa por tipo ou presença de indexador."""
+    if not isinstance(ativo, dict):
+        return False
+    tipo = str(ativo.get('tipo') or '').lower()
+    if 'renda fixa' in tipo or 'tesouro' in tipo:
+        return True
+    idx = ativo.get('indexador')
+    return bool(idx and str(idx).strip())
+
+
+def _calcular_fator_ipca_historico(data_inicio_dt, multiplicador_ipca=1.0, spread_mensal_pct=0.0, data_fim_dt=None):
     """
     Compõe IPCA mês a mês com a série 433 do BCB desde a data de aplicação.
     multiplicador_ipca: fator sobre o IPCA (ex.: 1.0 = 100%, 1.1 = IPCA+10%).
     spread_mensal_pct: taxa fixa mensal adicional em % (IPCA+).
+    data_fim_dt: fim do período (default: hoje).
     Retorna (fator, meses) ou (None, 0) se não houver série.
     """
     try:
-        from datetime import datetime
-
-        if isinstance(data_inicio_dt, datetime):
-            data_inicio = data_inicio_dt.date()
-        else:
-            data_inicio = data_inicio_dt
-        data_fim = datetime.now().date()
+        data_inicio = _to_date_rf(data_inicio_dt)
+        data_fim = _to_date_rf(data_fim_dt) or datetime.now().date()
+        if data_inicio is None:
+            return None, 0
         if data_inicio >= data_fim:
             return 1.0, 0
 
@@ -3213,6 +3781,50 @@ def _calcular_fator_ipca_historico(data_inicio_dt, multiplicador_ipca=1.0, sprea
         return fator, meses
     except Exception as e:
         print(f"Erro ao calcular fator IPCA histórico: {e}")
+        return None, 0
+
+
+def _calcular_fator_cdi_selic_historico(indexador, data_inicio_dt, fator_percentual=1.0, spread_anual_pct=0.0, data_fim_dt=None):
+    """
+    Compõe CDI (série 12) ou SELIC (série 11) dia a dia com taxas históricas do BCB.
+    fator_percentual: 1.0 = 100% do indexador, 1.1 = 110%.
+    spread_anual_pct: taxa fixa a.a. adicional (CDI+), convertida em fator diário útil.
+    Retorna (fator, dias) ou (None, 0).
+    """
+    try:
+        data_inicio = _to_date_rf(data_inicio_dt)
+        data_fim = _to_date_rf(data_fim_dt) or datetime.now().date()
+        if data_inicio is None:
+            return None, 0
+        if data_inicio >= data_fim:
+            return 1.0, 0
+
+        idx = str(indexador or '').upper()
+        serie_id = BCB_SERIE_CDI_DIARIO if idx.startswith('CDI') else BCB_SERIE_SELIC_DIARIO
+        serie = _obter_serie_bcb_cached(serie_id, data_inicio, data_fim)
+        if not serie:
+            return None, 0
+
+        fator = 1.0
+        dias = 0
+        spread = float(spread_anual_pct or 0.0)
+        taxa_diaria_fixa = ((1.0 + spread / 100.0) ** (1.0 / 252.0) - 1.0) if spread else 0.0
+        mult = float(fator_percentual) if fator_percentual and fator_percentual > 0 else 1.0
+
+        for item in serie:
+            try:
+                taxa_dia = float(item.get("valor"))
+            except (TypeError, ValueError):
+                continue
+            # taxa BCB em % a.d.; aplica percentual do indexador (100% CDI, 110%, etc.)
+            fator *= 1.0 + (taxa_dia * mult / 100.0)
+            if taxa_diaria_fixa:
+                fator *= 1.0 + taxa_diaria_fixa
+            dias += 1
+
+        return fator, dias
+    except Exception as e:
+        print(f"Erro ao calcular fator CDI/SELIC histórico: {e}")
         return None, 0
 
 
@@ -3462,8 +4074,8 @@ def _obter_taxa_atual_indexador(indexador):
         print(f"DEBUG: Erro geral ao obter taxa atual: {e}")
         return 13.0 if indexador in ["CDI", "SELIC"] else 0.5
 
-def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_adicao):
-    """Calcula o preço atual baseado no indexador e percentual - USANDO ABORDAGEM QUE JÁ FUNCIONA"""
+def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_adicao, data_fim=None):
+
     from math import isfinite
     try:
         def _normalizar_indexador_pct(idx, pct):
@@ -3486,8 +4098,6 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
 
             return pct
 
-        # CONVERSÃO EXPLÍCITA E VALIDAÇÃO CRÍTICA DE TIPOS (fix para PostgreSQL)
-        # PostgreSQL pode retornar NUMERIC como Decimal ou string, precisamos garantir float
         try:
             preco_inicial = float(preco_inicial) if preco_inicial is not None else None
         except (ValueError, TypeError):
@@ -3500,7 +4110,6 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"[ERRO CRITICO] Indexador_pct invalido: {indexador_pct} (tipo: {type(indexador_pct)})")
             return preco_inicial
         
-        # Validações básicas
         if preco_inicial is None or preco_inicial <= 0:
             print(f"[ERRO] Preco inicial invalido ou zero: {preco_inicial}")
             return preco_inicial if preco_inicial else None
@@ -3509,8 +4118,9 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"[ERRO] Indexador ou percentual faltando: indexador={indexador}, pct={indexador_pct}")
             return preco_inicial
 
-        # Compatibilidade para títulos antigos: quando o percentual vier vazio/zero
-        # em indexadores-base, assumir 100% do indexador.
+        indexador = str(indexador).strip().upper()
+
+        # Compatibilidade para títulos antigos: percentual vazio/zero em indexadores-base => 100%
         if indexador in ["CDI", "SELIC", "IPCA"] and (indexador_pct is None or indexador_pct <= 0):
             indexador_pct = 100.0
             print(f"DEBUG: Percentual ausente para {indexador}; assumindo 100% do indexador.")
@@ -3520,152 +4130,123 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
             print(f"[ERRO] Percentual do indexador ausente para {indexador}")
             return preco_inicial
         
-        # VALIDAÇÃO CRÍTICA: faixa ampla para cobrir base indexador e taxas fixas anuais.
         if indexador_pct > 1000:
-            print(f"[ERRO CRITICO] Indexador_pct fora do range esperado: {indexador_pct}% (esperado: 0.1-1000%)")
+            print(f"[ERRO CRITICO] Indexador_pct fora do range esperado: {indexador_pct}%")
             return preco_inicial
         
-        # Converter data de adição para datetime (aceitar múltiplos formatos)
-        from datetime import datetime
-        data_adicao_dt = None
-        try:
-            if isinstance(data_adicao, str):
-                s = data_adicao.strip()
-                # Remover sufixo 'Z' se presente e tentar múltiplos formatos comuns
-                s_clean = s.replace('Z', '')
-                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
-                    try:
-                        data_adicao_dt = datetime.strptime(s_clean, fmt)
-                        break
-                    except Exception:
-                        pass
-                if data_adicao_dt is None:
-                    try:
-                        data_adicao_dt = datetime.fromisoformat(s_clean)
-                    except Exception:
-                        pass
-            elif isinstance(data_adicao, datetime):
-                data_adicao_dt = data_adicao
-        except Exception:
-            data_adicao_dt = None
-        if data_adicao_dt is None:
-            # Como último recurso, considerar hoje menos um dia para evitar zero dias
-            data_adicao_dt = datetime.now()
-        
-        # Calcular dias desde a adição
-        dias_totais = max((datetime.now() - data_adicao_dt).days, 0)
-        
-        # VALIDAÇÃO CRÍTICA: Verificar se a data não está no futuro
-        if (datetime.now() - data_adicao_dt).days < 0:
-            print(f"[ERRO] Data de adicao esta no futuro: {data_adicao_dt}. Retornando preco inicial.")
+        data_inicio = _to_date_rf(data_adicao)
+        data_ref = _to_date_rf(data_fim) or datetime.now().date()
+        if data_inicio is None:
+            # Nunca assumir 'hoje' — isso zera o accrual e gera queda aparente de saldo.
+            print(f"[ERRO] Data de aplicacao invalida: {data_adicao!r}. Mantendo preco inicial.")
             return preco_inicial
-        
-        # VALIDAÇÃO CRÍTICA: Limitar dias a um máximo razoável (10 anos = 3650 dias)
-        # Se a data for muito antiga, pode gerar cálculos absurdos
+        if data_inicio > data_ref:
+            print(f"[ERRO] Data de aplicacao ({data_inicio}) apos data fim ({data_ref}). Mantendo preco inicial.")
+            return preco_inicial
+
+        dias_totais = max((data_ref - data_inicio).days, 0)
         if dias_totais > 3650:
-            print(f"[AVISO] Data muito antiga ({dias_totais} dias = {dias_totais/365:.1f} anos). Limitando a 10 anos para calculo.")
+            print(f"[AVISO] Periodo muito longo ({dias_totais} dias). Limitando inicio a 10 anos antes de {data_ref}.")
+            data_inicio = data_ref - timedelta(days=3650)
             dias_totais = 3650
         
         if dias_totais <= 0:
             return preco_inicial
         
-        print(f"DEBUG: Calculando valorização para {indexador} desde {data_adicao} ({dias_totais} dias)")
-        print(f"DEBUG: Valores recebidos - preco_inicial: {preco_inicial} (tipo: {type(preco_inicial).__name__}), indexador_pct: {indexador_pct} (tipo: {type(indexador_pct).__name__})")
+        print(f"DEBUG: Calculando valorização para {indexador} desde {data_inicio} ate {data_ref} ({dias_totais} dias)")
+        print(f"DEBUG: Valores recebidos - preco_inicial: {preco_inicial}, indexador_pct: {indexador_pct}")
         
-        # Aplicar percentual do indexador (ex: 110% = 1.1)
-        # GARANTIR que indexador_pct é float antes da divisão
         fator_percentual = float(indexador_pct) / 100.0
         if fator_percentual <= 0 or fator_percentual > 10:
-            print(f"[ERRO CRITICO] Fator percentual invalido: {fator_percentual} (indexador_pct={indexador_pct})")
+            print(f"[ERRO CRITICO] Fator percentual invalido: {fator_percentual}")
             return preco_inicial
 
-        # USAR A MESMA ABORDAGEM QUE JÁ FUNCIONA NA TELA DE DETALHES
+        data_adicao_dt = datetime.combine(data_inicio, datetime.min.time())
+
         if indexador in ["SELIC", "CDI"]:
-            # Usar a mesma lógica da função obter_historico_carteira_comparado
-            taxa_anual = _obter_taxa_atual_indexador(indexador)
-            print(f"DEBUG: Taxa atual {indexador}: {taxa_anual}% a.a.")
-            
-            # Aplicar taxa anual com percentual do indexador
-            taxa_anual_indexada = taxa_anual * fator_percentual
-            taxa_diaria = (1 + taxa_anual_indexada / 100) ** (1/252) - 1
-            # Aproximação de dias úteis (252 por ano)
-            dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
-            fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
-            
-            print(f"DEBUG: {indexador} taxa={taxa_anual}% | indexada={taxa_anual_indexada}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
+            fator_correcao, dias_serie = _calcular_fator_cdi_selic_historico(
+                indexador, data_inicio, fator_percentual=fator_percentual, data_fim_dt=data_ref
+            )
+            if fator_correcao is None:
+                taxa_anual = _obter_taxa_atual_indexador(indexador)
+                taxa_anual_indexada = taxa_anual * fator_percentual
+                taxa_diaria = (1 + taxa_anual_indexada / 100) ** (1 / 252) - 1
+                dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
+                fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
+                print(f"DEBUG: {indexador} FALLBACK spot taxa={taxa_anual}% | fator={fator_correcao:.6f}")
+            else:
+                print(f"DEBUG: {indexador} histórico diario | mult={fator_percentual:.4f} | dias={dias_serie} | fator={fator_correcao:.6f}")
             
         elif indexador == "CDI+":
-            # CDI+: CDI atual + taxa fixa prefixada
-            taxa_cdi_atual = _obter_taxa_atual_indexador("CDI")
             taxa_fixa_anual = (indexador_pct or 0)
-            taxa_total_anual = taxa_cdi_atual + taxa_fixa_anual
-            
-            taxa_diaria = (1 + taxa_total_anual / 100) ** (1/252) - 1
-            dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
-            fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
-            
-            print(f"DEBUG: CDI+ CDI={taxa_cdi_atual}% + fixa={taxa_fixa_anual}% = {taxa_total_anual}% | diaria={taxa_diaria:.8f} | dias_uteis~={dias_uteis_aprox} | fator={fator_correcao:.6f}")
+            fator_correcao, dias_serie = _calcular_fator_cdi_selic_historico(
+                "CDI", data_inicio, fator_percentual=1.0, spread_anual_pct=taxa_fixa_anual, data_fim_dt=data_ref
+            )
+            if fator_correcao is None:
+                taxa_cdi_atual = _obter_taxa_atual_indexador("CDI")
+                taxa_total_anual = taxa_cdi_atual + taxa_fixa_anual
+                taxa_diaria = (1 + taxa_total_anual / 100) ** (1 / 252) - 1
+                dias_uteis_aprox = int(round(dias_totais * 252.0 / 365.0))
+                fator_correcao = (1 + taxa_diaria) ** dias_uteis_aprox
+                print(f"DEBUG: CDI+ FALLBACK spot | fator={fator_correcao:.6f}")
+            else:
+                print(f"DEBUG: CDI+ histórico | fixa={taxa_fixa_anual}% | dias={dias_serie} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA":
-            # IPCA: compor mês a mês com série histórica 433 (cada mês com taxa real do BCB)
             fator_correcao, meses_ipca = _calcular_fator_ipca_historico(
-                data_adicao_dt, multiplicador_ipca=fator_percentual
+                data_adicao_dt, multiplicador_ipca=fator_percentual, data_fim_dt=data_ref
             )
             if fator_correcao is None:
                 ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
                 meses_desde_adicao = dias_totais / 30.44
                 taxa_mensal_indexada = ipca_atual_mensal * fator_percentual
                 fator_correcao = (1 + taxa_mensal_indexada / 100) ** meses_desde_adicao
-                print(f"DEBUG: IPCA fallback (sem série) mensal={ipca_atual_mensal}% | meses~={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+                print(f"DEBUG: IPCA fallback mensal={ipca_atual_mensal}% | fator={fator_correcao:.6f}")
             else:
-                print(f"DEBUG: IPCA histórico série 433 | mult={fator_percentual:.4f} | meses={meses_ipca} | fator={fator_correcao:.6f}")
+                print(f"DEBUG: IPCA histórico | mult={fator_percentual:.4f} | meses={meses_ipca} | fator={fator_correcao:.6f}")
             
         elif indexador == "IPCA+":
-            # IPCA+: IPCA histórico mês a mês + spread fixo mensal (taxa anual / 12)
             taxa_fixa_mensal = (indexador_pct or 0) / 12
             fator_correcao, meses_ipca = _calcular_fator_ipca_historico(
-                data_adicao_dt, multiplicador_ipca=1.0, spread_mensal_pct=taxa_fixa_mensal
+                data_adicao_dt, multiplicador_ipca=1.0, spread_mensal_pct=taxa_fixa_mensal, data_fim_dt=data_ref
             )
             if fator_correcao is None:
                 ipca_atual_mensal = _obter_taxa_atual_indexador("IPCA")
                 taxa_mensal_total = ipca_atual_mensal + taxa_fixa_mensal
                 meses_desde_adicao = dias_totais / 30.44
                 fator_correcao = (1 + taxa_mensal_total / 100) ** meses_desde_adicao
-                print(f"DEBUG: IPCA+ fallback IPCA={ipca_atual_mensal}% + fixa={taxa_fixa_mensal}% | meses~={meses_desde_adicao:.2f} | fator={fator_correcao:.6f}")
+                print(f"DEBUG: IPCA+ fallback | fator={fator_correcao:.6f}")
             else:
-                print(f"DEBUG: IPCA+ histórico série 433 | fixa_mensal={taxa_fixa_mensal:.4f}% | meses={meses_ipca} | fator={fator_correcao:.6f}")
+                print(f"DEBUG: IPCA+ histórico | fixa_mensal={taxa_fixa_mensal:.4f}% | meses={meses_ipca} | fator={fator_correcao:.6f}")
             
         elif indexador == "PREFIXADO":
-
             taxa_anual_decimal = (indexador_pct or 0) / 100.0
-            taxa_diaria = (1 + taxa_anual_decimal) ** (1/365) - 1
+            taxa_diaria = (1 + taxa_anual_decimal) ** (1 / 365) - 1
             fator_correcao = (1 + taxa_diaria) ** dias_totais
-            
-            print(f"DEBUG: PREFIXADO anual={indexador_pct}% | diaria={taxa_diaria:.8f} | fator={fator_correcao:.6f}")
+            print(f"DEBUG: PREFIXADO anual={indexador_pct}% | fator={fator_correcao:.6f}")
             
         else:
             print(f"DEBUG: Indexador não reconhecido: {indexador}")
             return preco_inicial
         
-        # Preço final - GARANTIR que ambos são float antes da multiplicação
         preco_final = float(preco_inicial) * float(fator_correcao)
         
-        # VALIDAÇÃO CRÍTICA FINAL: Verificar se o preço calculado é válido
         if preco_final <= 0 or not isinstance(preco_final, (int, float)) or not isfinite(preco_final):
-            print(f"[ERRO CRITICO] Preco calculado invalido: {preco_final} (tipo: {type(preco_final).__name__}). Retornando preco inicial.")
+            print(f"[ERRO CRITICO] Preco calculado invalido: {preco_final}. Retornando preco inicial.")
             return preco_inicial
         
-        # Validação do fator: para renda fixa, mesmo com 10 anos, o fator máximo seria ~3.5x (115% CDI)
-        # Mas permitir até 20x para casos extremos (múltiplas aplicações ou períodos muito longos)
         if not (0.01 <= fator_correcao <= 20.0):
             print(f"[ERRO CRITICO] Fator de correcao absurdo: {fator_correcao}. Retornando preco inicial.")
             return preco_inicial
         
-        # VALIDAÇÃO ADICIONAL: Preço final não pode ser muito diferente do inicial
-        # Se o preço final for menor que 20% do inicial ou maior que 20x, há algo errado
         if preco_final < preco_inicial * 0.2 or preco_final > preco_inicial * 20.0:
-            print(f"[ERRO CRITICO] Preco final fora do range esperado: inicial={preco_inicial}, final={preco_final} (fator={preco_final/preco_inicial:.4f}x). Retornando preco inicial.")
+            print(f"[ERRO CRITICO] Preco final fora do range: inicial={preco_inicial}, final={preco_final}. Retornando preco inicial.")
             return preco_inicial
+
+        # Sanidade accrual: RF indexada não fica abaixo do preço de aplicação.
+        if preco_final < preco_inicial:
+            print(f"[AVISO] Preco calculado ({preco_final}) < inicial ({preco_inicial}). Piso = preco_inicial.")
+            preco_final = preco_inicial
         
         print(f"DEBUG: Preço inicial: {preco_inicial}, fator: {fator_correcao:.6f}, preço final: {preco_final}")
         
@@ -3676,6 +4257,7 @@ def calcular_preco_com_indexador(preco_inicial, indexador, indexador_pct, data_a
         import traceback
         traceback.print_exc()
         return preco_inicial
+
 
 @cache.memoize(timeout=300)  # Cache de 5 minutos para taxa USD/BRL
 def obter_taxa_usd_brl():
@@ -4003,58 +4585,56 @@ def atualizar_precos_indicadores_carteira():
                         # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
                         if _indexador:
                             print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                            # Preço base - ORDEM DE PRIORIDADE CRÍTICA:
-                            # 1. indexador_base_preco (se configurado explicitamente)
-                            # 2. preco_compra (preço de compra original)
-                            # 3. preco_medio (preço médio ponderado)
-                            # 4. Primeira movimentação (último recurso)
-                            # NUNCA usar preco_atual como base!
-                            if base_preco is not None and base_data:
+                            # Preço/data base imutáveis — NUNCA usar preco_atual como base.
+                            # Se indexador_base_* existir, data DEVE ser a do base (evita misturar
+                            # preço já acruado com data_aplicacao antiga = superacumulação, ou
+                            # preço de compra com data recente = saldo "despenca").
+                            if base_preco is not None and base_data and _to_date_rf(base_data):
                                 preco_inicial = base_preco
-                                # Preferir data_aplicacao quando existir (evita superacumulação
-                                # por base_data legado desatualizado).
-                                data_base_calculo = _data_aplicacao or base_data
-                                print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                                data_base_calculo = base_data
+                                print(f"DEBUG: Usando indexador_base_preco/data: {preco_inicial} @ {data_base_calculo}")
                             elif _preco_compra is not None and _preco_compra > 0:
                                 preco_inicial = _preco_compra
                                 data_base_calculo = _data_aplicacao or _data_adicao
-                                print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                                print(f"DEBUG: Usando preco_compra: {preco_inicial} @ {data_base_calculo}")
                             elif _preco_medio is not None and _preco_medio > 0:
                                 preco_inicial = _preco_medio
                                 data_base_calculo = _data_aplicacao or _data_adicao
-                                print(f"DEBUG: Usando preco_medio: {preco_inicial}")
+                                print(f"DEBUG: Usando preco_medio: {preco_inicial} @ {data_base_calculo}")
                             else:
-                                # Último recurso: buscar primeira movimentação
-                                c.execute('SELECT preco FROM movimentacoes WHERE ticker = %s ORDER BY data ASC LIMIT 1', (_ticker,))
+                                c.execute('SELECT preco, data FROM movimentacoes WHERE ticker = %s ORDER BY data ASC LIMIT 1', (_ticker,))
                                 mov_row = c.fetchone()
                                 if mov_row and mov_row[0] and float(mov_row[0]) > 0:
                                     preco_inicial = float(mov_row[0])
-                                    data_base_calculo = _data_aplicacao or _data_adicao
+                                    data_base_calculo = _data_aplicacao or (mov_row[1] if len(mov_row) > 1 else None) or _data_adicao
                                     print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
                                 else:
-                                    # Se não encontrou nada, pular este ativo (não atualizar)
-                                    print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                    print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker}. Pulando.")
                                     continue
+
+                            if not _to_date_rf(data_base_calculo):
+                                print(f"[ERRO CRITICO] Data base invalida para {_ticker}: {data_base_calculo!r}. Pulando (nao assume hoje).")
+                                continue
                             
                             print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data base: {data_base_calculo}")
                             
-                            # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
                             if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
                                 print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
                                 continue
                             
                             preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, data_base_calculo)
-                            
 
                             if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
-                                print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
+                                print(f"[ERRO CRITICO] Preco calculado invalido para {_ticker}: {preco_atual}. Mantendo preco inicial.")
                                 preco_atual = preco_inicial
                             elif preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                                print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x). Mantendo preco inicial para evitar corrupcao.")
-                                preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
+                                print(f"[ERRO CRITICO] Preco absurdo para {_ticker}: inicial={preco_inicial}, calc={preco_atual}. Mantendo inicial.")
+                                preco_atual = preco_inicial
                             else:
+                                # Sanidade: accrual RF nunca abaixo do preço de compra/base
+                                if preco_atual < preco_inicial:
+                                    preco_atual = preco_inicial
                                 print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
-                            # Preservar indicadores já existentes para ativos com indexador.
                             dy = _dy_atual; pl = _pl_atual; pvp = _pvp_atual; roe = _roe_atual
                         elif _ticker in precos_batch:
                             # Se não tem indexador, usar preços do batch (yfinance)
@@ -4150,55 +4730,54 @@ def atualizar_precos_indicadores_carteira():
                     # CORREÇÃO CRÍTICA: Se tem indexador, calcular SEMPRE (mesmo que não esteja no batch)
                     if _indexador:
                         print(f"DEBUG: Ativo {_ticker} tem indexador {_indexador} com {_indexador_pct}%")
-                        
-
-                        if base_preco is not None and base_data:
+                        # Preço/data base imutáveis — NUNCA usar preco_atual como base.
+                        # Se indexador_base_* existir, data DEVE ser a do base.
+                        if base_preco is not None and base_data and _to_date_rf(base_data):
                             preco_inicial = base_preco
-                            # Preferir data_aplicacao quando existir (evita superacumulação
-                            # por base_data legado desatualizado).
-                            data_base_calculo = _data_aplicacao or base_data
-                            print(f"DEBUG: Usando indexador_base_preco: {preco_inicial}")
+                            data_base_calculo = base_data
+                            print(f"DEBUG: Usando indexador_base_preco/data: {preco_inicial} @ {data_base_calculo}")
                         elif _preco_compra is not None and _preco_compra > 0:
                             preco_inicial = _preco_compra
                             data_base_calculo = _data_aplicacao or _data_adicao
-                            print(f"DEBUG: Usando preco_compra: {preco_inicial}")
+                            print(f"DEBUG: Usando preco_compra: {preco_inicial} @ {data_base_calculo}")
                         elif _preco_medio is not None and _preco_medio > 0:
                             preco_inicial = _preco_medio
                             data_base_calculo = _data_aplicacao or _data_adicao
-                            print(f"DEBUG: Usando preco_medio: {preco_inicial}")
+                            print(f"DEBUG: Usando preco_medio: {preco_inicial} @ {data_base_calculo}")
                         else:
-                            # Último recurso: buscar primeira movimentação
-                            cur.execute('SELECT preco FROM movimentacoes WHERE ticker = ? ORDER BY data ASC LIMIT 1', (_ticker,))
+                            cur.execute('SELECT preco, data FROM movimentacoes WHERE ticker = ? ORDER BY data ASC LIMIT 1', (_ticker,))
                             mov_row = cur.fetchone()
                             if mov_row and mov_row[0] and float(mov_row[0]) > 0:
                                 preco_inicial = float(mov_row[0])
-                                data_base_calculo = _data_aplicacao or _data_adicao
+                                data_base_calculo = _data_aplicacao or (mov_row[1] if len(mov_row) > 1 else None) or _data_adicao
                                 print(f"DEBUG: Usando primeira movimentação: {preco_inicial}")
                             else:
-                                # Se não encontrou nada, pular este ativo (não atualizar)
-                                print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker} com indexador. Pulando atualizacao.")
+                                print(f"[ERRO CRITICO] Nao foi possivel determinar preco inicial para {_ticker}. Pulando.")
                                 continue
+
+                        if not _to_date_rf(data_base_calculo):
+                            print(f"[ERRO CRITICO] Data base invalida para {_ticker}: {data_base_calculo!r}. Pulando (nao assume hoje).")
+                            continue
                         
                         print(f"DEBUG: Preço inicial encontrado: {preco_inicial}, data base: {data_base_calculo}")
                         
-                        # VALIDAÇÃO PRÉ-CÁLCULO: Garantir que preco_inicial é válido
                         if preco_inicial is None or preco_inicial <= 0 or not isinstance(preco_inicial, (int, float)):
                             print(f"[ERRO CRITICO] Preco inicial invalido para {_ticker}: {preco_inicial}. Pulando atualizacao.")
                             continue
                         
                         preco_atual = calcular_preco_com_indexador(preco_inicial, _indexador, _indexador_pct, data_base_calculo)
-                        
 
                         if preco_atual is None or not isinstance(preco_atual, (int, float)) or preco_atual <= 0:
-                            print(f"[ERRO CRITICO] Preco calculado invalido (None/zero/nao-numerico) para {_ticker}: {preco_atual}. Mantendo preco inicial.")
+                            print(f"[ERRO CRITICO] Preco calculado invalido para {_ticker}: {preco_atual}. Mantendo preco inicial.")
                             preco_atual = preco_inicial
                         elif preco_atual < preco_inicial * 0.2 or preco_atual > preco_inicial * 20.0:
-                            print(f"[ERRO CRITICO] Preco calculado absurdo para {_ticker}: inicial={preco_inicial}, calculado={preco_atual} (fator={preco_atual/preco_inicial:.4f}x). Mantendo preco inicial para evitar corrupcao.")
-                            preco_atual = preco_inicial  # CORREÇÃO: Manter preço inicial, não o atual (que pode estar corrompido)
+                            print(f"[ERRO CRITICO] Preco absurdo para {_ticker}: inicial={preco_inicial}, calc={preco_atual}. Mantendo inicial.")
+                            preco_atual = preco_inicial
                         else:
+                            if preco_atual < preco_inicial:
+                                preco_atual = preco_inicial
                             print(f"DEBUG: Preço calculado com indexador: {preco_atual} (inicial: {preco_inicial}, fator: {preco_atual/preco_inicial:.4f}x)")
                         
-                        # Preservar indicadores já existentes para ativos com indexador.
                         dy = _dy_atual
                         pl = _pl_atual
                         pvp = _pvp_atual
@@ -6140,10 +6719,192 @@ def obter_carteira():
         return []
 
 
+def _add_calendar_months(d, months):
+    """Soma meses civis preservando o dia (ajusta p/ último dia do mês se necessário)."""
+    from calendar import monthrange
+    if d is None:
+        return None
+    months = int(months)
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    day = min(d.day, monthrange(y, m)[1])
+    return d.replace(year=y, month=m, day=day)
+
+
+def _inicio_periodo_mensal(periodo, hoje):
+    """
+    Início do filtro em meses civis (não dias corridos).
+    Retorna (data_inicio, n_meses) ou (None, 0).
+    """
+    periodo = (periodo or "").strip().lower()
+    if periodo == "1m":
+        return _add_calendar_months(hoje, -1), 1
+    if periodo == "3m":
+        return _add_calendar_months(hoje, -3), 3
+    if periodo == "6m":
+        return _add_calendar_months(hoje, -6), 6
+    if periodo == "1a":
+        return _add_calendar_months(hoje, -12), 12
+    if periodo == "ytd":
+        ini = hoje.replace(month=1, day=1)
+        n = (hoje.year - ini.year) * 12 + (hoje.month - ini.month)
+        if hoje.day > 0 and hoje > ini:
+            n = max(n, 1)
+        return ini, n
+    return None, 0
+
+
+def _ancoras_mensais(data_inicio, data_fim):
+    """
+    Âncoras [inicio, +1m, +2m, ..., fim] para encadear retornos mês a mês.
+    Se inicio >= fim, retorna [fim] (sem variação).
+    """
+    if data_inicio is None or data_fim is None:
+        return []
+    if data_inicio >= data_fim:
+        return [data_fim]
+    out = [data_inicio]
+    k = 1
+    while k <= 36:
+        nxt = _add_calendar_months(data_inicio, k)
+        if nxt is None or nxt >= data_fim:
+            break
+        out.append(nxt)
+        k += 1
+    if out[-1] != data_fim:
+        out.append(data_fim)
+    return out
+
+
+def _resolver_base_renda_fixa(ativo):
+    """Preço e data base imutáveis para accrual RF."""
+    base_preco = ativo.get("indexador_base_preco")
+    base_data = ativo.get("indexador_base_data")
+    if base_preco is not None and _to_date_rf(base_data):
+        try:
+            return float(base_preco), base_data
+        except (TypeError, ValueError):
+            pass
+    try:
+        preco_base = float(ativo.get("preco_compra") or ativo.get("preco_medio") or 0)
+    except (TypeError, ValueError):
+        preco_base = 0.0
+    data_base = ativo.get("data_aplicacao") or ativo.get("data_adicao")
+    return preco_base, data_base
+
+
+def _preco_renda_fixa_em_data(ativo, data_ref):
+    """Mark-to-model RF na data_ref via indexador (sem yfinance)."""
+    if not ativo.get("indexador"):
+        return None
+    preco_base, data_base = _resolver_base_renda_fixa(ativo)
+    data_base_dt = _to_date_rf(data_base)
+    data_ref_dt = _to_date_rf(data_ref)
+    if preco_base is None or preco_base <= 0 or data_base_dt is None or data_ref_dt is None:
+        return None
+    if data_ref_dt <= data_base_dt:
+        return float(preco_base)
+    preco = calcular_preco_com_indexador(
+        preco_base,
+        ativo.get("indexador"),
+        ativo.get("indexador_pct"),
+        data_base,
+        data_fim=data_ref_dt,
+    )
+    if preco is None or preco <= 0:
+        return None
+    return float(preco)
+
+
+def _mapear_precos_historicos_rv(ticker, datas):
+    """
+    Uma busca de histórico cobrindo todas as datas pedidas.
+    Retorna dict data -> preço (último close <= data).
+    """
+    datas_ok = sorted({_to_date_rf(d) for d in datas if _to_date_rf(d)})
+    out = {}
+    if not datas_ok or not ticker:
+        return out
+
+    if is_crypto_ticker(ticker):
+        for d in datas_ok:
+            res = obter_preco_historico(ticker, d.isoformat())
+            if res and res.get("preco"):
+                try:
+                    p = float(res["preco"])
+                    if p > 0:
+                        out[d] = p
+                except (TypeError, ValueError):
+                    pass
+        return out
+
+    try:
+        ticker_yf = ticker.strip().upper()
+        if '-' not in ticker_yf and '.' not in ticker_yf and len(ticker_yf) <= 6:
+            ticker_yf += '.SA'
+        start = datas_ok[0] - timedelta(days=40)
+        end = datas_ok[-1] + timedelta(days=2)
+        hist = yf.Ticker(ticker_yf).history(start=start.isoformat(), end=end.isoformat())
+        if hist is None or hist.empty:
+            # Fallback pontual
+            for d in datas_ok:
+                res = obter_preco_historico(ticker, d.isoformat())
+                if res and res.get("preco"):
+                    try:
+                        p = float(res["preco"])
+                        if p > 0:
+                            out[d] = p
+                    except (TypeError, ValueError):
+                        pass
+            return out
+
+        # Serie (date -> close) ordenada
+        serie = []
+        for idx, row in hist.iterrows():
+            try:
+                d = idx.date() if hasattr(idx, "date") else idx
+                close = row.get("Close") or row.get("Adj Close")
+                p = float(close)
+                if p > 0:
+                    serie.append((d, p))
+            except (TypeError, ValueError):
+                continue
+        serie.sort(key=lambda x: x[0])
+        if not serie:
+            return out
+
+        j = 0
+        last = None
+        for d in datas_ok:
+            while j < len(serie) and serie[j][0] <= d:
+                last = serie[j][1]
+                j += 1
+            if last is not None:
+                out[d] = last
+        return out
+    except Exception as e:
+        print(f"[AVISO] _mapear_precos_historicos_rv({ticker}): {e}")
+        for d in datas_ok:
+            res = obter_preco_historico(ticker, d.isoformat())
+            if res and res.get("preco"):
+                try:
+                    p = float(res["preco"])
+                    if p > 0:
+                        out[d] = p
+                except (TypeError, ValueError):
+                    pass
+        return out
+
+
 def obter_valorizacao_periodo(periodo):
     """
-    Retorna valorização em R$ e % por ativo para um período (1m, 3m, 6m, 1a, ytd).
-    Usa preço histórico na data inicial do período para calcular ganho/perda no período.
+    Valorização em R$ e % por ativo no filtro de período (1m, 3m, 6m, 1a, ytd).
+
+    Regras:
+    - Janela em meses civis (6m = 6 meses, 1a = 12), não 180/365 dias.
+    - Retorno cumulativo mês a mês: produto dos (1 + r_m) − 1.
+    - Clip pela data de compra/aplicação: não inventa performance pré-posse.
+    - Renda fixa: accrual do indexador (sem yfinance).
     """
     try:
         usuario = get_usuario_atual()
@@ -6152,28 +6913,30 @@ def obter_valorizacao_periodo(periodo):
         carteira = obter_carteira()
         if not carteira or not isinstance(carteira, list):
             return []
+
         hoje = datetime.now().date()
-        periodo = (periodo or "").strip().lower()
-        if periodo == "1m":
-            data_inicio = hoje - timedelta(days=30)
-        elif periodo == "3m":
-            data_inicio = hoje - timedelta(days=90)
-        elif periodo == "6m":
-            data_inicio = hoje - timedelta(days=180)
-        elif periodo == "1a":
-            data_inicio = hoje - timedelta(days=365)
-        elif periodo == "ytd":
-            data_inicio = hoje.replace(month=1, day=1)
-        else:
+        data_inicio_periodo, n_meses = _inicio_periodo_mensal(periodo, hoje)
+        if data_inicio_periodo is None:
             return []
-        data_inicio_str = data_inicio.isoformat()
+
         max_workers = min(len(carteira), YF_MAX_CONCURRENT, 12)
 
         def item_para_ativo(ativo):
-            ticker = (ativo.get("ticker") or "").strip()
-            qtd = float(ativo.get("quantidade") or 0)
-            preco_atual = float(ativo.get("preco_atual") or 0)
-            if not ticker or qtd <= 0:
+            try:
+                return _calcular_valorizacao_periodo_ativo(
+                    ativo, data_inicio_periodo, hoje, n_meses=n_meses, periodo=periodo
+                )
+            except Exception as e:
+                print(f"Erro ao calcular valorização por período ({ativo.get('ticker')}): {e}")
+                ticker = (ativo.get("ticker") or "").strip()
+                try:
+                    qtd = float(ativo.get("quantidade") or 0)
+                except (TypeError, ValueError):
+                    qtd = 0.0
+                try:
+                    preco_atual = float(ativo.get("preco_atual") or 0)
+                except (TypeError, ValueError):
+                    preco_atual = 0.0
                 return {
                     "id": ativo.get("id"),
                     "ticker": ticker,
@@ -6182,30 +6945,11 @@ def obter_valorizacao_periodo(periodo):
                     "preco_inicio_periodo": None,
                     "valorizacao_reais": None,
                     "valorizacao_pct": None,
+                    "meses_calculados": 0,
+                    "meses_periodo": n_meses,
+                    "periodo_parcial": False,
+                    "aviso": None,
                 }
-            res = obter_preco_historico(ticker, data_inicio_str)
-            preco_inicio = float(res["preco"]) if res and res.get("preco") is not None else None
-            if preco_inicio is None or preco_inicio <= 0:
-                return {
-                    "id": ativo.get("id"),
-                    "ticker": ticker,
-                    "quantidade": qtd,
-                    "preco_atual": preco_atual,
-                    "preco_inicio_periodo": None,
-                    "valorizacao_reais": None,
-                    "valorizacao_pct": None,
-                }
-            valorizacao_reais = (preco_atual - preco_inicio) * qtd
-            valorizacao_pct = ((preco_atual - preco_inicio) / preco_inicio) * 100
-            return {
-                "id": ativo.get("id"),
-                "ticker": ticker,
-                "quantidade": qtd,
-                "preco_atual": preco_atual,
-                "preco_inicio_periodo": preco_inicio,
-                "valorizacao_reais": valorizacao_reais,
-                "valorizacao_pct": valorizacao_pct,
-            }
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(item_para_ativo, ativo): ativo for ativo in carteira}
@@ -6218,7 +6962,185 @@ def obter_valorizacao_periodo(periodo):
             return resultados
     except Exception as e:
         print(f"Erro em obter_valorizacao_periodo: {e}")
+        import traceback
+        traceback.print_exc()
         return []
+
+
+def _rotulo_periodo_meses(n_meses, periodo=None):
+    periodo = (periodo or "").strip().lower()
+    if periodo == "ytd":
+        return "o ano (YTD)"
+    if n_meses == 1:
+        return "1 mês"
+    if n_meses == 12:
+        return "1 ano"
+    return f"{n_meses} meses"
+
+
+def _aviso_periodo_parcial(meses_calculados, n_meses, data_compra, periodo=None):
+    """Texto claro quando o ativo não cobre o filtro inteiro."""
+    rotulo = _rotulo_periodo_meses(n_meses, periodo)
+    data_txt = None
+    dc = _to_date_rf(data_compra)
+    if dc:
+        data_txt = dc.strftime("%d/%m/%Y")
+
+    if meses_calculados <= 0:
+        if data_txt:
+            return (
+                f"Na carteira desde {data_txt} — ainda sem histórico suficiente "
+                f"para o filtro de {rotulo}."
+            )
+        return f"Ainda sem histórico suficiente para o filtro de {rotulo}."
+
+    if data_txt:
+        return (
+            f"Calculado com {meses_calculados} {('mês' if meses_calculados == 1 else 'meses')} "
+            f"(desde {data_txt}); o filtro pede {rotulo}."
+        )
+    return (
+        f"Calculado com {meses_calculados} {('mês' if meses_calculados == 1 else 'meses')}; "
+        f"o filtro pede {rotulo}."
+    )
+
+
+def _calcular_valorizacao_periodo_ativo(ativo, data_inicio_periodo, hoje, n_meses=0, periodo=None):
+    ticker = (ativo.get("ticker") or "").strip()
+    try:
+        qtd = float(ativo.get("quantidade") or 0)
+    except (TypeError, ValueError):
+        qtd = 0.0
+    try:
+        preco_atual = float(ativo.get("preco_atual") or 0)
+    except (TypeError, ValueError):
+        preco_atual = 0.0
+
+    def _payload(**extra):
+        base = {
+            "id": ativo.get("id"),
+            "ticker": ticker,
+            "quantidade": qtd,
+            "preco_atual": preco_atual,
+            "preco_inicio_periodo": None,
+            "valorizacao_reais": None,
+            "valorizacao_pct": None,
+            "meses_calculados": 0,
+            "meses_periodo": int(n_meses or 0),
+            "periodo_parcial": False,
+            "aviso": None,
+        }
+        base.update(extra)
+        return base
+
+    if not ticker or qtd <= 0 or preco_atual <= 0:
+        return _payload()
+
+    data_compra = _to_date_rf(
+        ativo.get("data_aplicacao") or ativo.get("data_adicao")
+    )
+    # Início efetivo: não conta período antes de possuir o ativo
+    data_inicio_efetiva = data_inicio_periodo
+    clipado = False
+    if data_compra and data_compra > data_inicio_efetiva:
+        data_inicio_efetiva = data_compra
+        clipado = True
+
+    # Comprado hoje (ou sem dias no período): sem variação + aviso explícito
+    if data_inicio_efetiva >= hoje:
+        aviso = _aviso_periodo_parcial(0, n_meses, data_compra, periodo)
+        return _payload(
+            preco_inicio_periodo=preco_atual,
+            valorizacao_reais=0.0,
+            valorizacao_pct=0.0,
+            meses_calculados=0,
+            periodo_parcial=True,
+            aviso=aviso,
+        )
+
+    ancoras = _ancoras_mensais(data_inicio_efetiva, hoje)
+    if len(ancoras) < 2:
+        aviso = _aviso_periodo_parcial(0, n_meses, data_compra, periodo)
+        return _payload(
+            preco_inicio_periodo=preco_atual,
+            valorizacao_reais=0.0,
+            valorizacao_pct=0.0,
+            meses_calculados=0,
+            periodo_parcial=True,
+            aviso=aviso,
+        )
+
+    eh_rf = _ativo_eh_renda_fixa(ativo) and bool(ativo.get("indexador"))
+    precos_por_data = {}
+
+    if eh_rf:
+        for d in ancoras:
+            if d >= hoje:
+                precos_por_data[d] = preco_atual
+            else:
+                p = _preco_renda_fixa_em_data(ativo, d)
+                if p is not None:
+                    precos_por_data[d] = p
+    else:
+        precos_por_data = _mapear_precos_historicos_rv(ticker, ancoras)
+        precos_por_data[hoje] = preco_atual
+        if data_compra and data_compra == data_inicio_efetiva:
+            try:
+                pc = float(ativo.get("preco_compra") or ativo.get("preco_medio") or 0)
+            except (TypeError, ValueError):
+                pc = 0.0
+            if pc > 0:
+                precos_por_data[data_inicio_efetiva] = pc
+
+    fator = 1.0
+    reais_acum = 0.0
+    meses_ok = 0
+    preco_inicio = None
+    preco_anterior = None
+
+    for d in ancoras:
+        p = precos_por_data.get(d)
+        if p is None or p <= 0:
+            continue
+        if preco_inicio is None:
+            preco_inicio = p
+            preco_anterior = p
+            continue
+        r = (p / preco_anterior) - 1.0
+        fator *= (1.0 + r)
+        reais_acum += (p - preco_anterior) * qtd
+        preco_anterior = p
+        meses_ok += 1
+
+    if preco_inicio is None or preco_inicio <= 0 or meses_ok == 0:
+        aviso = _aviso_periodo_parcial(0, n_meses, data_compra, periodo) if clipado else None
+        return _payload(
+            preco_inicio_periodo=preco_atual if clipado else None,
+            valorizacao_reais=0.0 if clipado else None,
+            valorizacao_pct=0.0 if clipado else None,
+            meses_calculados=0,
+            periodo_parcial=bool(clipado),
+            aviso=aviso,
+        )
+
+    valorizacao_pct = (fator - 1.0) * 100.0
+    valorizacao_reais = reais_acum
+    # Parcial se comprou depois do início do filtro OU não fechou todos os meses do filtro
+    periodo_parcial = bool(clipado) or (n_meses > 0 and meses_ok < n_meses)
+    aviso = (
+        _aviso_periodo_parcial(meses_ok, n_meses, data_compra, periodo)
+        if periodo_parcial
+        else None
+    )
+
+    return _payload(
+        preco_inicio_periodo=preco_inicio,
+        valorizacao_reais=valorizacao_reais,
+        valorizacao_pct=valorizacao_pct,
+        meses_calculados=meses_ok,
+        periodo_parcial=periodo_parcial,
+        aviso=aviso,
+    )
 
 
 # ==================== REBALANCEAMENTO ====================

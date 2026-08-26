@@ -651,6 +651,10 @@ export const carteiraService = {
     preco_inicio_periodo?: number | null
     valorizacao_reais: number | null
     valorizacao_pct: number | null
+    meses_calculados?: number
+    meses_periodo?: number
+    periodo_parcial?: boolean
+    aviso?: string | null
   }>> => {
     const response = await api.get(`/carteira/valorizacao-periodo?periodo=${encodeURIComponent(periodo)}`)
     return asArray(response.data)
@@ -1772,8 +1776,12 @@ export async function fetchHistoricoCarteiraComFallback(
 
 export const cartaoService = {
   // Cartões Cadastrados
-  getCartoesCadastrados: async (): Promise<CartaoCadastrado[]> => {
-    const response = await api.get('/controle/cartoes-cadastrados')
+  getCartoesCadastrados: async (mes?: string, ano?: string): Promise<CartaoCadastrado[]> => {
+    const params = new URLSearchParams()
+    if (mes) params.append('mes', String(mes).padStart(2, '0'))
+    if (ano) params.append('ano', String(ano))
+    const qs = params.toString()
+    const response = await api.get(`/controle/cartoes-cadastrados${qs ? `?${qs}` : ''}`)
     const payload = response.data
     if (Array.isArray(payload)) return payload as CartaoCadastrado[]
     if (Array.isArray(payload?.cartoes)) return payload.cartoes as CartaoCadastrado[]

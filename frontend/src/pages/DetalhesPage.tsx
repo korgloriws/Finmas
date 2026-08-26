@@ -1098,6 +1098,7 @@ export default function DetalhesPage() {
                 evToEbit={evToEbit}
                 liquidezDiaria={liquidezDiaria}
                 isInCarteira={isInCarteira}
+                indicadoresPorPeriodo={detalhes?.indicadores_por_periodo}
               />
             )}
 

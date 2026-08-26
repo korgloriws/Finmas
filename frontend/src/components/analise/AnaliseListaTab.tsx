@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { analiseService, carteiraService, ativoService } from '../../services/api'
-import { AtivoAnalise, FiltrosAnalise } from '../../types'
+import { AtivoAnalise, FiltrosAnalise, PeriodoIndicadores } from '../../types'
 import { useAnalise } from '../../contexts/AnaliseContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTabNavigationGuard } from '../../hooks/useTabNavigationGuard'
@@ -27,7 +27,63 @@ function erroFoiCancelamento(err: unknown): boolean {
   return false
 }
 
-const FILTROS_UNIVERSO_ACOES: FiltrosAnalise = {
+const PERIODOS_INDICADORES: Array<{ value: PeriodoIndicadores; label: string; hint: string }> = [
+  { value: 'atual', label: 'Agora', hint: 'DY e ROE do snapshot atual' },
+  { value: '6m', label: '6M', hint: 'DY/ROE anualizados dos últimos 6 meses' },
+  { value: '1a', label: '1A', hint: 'DY/ROE médios de 1 ano' },
+  { value: '3a', label: '3A', hint: 'DY/ROE médios de 3 anos' },
+  { value: '5a', label: '5A', hint: 'DY/ROE médios de 5 anos' },
+]
+
+function labelPeriodoCurto(periodo?: PeriodoIndicadores | string | null): string {
+  const p = (periodo || 'atual') as PeriodoIndicadores
+  const found = PERIODOS_INDICADORES.find((x) => x.value === p)
+  return found?.label || 'Agora'
+}
+
+function periodoDosFiltros(filtros: FiltrosAnalise): PeriodoIndicadores {
+  const p = filtros.periodo_indicadores || 'atual'
+  return (PERIODOS_INDICADORES.some((x) => x.value === p) ? p : 'atual') as PeriodoIndicadores
+}
+
+function PeriodoIndicadoresPills({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PeriodoIndicadores
+  onChange: (periodo: PeriodoIndicadores) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="block text-sm font-semibold text-foreground">Período dos indicadores</label>
+        <span className="text-xs text-muted-foreground">Opcional — aplica DY, ROE, P/L, P/VP e liquidez</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {PERIODOS_INDICADORES.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            disabled={disabled}
+            title={p.hint}
+            onClick={() => onChange(p.value)}
+            className={`px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 ${
+              value === p.value
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const FILTROS_UNIVERSO_ACOES_BASE: FiltrosAnalise = {
   roe_min: -999999,
   dy_min: -999999,
   pl_min: -999999,
@@ -35,10 +91,11 @@ const FILTROS_UNIVERSO_ACOES: FiltrosAnalise = {
   pvp_max: 999999,
   net_debt_ebitda_max: 999999,
   liq_min: 0,
-  setor: ''
+  setor: '',
+  setores_excluir: [],
 }
 
-const FILTROS_UNIVERSO_BDRS: FiltrosAnalise = {
+const FILTROS_UNIVERSO_BDRS_BASE: FiltrosAnalise = {
   roe_min: -999999,
   dy_min: -999999,
   pl_min: -999999,
@@ -46,20 +103,57 @@ const FILTROS_UNIVERSO_BDRS: FiltrosAnalise = {
   pvp_max: 999999,
   net_debt_ebitda_max: 999999,
   liq_min: 0,
-  setor: ''
+  setor: '',
+  setores_excluir: [],
 }
 
-const FILTROS_UNIVERSO_FIIS: FiltrosAnalise = {
+const FILTROS_UNIVERSO_FIIS_BASE: FiltrosAnalise = {
   dy_min: -999999,
   dy_max: 999999,
   liq_min: 0,
   tipo_fii: '',
-  segmento_fii: ''
+  segmento_fii: '',
+  segmentos_excluir: [],
+}
+
+function filtrosUniversoAcoes(periodo: PeriodoIndicadores): FiltrosAnalise {
+  return { ...FILTROS_UNIVERSO_ACOES_BASE, periodo_indicadores: periodo }
+}
+
+function filtrosUniversoBdrs(periodo: PeriodoIndicadores): FiltrosAnalise {
+  return { ...FILTROS_UNIVERSO_BDRS_BASE, periodo_indicadores: periodo }
+}
+
+function filtrosUniversoFiis(periodo: PeriodoIndicadores): FiltrosAnalise {
+  return { ...FILTROS_UNIVERSO_FIIS_BASE, periodo_indicadores: periodo }
 }
 
 const toFinite = (value: unknown, fallback: number) => {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+const normTexto = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
+function setorBate(ativoSetor: unknown, filtro: string | undefined): boolean {
+  const f = (filtro || '').trim()
+  if (!f) return true
+  return normTexto(ativoSetor) === normTexto(f)
+}
+
+function setorExcluido(ativoSetor: unknown, excluir: string[] | undefined): boolean {
+  if (!excluir?.length) return false
+  const alvo = normTexto(ativoSetor)
+  if (!alvo) return false
+  return excluir.some((s) => normTexto(s) === alvo)
+}
+
+function temFiltroSetorialFiis(filtros: FiltrosAnalise): boolean {
+  return !!(
+    filtros.tipo_fii?.trim() ||
+    filtros.segmento_fii?.trim() ||
+    (filtros.segmentos_excluir && filtros.segmentos_excluir.length > 0)
+  )
 }
 
 function filtrarAcoesLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
@@ -70,6 +164,7 @@ function filtrarAcoesLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise):
   const pvpMax = toFinite(filtros.pvp_max, Number.POSITIVE_INFINITY)
   const liqMin = toFinite(filtros.liq_min, 0)
   const setor = (filtros.setor || '').trim()
+  const excluir = filtros.setores_excluir || []
 
   return lista
     .filter((ativo) => (
@@ -79,7 +174,8 @@ function filtrarAcoesLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise):
       toFinite(ativo.pl, 0) <= plMax &&
       toFinite(ativo.pvp, 0) <= pvpMax &&
       toFinite(ativo.liquidez_diaria, 0) > liqMin &&
-      (!setor || (ativo.setor || '').trim() === setor)
+      setorBate(ativo.setor, setor) &&
+      !setorExcluido(ativo.setor, excluir)
     ))
     .sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
 }
@@ -92,19 +188,54 @@ function filtrarFiisLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): 
   const dyMin = toFinite(filtros.dy_min, 0)
   const dyMax = toFinite(filtros.dy_max, Number.POSITIVE_INFINITY)
   const liqMin = toFinite(filtros.liq_min, 0)
+  const tipo = (filtros.tipo_fii || '').trim()
+  const segmento = (filtros.segmento_fii || '').trim()
+  const excluir = filtros.segmentos_excluir || []
+  const precisaMeta = !!(tipo || segmento || excluir.length)
 
   return lista
-    .filter((ativo) => (
-      toFinite(ativo.dividend_yield, 0) >= dyMin &&
-      toFinite(ativo.dividend_yield, 0) <= dyMax &&
-      toFinite(ativo.liquidez_diaria, 0) > liqMin
-    ))
+    .filter((ativo) => {
+      if (
+        toFinite(ativo.dividend_yield, 0) < dyMin ||
+        toFinite(ativo.dividend_yield, 0) > dyMax ||
+        toFinite(ativo.liquidez_diaria, 0) <= liqMin
+      ) {
+        return false
+      }
+
+      if (!precisaMeta) return true
+
+      const aTipo = (ativo.tipo_fii || '').trim()
+      const aSeg = (ativo.segmento_fii || ativo.setor || '').trim()
+      if (!aTipo && !aSeg) return false
+      if (tipo && !setorBate(aTipo, tipo)) return false
+      if (segmento && !setorBate(aSeg, segmento)) return false
+      if (setorExcluido(aSeg, excluir)) return false
+      return true
+    })
     .sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
 }
 
 
 const MAX_FIIS_VISIVEIS = 10
 
+/** Rótulos em PT para setores Yahoo (valor do filtro permanece o original). */
+const SETOR_LABEL: Record<string, string> = {
+  'Financial Services': 'Financeiro',
+  Technology: 'Tecnologia',
+  'Consumer Cyclical': 'Consumo cíclico',
+  'Consumer Defensive': 'Consumo defensivo',
+  Healthcare: 'Saúde',
+  Energy: 'Energia',
+  Industrials: 'Industrial',
+  'Communication Services': 'Comunicação',
+  Utilities: 'Utilidades',
+  'Real Estate': 'Imobiliário',
+  'Basic Materials': 'Materiais básicos',
+  Services: 'Serviços',
+  'Consumer Staples': 'Bens de consumo',
+  'Consumer Discretionary': 'Consumo discricionário',
+}
 
 const SETORES_COMUNS = [
   'Financial Services',
@@ -121,16 +252,127 @@ const SETORES_COMUNS = [
   'Services',
   'Consumer Staples',
   'Consumer Discretionary',
-  'Oil & Gas Integrated',
-  'Utilities - Regulated Electric',
-  'Real Estate Services',
-
 ]
+
+const SEGMENTOS_FII_COMUNS = [
+  'Shopping',
+  'Logística',
+  'Lajes corporativas',
+  'Escritórios',
+  'Residencial',
+  'Industrial',
+  'Hospitalar',
+  'Educacional',
+  'Galpões',
+  'Recebíveis/CRI',
+  'Fundo de Fundos',
+  'Híbrido',
+  'Agências',
+  'Hotel',
+]
+
+function labelSetor(setor: string): string {
+  return SETOR_LABEL[setor] || setor
+}
+
+function coletarSetores(lista: AtivoAnalise[] | null | undefined, fallback: string[]): string[] {
+  const set = new Set<string>()
+  for (const s of fallback) {
+    if (s.trim()) set.add(s.trim())
+  }
+  for (const ativo of lista || []) {
+    const s = (ativo.setor || '').trim()
+    if (s && s !== 'Desconhecido') set.add(s)
+  }
+  return Array.from(set).sort((a, b) => labelSetor(a).localeCompare(labelSetor(b), 'pt-BR'))
+}
+
+function coletarSegmentosFiis(
+  lista: AtivoAnalise[] | null | undefined,
+  metaMap: Record<string, { tipo?: string; segmento?: string }>,
+  fallback: string[]
+): string[] {
+  const set = new Set<string>()
+  for (const s of fallback) {
+    if (s.trim()) set.add(s.trim())
+  }
+  for (const ativo of lista || []) {
+    const s = (ativo.segmento_fii || ativo.setor || metaMap[ativo.ticker]?.segmento || '').trim()
+    if (s) set.add(s)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+}
+
+function ExclusaoChips({
+  label,
+  opcoes,
+  selecionados,
+  onChange,
+  formatLabel,
+}: {
+  label: string
+  opcoes: string[]
+  selecionados: string[]
+  onChange: (next: string[]) => void
+  formatLabel?: (value: string) => string
+}) {
+  const toggle = (valor: string) => {
+    const ja = selecionados.some((s) => normTexto(s) === normTexto(valor))
+    if (ja) {
+      onChange(selecionados.filter((s) => normTexto(s) !== normTexto(valor)))
+    } else {
+      onChange([...selecionados, valor])
+    }
+  }
+
+  return (
+    <div className="space-y-2 md:col-span-2 lg:col-span-3">
+      <div>
+        <label className="block text-sm font-semibold text-foreground">{label}</label>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Oculte setores/segmentos relacionados para diversificar e evitar concentração.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 border border-border rounded-xl bg-background">
+        {opcoes.map((opcao) => {
+          const ativo = selecionados.some((s) => normTexto(s) === normTexto(opcao))
+          return (
+            <button
+              key={opcao}
+              type="button"
+              onClick={() => toggle(opcao)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                ativo
+                  ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+                  : 'bg-muted/40 text-foreground border-border hover:bg-muted'
+              }`}
+              aria-pressed={ativo}
+            >
+              {formatLabel ? formatLabel(opcao) : opcao}
+            </button>
+          )
+        })}
+      </div>
+      {selecionados.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+        >
+          Limpar exclusões ({selecionados.length})
+        </button>
+      )}
+    </div>
+  )
+}
 
 function FiltrosAcoes({ 
   filtros, 
   onFiltroChange, 
   onFiltroStringChange,
+  onExclusaoChange,
+  onPeriodoChange,
+  setoresOpcoes,
   onBuscar, 
   loading, 
   onCancelar,
@@ -140,18 +382,22 @@ function FiltrosAcoes({
   filtros: FiltrosAnalise
   onFiltroChange: (key: keyof FiltrosAnalise, value: number) => void
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
+  onExclusaoChange: (key: 'setores_excluir', value: string[]) => void
+  onPeriodoChange: (periodo: PeriodoIndicadores) => void
+  setoresOpcoes: string[]
   onBuscar: () => void
   loading: boolean
   onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
+  const periodoLabel = labelPeriodoCurto(periodoDosFiltros(filtros))
   return (
     <div className="bg-card border border-border rounded-2xl p-6 mb-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-bold text-foreground">Filtros para Ações</h3>
-          <p className="text-muted-foreground text-sm">Configure os critérios de análise</p>
+          <p className="text-muted-foreground text-sm">Configure os critérios de análise — use o setor para focar ou evitar segmentos relacionados</p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
@@ -166,10 +412,18 @@ function FiltrosAcoes({
           </label>
         </div>
       </div>
+
+      <div className="mb-6 pb-6 border-b border-border">
+        <PeriodoIndicadoresPills
+          value={periodoDosFiltros(filtros)}
+          onChange={onPeriodoChange}
+          disabled={loading}
+        />
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">ROE Mínimo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">ROE Mínimo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.roe_min || ''}
@@ -181,7 +435,7 @@ function FiltrosAcoes({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.dy_min || ''}
@@ -193,7 +447,7 @@ function FiltrosAcoes({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/L Mínimo</label>
+          <label className="block text-sm font-semibold text-foreground">P/L Mínimo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pl_min || ''}
@@ -205,7 +459,7 @@ function FiltrosAcoes({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/L Máximo</label>
+          <label className="block text-sm font-semibold text-foreground">P/L Máximo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pl_max || ''}
@@ -217,7 +471,7 @@ function FiltrosAcoes({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/VP Máximo</label>
+          <label className="block text-sm font-semibold text-foreground">P/VP Máximo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pvp_max || ''}
@@ -238,12 +492,12 @@ function FiltrosAcoes({
             className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
             placeholder="3"
             aria-label="Dívida Líquida sobre EBITDA máximo"
-            title="Filtra empresas com alavancagem até o limite escolhido"
+            title="Usa o valor atual (não há série histórica estável no Yahoo para este filtro)"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$)</label>
+          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.liq_min ?? 100000}
@@ -256,19 +510,27 @@ function FiltrosAcoes({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Setor</label>
+          <label className="block text-sm font-semibold text-foreground">Setor (incluir)</label>
           <select
             value={filtros.setor || ''}
             onChange={(e) => onFiltroStringChange('setor', e.target.value)}
             className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-            aria-label="Setor"
+            aria-label="Setor a incluir"
           >
             <option value="">Todos os setores</option>
-            {SETORES_COMUNS.map((setor) => (
-              <option key={setor} value={setor}>{setor}</option>
+            {setoresOpcoes.map((setor) => (
+              <option key={setor} value={setor}>{labelSetor(setor)}</option>
             ))}
           </select>
         </div>
+
+        <ExclusaoChips
+          label="Excluir setores"
+          opcoes={setoresOpcoes}
+          selecionados={filtros.setores_excluir || []}
+          onChange={(next) => onExclusaoChange('setores_excluir', next)}
+          formatLabel={labelSetor}
+        />
       </div>
       
       <div className="mt-6 flex justify-end gap-2">
@@ -310,6 +572,9 @@ function FiltrosBdrs({
   filtros, 
   onFiltroChange, 
   onFiltroStringChange,
+  onExclusaoChange,
+  onPeriodoChange,
+  setoresOpcoes,
   onBuscar, 
   loading, 
   onCancelar,
@@ -319,18 +584,22 @@ function FiltrosBdrs({
   filtros: FiltrosAnalise
   onFiltroChange: (key: keyof FiltrosAnalise, value: number) => void
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
+  onExclusaoChange: (key: 'setores_excluir', value: string[]) => void
+  onPeriodoChange: (periodo: PeriodoIndicadores) => void
+  setoresOpcoes: string[]
   onBuscar: () => void
   loading: boolean
   onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
+  const periodoLabel = labelPeriodoCurto(periodoDosFiltros(filtros))
   return (
     <div className="bg-card border border-border rounded-2xl p-6 mb-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-bold text-foreground">Filtros para BDRs</h3>
-          <p className="text-muted-foreground text-sm">Configure os critérios de análise</p>
+          <p className="text-muted-foreground text-sm">Configure os critérios de análise — use o setor para focar ou evitar segmentos relacionados</p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
@@ -345,10 +614,18 @@ function FiltrosBdrs({
           </label>
         </div>
       </div>
+
+      <div className="mb-6 pb-6 border-b border-border">
+        <PeriodoIndicadoresPills
+          value={periodoDosFiltros(filtros)}
+          onChange={onPeriodoChange}
+          disabled={loading}
+        />
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">ROE Mínimo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">ROE Mínimo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.roe_min || ''}
@@ -360,7 +637,7 @@ function FiltrosBdrs({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.dy_min || ''}
@@ -372,7 +649,7 @@ function FiltrosBdrs({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/L Mínimo</label>
+          <label className="block text-sm font-semibold text-foreground">P/L Mínimo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pl_min || ''}
@@ -384,7 +661,7 @@ function FiltrosBdrs({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/L Máximo</label>
+          <label className="block text-sm font-semibold text-foreground">P/L Máximo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pl_max || ''}
@@ -396,7 +673,7 @@ function FiltrosBdrs({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">P/VP Máximo</label>
+          <label className="block text-sm font-semibold text-foreground">P/VP Máximo — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.pvp_max || ''}
@@ -408,7 +685,7 @@ function FiltrosBdrs({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$)</label>
+          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.liq_min ?? 10000}
@@ -421,19 +698,27 @@ function FiltrosBdrs({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Setor</label>
+          <label className="block text-sm font-semibold text-foreground">Setor (incluir)</label>
           <select
             value={filtros.setor || ''}
             onChange={(e) => onFiltroStringChange('setor', e.target.value)}
             className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-            aria-label="Setor"
+            aria-label="Setor a incluir"
           >
             <option value="">Todos os setores</option>
-            {SETORES_COMUNS.map((setor) => (
-              <option key={setor} value={setor}>{setor}</option>
+            {setoresOpcoes.map((setor) => (
+              <option key={setor} value={setor}>{labelSetor(setor)}</option>
             ))}
           </select>
         </div>
+
+        <ExclusaoChips
+          label="Excluir setores"
+          opcoes={setoresOpcoes}
+          selecionados={filtros.setores_excluir || []}
+          onChange={(next) => onExclusaoChange('setores_excluir', next)}
+          formatLabel={labelSetor}
+        />
       </div>
       
       <div className="mt-6 flex justify-end gap-2">
@@ -475,6 +760,9 @@ function FiltrosFiis({
   filtros, 
   onFiltroChange, 
   onFiltroStringChange,
+  onExclusaoChange,
+  onPeriodoChange,
+  segmentosOpcoes,
   onBuscar, 
   loading, 
   onCancelar,
@@ -484,18 +772,22 @@ function FiltrosFiis({
   filtros: FiltrosAnalise
   onFiltroChange: (key: keyof FiltrosAnalise, value: number) => void
   onFiltroStringChange: (key: keyof FiltrosAnalise, value: string) => void
+  onExclusaoChange: (key: 'segmentos_excluir', value: string[]) => void
+  onPeriodoChange: (periodo: PeriodoIndicadores) => void
+  segmentosOpcoes: string[]
   onBuscar: () => void
   loading: boolean
   onCancelar: () => void
   autoSearch: boolean
   onAutoSearchChange: (value: boolean) => void
 }) {
+  const periodoLabel = labelPeriodoCurto(periodoDosFiltros(filtros))
   return (
     <div className="bg-card border border-border rounded-2xl p-6 mb-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-bold text-foreground">Filtros para FIIs</h3>
-          <p className="text-muted-foreground text-sm">Configure os critérios de análise</p>
+          <p className="text-muted-foreground text-sm">Configure os critérios — o segmento atua como setor para diversificar a lista</p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
@@ -510,10 +802,18 @@ function FiltrosFiis({
           </label>
         </div>
       </div>
+
+      <div className="mb-6 pb-6 border-b border-border">
+        <PeriodoIndicadoresPills
+          value={periodoDosFiltros(filtros)}
+          onChange={onPeriodoChange}
+          disabled={loading}
+        />
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">DY Mínimo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.dy_min || ''}
@@ -525,7 +825,7 @@ function FiltrosFiis({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">DY Máximo (%)</label>
+          <label className="block text-sm font-semibold text-foreground">DY Máximo (%) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.dy_max || ''}
@@ -537,7 +837,7 @@ function FiltrosFiis({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$)</label>
+          <label className="block text-sm font-semibold text-foreground">Liquidez Mínima (R$) — {periodoLabel}</label>
           <input
             type="number"
             value={filtros.liq_min || ''}
@@ -564,26 +864,26 @@ function FiltrosFiis({
         </div>
         
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-foreground">Segmento</label>
+          <label className="block text-sm font-semibold text-foreground">Segmento / setor (incluir)</label>
           <select
             value={filtros.segmento_fii || ''}
             onChange={(e) => onFiltroStringChange('segmento_fii', e.target.value)}
             className="w-full px-4 py-3 border border-border rounded-xl bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-            aria-label="Segmento do FII"
+            aria-label="Segmento do FII a incluir"
           >
             <option value="">Todos os segmentos</option>
-            <option value="Shopping">Shopping</option>
-            <option value="Logística">Logística</option>
-            <option value="Lajes corporativas">Lajes corporativas</option>
-            <option value="Escritórios">Escritórios</option>
-            <option value="Residencial">Residencial</option>
-            <option value="Industrial">Industrial</option>
-            <option value="Hospitalar">Hospitalar</option>
-            <option value="Educacional">Educacional</option>
-            <option value="Galpões">Galpões</option>
-            <option value="Recebíveis/CRI">Recebíveis/CRI</option>
+            {segmentosOpcoes.map((seg) => (
+              <option key={seg} value={seg}>{seg}</option>
+            ))}
           </select>
         </div>
+
+        <ExclusaoChips
+          label="Excluir segmentos (setores)"
+          opcoes={segmentosOpcoes}
+          selecionados={filtros.segmentos_excluir || []}
+          onChange={(next) => onExclusaoChange('segmentos_excluir', next)}
+        />
       </div>
       
       <div className="mt-6 flex justify-end gap-2">
@@ -628,7 +928,8 @@ function TabelaAtivos({
   tipo,
   isAtivoNaCarteira,
   fiiMetadataMap,
-  onRetry
+  onRetry,
+  periodoLabel = 'Agora',
 }: {
   ativos: AtivoAnalise[]
   loading: boolean
@@ -637,6 +938,7 @@ function TabelaAtivos({
   isAtivoNaCarteira: (ticker: string) => boolean
   fiiMetadataMap?: Record<string, { tipo?: string; segmento?: string }>
   onRetry?: () => void
+  periodoLabel?: string
 }) {
   if (loading) {
     return (
@@ -645,7 +947,7 @@ function TabelaAtivos({
           <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
           <div className="space-y-2">
             <p className="text-lg font-semibold text-foreground">Carregando {tipo}...</p>
-            <p className="text-sm text-muted-foreground">Analisando dados do mercado. Aguarde a lista completa.</p>
+            <p className="text-sm text-muted-foreground">Analisando dados do mercado. Janelas longas de DY/ROE podem demorar mais.</p>
           </div>
         </div>
       </div>
@@ -713,7 +1015,11 @@ function TabelaAtivos({
                 <div className="min-w-0">
                   <TickerWithLogo ticker={ativo.ticker} />
                   <p className="mt-1 text-sm font-semibold text-foreground truncate">{ativo.nome_completo}</p>
-                  <p className="text-xs text-muted-foreground truncate">{ativo.industria || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {isFiiTable
+                      ? (fiiMeta?.segmento || ativo.segmento_fii || ativo.setor || 'Sem segmento')
+                      : (ativo.setor ? labelSetor(ativo.setor) : (ativo.industria || 'N/A'))}
+                  </p>
                 </div>
                 <span className={`px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${
                   ativo.tipo === 'Ação' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' :
@@ -728,11 +1034,24 @@ function TabelaAtivos({
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-muted/40 rounded-lg p-2">
                     <p className="text-muted-foreground">Tipo FII</p>
-                    <p className="font-semibold text-foreground">{fiiMeta?.tipo || '-'}</p>
+                    <p className="font-semibold text-foreground">{fiiMeta?.tipo || ativo.tipo_fii || '-'}</p>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-2">
-                    <p className="text-muted-foreground">Segmento</p>
-                    <p className="font-semibold text-foreground">{fiiMeta?.segmento || '-'}</p>
+                    <p className="text-muted-foreground">Segmento / setor</p>
+                    <p className="font-semibold text-foreground">{fiiMeta?.segmento || ativo.segmento_fii || ativo.setor || '-'}</p>
+                  </div>
+                </div>
+              )}
+
+              {!isFiiTable && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-muted/40 rounded-lg p-2">
+                    <p className="text-muted-foreground">Setor</p>
+                    <p className="font-semibold text-foreground">{ativo.setor ? labelSetor(ativo.setor) : '-'}</p>
+                  </div>
+                  <div className="bg-muted/40 rounded-lg p-2">
+                    <p className="text-muted-foreground">Indústria</p>
+                    <p className="font-semibold text-foreground truncate">{ativo.industria || '-'}</p>
                   </div>
                 </div>
               )}
@@ -743,23 +1062,23 @@ function TabelaAtivos({
                   <p className="font-semibold text-foreground">{formatCurrency(Number.isFinite(Number(ativo.preco_atual)) ? Number(ativo.preco_atual) : 0)}</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-2">
-                  <p className="text-muted-foreground">DY</p>
+                  <p className="text-muted-foreground">DY ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.dividend_yield)) ? Number(ativo.dividend_yield).toFixed(2) : '0.00'}%</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-2">
-                  <p className="text-muted-foreground">P/L</p>
+                  <p className="text-muted-foreground">P/L ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pl)) ? Number(ativo.pl).toFixed(2) : '-'}</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-2">
-                  <p className="text-muted-foreground">P/VP</p>
+                  <p className="text-muted-foreground">P/VP ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pvp)) ? Number(ativo.pvp).toFixed(2) : '-'}</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-2">
-                  <p className="text-muted-foreground">ROE</p>
+                  <p className="text-muted-foreground">ROE ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.roe)) ? Number(ativo.roe).toFixed(2) : '0.00'}%</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-2">
-                  <p className="text-muted-foreground">Liquidez</p>
+                  <p className="text-muted-foreground">Liquidez ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{formatCurrency(ativo.liquidez_diaria || 0)}</p>
                 </div>
               </div>
@@ -791,21 +1110,24 @@ function TabelaAtivos({
               {isFiiTable && (
                 <>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Tipo FII</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Segmento</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Segmento / setor</th>
                 </>
               )}
+              {!isFiiTable && (
+                <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Setor</th>
+              )}
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Preço</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">DY</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/L</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/VP</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">ROE</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">DY ({periodoLabel})</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/L ({periodoLabel})</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/VP ({periodoLabel})</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">ROE ({periodoLabel})</th>
               {!isFiiTable && (
                 <>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Indústria</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">País</th>
                 </>
               )}
-              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Liquidez</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Liquidez ({periodoLabel})</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Status</th>
             </tr>
           </thead>
@@ -836,24 +1158,31 @@ function TabelaAtivos({
                 {isFiiTable && (
                   <>
                     <td className="px-6 py-4">
-                      {fiiMeta?.tipo ? (
+                      {(fiiMeta?.tipo || ativo.tipo_fii) ? (
                         <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                          fiiMeta.tipo === 'Tijolo' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300' :
-                          fiiMeta.tipo === 'Papel' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300' :
+                          (fiiMeta?.tipo || ativo.tipo_fii) === 'Tijolo' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300' :
+                          (fiiMeta?.tipo || ativo.tipo_fii) === 'Papel' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300' :
                           'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300'
                         }`}>
-                          {fiiMeta.tipo}
+                          {fiiMeta?.tipo || ativo.tipo_fii}
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Carregando...</span>
+                        <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-foreground">
-                        {fiiMeta?.segmento || '-'}
+                        {fiiMeta?.segmento || ativo.segmento_fii || ativo.setor || '-'}
                       </span>
                     </td>
                   </>
+                )}
+                {!isFiiTable && (
+                  <td className="px-6 py-4">
+                    <span className="text-sm font-medium text-foreground">
+                      {ativo.setor ? labelSetor(ativo.setor) : '-'}
+                    </span>
+                  </td>
                 )}
                 <td className="px-6 py-4">
                   <span className="font-bold text-foreground text-sm">
@@ -1421,15 +1750,36 @@ export default function AnaliseListaTab() {
 
 
   const [fiiMetadataMap, setFiiMetadataMap] = useState<Record<string, { tipo?: string; segmento?: string }>>({})
+  const [universoTick, setUniversoTick] = useState(0)
   const abortAcoesRef = useRef<AbortController | null>(null)
   const abortBdrsRef = useRef<AbortController | null>(null)
   const abortFiisRef = useRef<AbortController | null>(null)
   const universoAcoesRef = useRef<AtivoAnalise[] | null>(null)
   const universoBdrsRef = useRef<AtivoAnalise[] | null>(null)
   const universoFiisRef = useRef<AtivoAnalise[] | null>(null)
+  const periodoUniversoAcoesRef = useRef<PeriodoIndicadores>('atual')
+  const periodoUniversoBdrsRef = useRef<PeriodoIndicadores>('atual')
+  const periodoUniversoFiisRef = useRef<PeriodoIndicadores>('atual')
   const filtrosAcoesRef = useRef<FiltrosAnalise>(filtrosAcoes)
   const filtrosBdrsRef = useRef<FiltrosAnalise>(filtrosBdrs)
   const filtrosFiisRef = useRef<FiltrosAnalise>(filtrosFiis)
+  const enrichFiisGenRef = useRef(0)
+
+  const setoresAcoesOpcoes = useMemo(
+    () => coletarSetores(universoAcoesRef.current || ativosAcoes, SETORES_COMUNS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ativosAcoes, universoTick]
+  )
+  const setoresBdrsOpcoes = useMemo(
+    () => coletarSetores(universoBdrsRef.current || ativosBdrs, SETORES_COMUNS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ativosBdrs, universoTick]
+  )
+  const segmentosFiisOpcoes = useMemo(
+    () => coletarSegmentosFiis(universoFiisRef.current || ativosFiis, fiiMetadataMap, SEGMENTOS_FII_COMUNS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ativosFiis, fiiMetadataMap, universoTick]
+  )
 
   // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
   const { data: carteira } = useQuery({
@@ -1453,17 +1803,21 @@ export default function AnaliseListaTab() {
     // Como a tabela só renderiza os primeiros MAX_FIIS_VISIVEIS, buscar metadata
     // apenas desses tickers — evita 30+ requests desnecessárias ao FundsExplorer.
     const fiisVisiveis = ativosFiis.slice(0, MAX_FIIS_VISIVEIS)
+    const faltando = fiisVisiveis.filter((f) => !fiiMetadataMap[f.ticker] && !f.segmento_fii)
+    if (faltando.length === 0) return
 
+    let cancelled = false
     const buscarMetadados = async () => {
       const newMetadataMap: Record<string, { tipo?: string; segmento?: string }> = {}
 
       const batchSize = 5
-      for (let i = 0; i < fiisVisiveis.length; i += batchSize) {
-        const batch = fiisVisiveis.slice(i, i + batchSize)
+      for (let i = 0; i < faltando.length; i += batchSize) {
+        if (cancelled) return
+        const batch = faltando.slice(i, i + batchSize)
 
         const promises = batch.map(async (fii) => {
           try {
-            const metadata = await ativoService.getFiiMetadata(fii.ticker, false) // false = sem portfólio (otimização)
+            const metadata = await ativoService.getFiiMetadata(fii.ticker, false)
             if (metadata) {
               newMetadataMap[fii.ticker] = {
                 tipo: metadata.tipo,
@@ -1476,17 +1830,87 @@ export default function AnaliseListaTab() {
         })
 
         await Promise.all(promises)
+        if (cancelled) return
 
         setFiiMetadataMap(prev => ({ ...prev, ...newMetadataMap }))
 
-        if (i + batchSize < fiisVisiveis.length) {
+        if (universoFiisRef.current && Object.keys(newMetadataMap).length > 0) {
+          universoFiisRef.current = universoFiisRef.current.map((a) => {
+            const meta = newMetadataMap[a.ticker]
+            if (!meta) return a
+            return {
+              ...a,
+              tipo_fii: meta.tipo ?? a.tipo_fii,
+              segmento_fii: meta.segmento ?? a.segmento_fii,
+              setor: meta.segmento || a.setor,
+            }
+          })
+          setUniversoTick((t) => t + 1)
+        }
+
+        if (i + batchSize < faltando.length) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
     }
 
     buscarMetadados()
+    return () => { cancelled = true }
+    // fiiMetadataMap propositalmente fora: evita loop; só busca o que ainda falta
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativosFiis])
+
+  const enriquecerUniversoFiis = useCallback(async (lista: AtivoAnalise[]) => {
+    const gen = ++enrichFiisGenRef.current
+    const pendentes = lista.filter((a) => !a.segmento_fii && !a.tipo_fii)
+    if (pendentes.length === 0) return
+
+    const batchSize = 8
+    for (let i = 0; i < pendentes.length; i += batchSize) {
+      if (enrichFiisGenRef.current !== gen) return
+      const batch = pendentes.slice(i, i + batchSize)
+      const newMetadataMap: Record<string, { tipo?: string; segmento?: string }> = {}
+
+      await Promise.all(batch.map(async (fii) => {
+        try {
+          const metadata = await ativoService.getFiiMetadata(fii.ticker, false)
+          if (metadata) {
+            newMetadataMap[fii.ticker] = {
+              tipo: metadata.tipo,
+              segmento: metadata.segmento,
+            }
+          }
+        } catch {
+          // ignora ticker sem meta
+        }
+      }))
+
+      if (enrichFiisGenRef.current !== gen) return
+      if (Object.keys(newMetadataMap).length === 0) continue
+
+      setFiiMetadataMap((prev) => ({ ...prev, ...newMetadataMap }))
+      if (universoFiisRef.current) {
+        universoFiisRef.current = universoFiisRef.current.map((a) => {
+          const meta = newMetadataMap[a.ticker]
+          if (!meta) return a
+          return {
+            ...a,
+            tipo_fii: meta.tipo ?? a.tipo_fii,
+            segmento_fii: meta.segmento ?? a.segmento_fii,
+            setor: meta.segmento || a.setor,
+          }
+        })
+        setUniversoTick((t) => t + 1)
+        if (temFiltroSetorialFiis(filtrosFiisRef.current)) {
+          setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosFiisRef.current))
+        }
+      }
+
+      if (i + batchSize < pendentes.length) {
+        await new Promise((r) => setTimeout(r, 300))
+      }
+    }
+  }, [setAtivosFiis])
 
   const cancelarBuscaAcoes = useCallback(() => {
     void analiseService.cancelarBusca().catch(() => undefined)
@@ -1541,12 +1965,20 @@ export default function AnaliseListaTab() {
 
   useEffect(() => {
     if (!universoFiisRef.current) return
+    if (temFiltroSetorialFiis(filtrosFiis)) {
+      const temMeta = universoFiisRef.current.some((a) => a.segmento_fii || a.tipo_fii)
+      if (!temMeta) return
+    }
     setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosFiis))
   }, [filtrosFiis, setAtivosFiis])
 
   const handleBuscarAcoes = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
     const filtrosAtuais = filtrosOverride || filtrosAcoesRef.current
-    if (universoAcoesRef.current) {
+    const periodo = periodoDosFiltros(filtrosAtuais)
+    if (
+      universoAcoesRef.current &&
+      periodoUniversoAcoesRef.current === periodo
+    ) {
       setErrorAcoes(null)
       setAtivosAcoes(filtrarAcoesLocalmente(universoAcoesRef.current, filtrosAtuais))
       return
@@ -1560,8 +1992,10 @@ export default function AnaliseListaTab() {
     setLoadingAcoes(true)
     setErrorAcoes(null)
     try {
-      const universo = await analiseService.getAtivos('acoes', FILTROS_UNIVERSO_ACOES, { signal: ctrl.signal })
+      const universo = await analiseService.getAtivos('acoes', filtrosUniversoAcoes(periodo), { signal: ctrl.signal })
       universoAcoesRef.current = universo
+      periodoUniversoAcoesRef.current = periodo
+      setUniversoTick((t) => t + 1)
       setAtivosAcoes(filtrarAcoesLocalmente(universo, filtrosAcoesRef.current))
     } catch (error) {
       if (!erroFoiCancelamento(error)) {
@@ -1571,11 +2005,15 @@ export default function AnaliseListaTab() {
       setLoadingAcoes(false)
       if (abortAcoesRef.current === ctrl) abortAcoesRef.current = null
     }
-  }, [filtrosAcoes, setAtivosAcoes])
+  }, [setAtivosAcoes])
 
   const handleBuscarBdrs = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
     const filtrosAtuais = filtrosOverride || filtrosBdrsRef.current
-    if (universoBdrsRef.current) {
+    const periodo = periodoDosFiltros(filtrosAtuais)
+    if (
+      universoBdrsRef.current &&
+      periodoUniversoBdrsRef.current === periodo
+    ) {
       setErrorBdrs(null)
       setAtivosBdrs(filtrarBdrsLocalmente(universoBdrsRef.current, filtrosAtuais))
       return
@@ -1589,8 +2027,10 @@ export default function AnaliseListaTab() {
     setLoadingBdrs(true)
     setErrorBdrs(null)
     try {
-      const universo = await analiseService.getAtivos('bdrs', FILTROS_UNIVERSO_BDRS, { signal: ctrl.signal })
+      const universo = await analiseService.getAtivos('bdrs', filtrosUniversoBdrs(periodo), { signal: ctrl.signal })
       universoBdrsRef.current = universo
+      periodoUniversoBdrsRef.current = periodo
+      setUniversoTick((t) => t + 1)
       setAtivosBdrs(filtrarBdrsLocalmente(universo, filtrosBdrsRef.current))
     } catch (error) {
       if (!erroFoiCancelamento(error)) {
@@ -1600,15 +2040,22 @@ export default function AnaliseListaTab() {
       setLoadingBdrs(false)
       if (abortBdrsRef.current === ctrl) abortBdrsRef.current = null
     }
-  }, [filtrosBdrs, setAtivosBdrs])
+  }, [setAtivosBdrs])
 
   const handleBuscarFiis = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
     const filtrosAtuais = filtrosOverride || filtrosFiisRef.current
-    if (universoFiisRef.current) {
+    const periodo = periodoDosFiltros(filtrosAtuais)
+    const setorial = temFiltroSetorialFiis(filtrosAtuais)
+    const universo = universoFiisRef.current
+    const universoMesmoPeriodo = !!universo && periodoUniversoFiisRef.current === periodo
+    const universoTemMeta = !!universo?.some((a) => a.segmento_fii || a.tipo_fii)
+
+    if (universoMesmoPeriodo && (!setorial || universoTemMeta)) {
       setErrorFiis(null)
-      setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosAtuais))
+      setAtivosFiis(filtrarFiisLocalmente(universo!, filtrosAtuais))
       return
     }
+
     try {
       await analiseService.cancelarBusca()
     } catch {}
@@ -1618,9 +2065,18 @@ export default function AnaliseListaTab() {
     setLoadingFiis(true)
     setErrorFiis(null)
     try {
-      const universo = await analiseService.getAtivos('fiis', FILTROS_UNIVERSO_FIIS, { signal: ctrl.signal })
-      universoFiisRef.current = universo
-      setAtivosFiis(filtrarFiisLocalmente(universo, filtrosFiisRef.current))
+      if (setorial && !(universoMesmoPeriodo && universoTemMeta)) {
+        // Busca no backend com tipo/segmento/exclusões (metadados FundsExplorer)
+        const dados = await analiseService.getAtivos('fiis', { ...filtrosAtuais, periodo_indicadores: periodo }, { signal: ctrl.signal })
+        setAtivosFiis(dados)
+      } else {
+        const novoUniverso = await analiseService.getAtivos('fiis', filtrosUniversoFiis(periodo), { signal: ctrl.signal })
+        universoFiisRef.current = novoUniverso
+        periodoUniversoFiisRef.current = periodo
+        setUniversoTick((t) => t + 1)
+        setAtivosFiis(filtrarFiisLocalmente(novoUniverso, filtrosFiisRef.current))
+        void enriquecerUniversoFiis(novoUniverso)
+      }
     } catch (error) {
       if (!erroFoiCancelamento(error)) {
         setErrorFiis(mensagemErroAnalise(error))
@@ -1629,7 +2085,7 @@ export default function AnaliseListaTab() {
       setLoadingFiis(false)
       if (abortFiisRef.current === ctrl) abortFiisRef.current = null
     }
-  }, [filtrosFiis, setAtivosFiis])
+  }, [enriquecerUniversoFiis, setAtivosFiis])
 
   // Funções de mudança de filtro
   const handleFiltroAcoesChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
@@ -1638,7 +2094,7 @@ export default function AnaliseListaTab() {
     if (autoSearchAcoes) {
       void handleBuscarAcoes(nextFiltros)
     }
-  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
+  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
 
   const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosAcoes, [key]: value }
@@ -1646,7 +2102,15 @@ export default function AnaliseListaTab() {
     if (autoSearchAcoes) {
       void handleBuscarAcoes(nextFiltros)
     }
-  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes])
+  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
+
+  const handleFiltroAcoesExclusaoChange = useCallback((key: 'setores_excluir', value: string[]) => {
+    const nextFiltros = { ...filtrosAcoes, [key]: value }
+    setFiltrosAcoes(nextFiltros)
+    if (autoSearchAcoes) {
+      void handleBuscarAcoes(nextFiltros)
+    }
+  }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
 
   const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
     const nextFiltros = { ...filtrosBdrs, [key]: value }
@@ -1654,7 +2118,7 @@ export default function AnaliseListaTab() {
     if (autoSearchBdrs) {
       void handleBuscarBdrs(nextFiltros)
     }
-  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
+  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
 
   const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosBdrs, [key]: value }
@@ -1662,7 +2126,15 @@ export default function AnaliseListaTab() {
     if (autoSearchBdrs) {
       void handleBuscarBdrs(nextFiltros)
     }
-  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs])
+  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
+
+  const handleFiltroBdrsExclusaoChange = useCallback((key: 'setores_excluir', value: string[]) => {
+    const nextFiltros = { ...filtrosBdrs, [key]: value }
+    setFiltrosBdrs(nextFiltros)
+    if (autoSearchBdrs) {
+      void handleBuscarBdrs(nextFiltros)
+    }
+  }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
 
   const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
     const nextFiltros = { ...filtrosFiis, [key]: value }
@@ -1670,7 +2142,7 @@ export default function AnaliseListaTab() {
     if (autoSearchFiis) {
       void handleBuscarFiis(nextFiltros)
     }
-  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
+  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
 
   const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosFiis, [key]: value }
@@ -1678,7 +2150,48 @@ export default function AnaliseListaTab() {
     if (autoSearchFiis) {
       void handleBuscarFiis(nextFiltros)
     }
-  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis])
+  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
+
+  const handleFiltroFiisExclusaoChange = useCallback((key: 'segmentos_excluir', value: string[]) => {
+    const nextFiltros = { ...filtrosFiis, [key]: value }
+    setFiltrosFiis(nextFiltros)
+    if (autoSearchFiis) {
+      void handleBuscarFiis(nextFiltros)
+    }
+  }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
+
+  const handlePeriodoAcoesChange = useCallback((periodo: PeriodoIndicadores) => {
+    if (periodoDosFiltros(filtrosAcoes) === periodo) return
+    const nextFiltros = { ...filtrosAcoes, periodo_indicadores: periodo }
+    const tinhaDados = !!universoAcoesRef.current || ativosAcoes.length > 0
+    universoAcoesRef.current = null
+    setFiltrosAcoes(nextFiltros)
+    if (tinhaDados || autoSearchAcoes) {
+      void handleBuscarAcoes(nextFiltros)
+    }
+  }, [autoSearchAcoes, ativosAcoes.length, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
+
+  const handlePeriodoBdrsChange = useCallback((periodo: PeriodoIndicadores) => {
+    if (periodoDosFiltros(filtrosBdrs) === periodo) return
+    const nextFiltros = { ...filtrosBdrs, periodo_indicadores: periodo }
+    const tinhaDados = !!universoBdrsRef.current || ativosBdrs.length > 0
+    universoBdrsRef.current = null
+    setFiltrosBdrs(nextFiltros)
+    if (tinhaDados || autoSearchBdrs) {
+      void handleBuscarBdrs(nextFiltros)
+    }
+  }, [autoSearchBdrs, ativosBdrs.length, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
+
+  const handlePeriodoFiisChange = useCallback((periodo: PeriodoIndicadores) => {
+    if (periodoDosFiltros(filtrosFiis) === periodo) return
+    const nextFiltros = { ...filtrosFiis, periodo_indicadores: periodo }
+    const tinhaDados = !!universoFiisRef.current || ativosFiis.length > 0
+    universoFiisRef.current = null
+    setFiltrosFiis(nextFiltros)
+    if (tinhaDados || autoSearchFiis) {
+      void handleBuscarFiis(nextFiltros)
+    }
+  }, [autoSearchFiis, ativosFiis.length, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
 
   return (
     <div>
@@ -1807,6 +2320,9 @@ export default function AnaliseListaTab() {
               filtros={filtrosAcoes}
               onFiltroChange={handleFiltroAcoesChange}
               onFiltroStringChange={handleFiltroAcoesStringChange}
+              onExclusaoChange={handleFiltroAcoesExclusaoChange}
+              onPeriodoChange={handlePeriodoAcoesChange}
+              setoresOpcoes={setoresAcoesOpcoes}
               onBuscar={handleBuscarAcoes}
               loading={loadingAcoes}
               onCancelar={cancelarBuscaAcoes}
@@ -1820,6 +2336,7 @@ export default function AnaliseListaTab() {
               tipo="Ações"
               isAtivoNaCarteira={isAtivoNaCarteira}
               onRetry={handleBuscarAcoes}
+              periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosAcoes))}
             />
           </motion.div>
         )}
@@ -1836,6 +2353,9 @@ export default function AnaliseListaTab() {
               filtros={filtrosBdrs}
               onFiltroChange={handleFiltroBdrsChange}
               onFiltroStringChange={handleFiltroBdrsStringChange}
+              onExclusaoChange={handleFiltroBdrsExclusaoChange}
+              onPeriodoChange={handlePeriodoBdrsChange}
+              setoresOpcoes={setoresBdrsOpcoes}
               onBuscar={handleBuscarBdrs}
               loading={loadingBdrs}
               onCancelar={cancelarBuscaBdrs}
@@ -1849,6 +2369,7 @@ export default function AnaliseListaTab() {
               tipo="BDRs"
               isAtivoNaCarteira={isAtivoNaCarteira}
               onRetry={handleBuscarBdrs}
+              periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosBdrs))}
             />
           </motion.div>
         )}
@@ -1865,6 +2386,9 @@ export default function AnaliseListaTab() {
               filtros={filtrosFiis}
               onFiltroChange={handleFiltroFiisChange}
               onFiltroStringChange={handleFiltroFiisStringChange}
+              onExclusaoChange={handleFiltroFiisExclusaoChange}
+              onPeriodoChange={handlePeriodoFiisChange}
+              segmentosOpcoes={segmentosFiisOpcoes}
               onBuscar={handleBuscarFiis}
               loading={loadingFiis}
               onCancelar={cancelarBuscaFiis}
@@ -1879,6 +2403,7 @@ export default function AnaliseListaTab() {
               isAtivoNaCarteira={isAtivoNaCarteira}
               fiiMetadataMap={fiiMetadataMap}
               onRetry={handleBuscarFiis}
+              periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosFiis))}
             />
           </motion.div>
         )}

@@ -21,6 +21,8 @@ import {
 import { formatCurrency, formatPercentage, formatNumber, formatDividendYield } from '../../utils/formatters'
 import PortfolioFIIComponent from './PortfolioFII'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useMemo, useState } from 'react'
+import type { IndicadoresPeriodo, PeriodoIndicadores } from '../../types'
 
 
 function MetricCard({ 
@@ -186,6 +188,7 @@ interface DetalhesVisaoGeralTabProps {
   evToEbit: number | null
   liquidezDiaria: number
   isInCarteira?: boolean
+  indicadoresPorPeriodo?: Partial<Record<PeriodoIndicadores, IndicadoresPeriodo>> | null
 }
 
 export default function DetalhesVisaoGeralTab({
@@ -206,8 +209,62 @@ export default function DetalhesVisaoGeralTab({
   ebitComputed,
   evToEbit,
   liquidezDiaria,
-  isInCarteira = false
+  isInCarteira = false,
+  indicadoresPorPeriodo = null,
 }: DetalhesVisaoGeralTabProps) {
+  const [periodoIndicadores, setPeriodoIndicadores] = useState<PeriodoIndicadores>('atual')
+
+  const periodosIndicadores: Array<{ value: PeriodoIndicadores; label: string }> = [
+    { value: 'atual', label: 'Agora' },
+    { value: '6m', label: '6M' },
+    { value: '1a', label: '1A' },
+    { value: '3a', label: '3A' },
+    { value: '5a', label: '5A' },
+  ]
+
+  const indicadoresSelecionados = useMemo(() => {
+    const mapa = indicadoresPorPeriodo || {}
+    const sel = mapa[periodoIndicadores]
+    if (sel) return sel
+    return mapa.atual || null
+  }, [indicadoresPorPeriodo, periodoIndicadores])
+
+  const dyExibido = useMemo(() => {
+    if (periodoIndicadores === 'atual' || !indicadoresSelecionados) {
+      return formatDividendYield(info.dividendYield)
+    }
+    return formatPercentage(indicadoresSelecionados.dy)
+  }, [periodoIndicadores, indicadoresSelecionados, info.dividendYield])
+
+  const roeExibido = useMemo(() => {
+    if (periodoIndicadores === 'atual' || !indicadoresSelecionados) {
+      return formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)
+    }
+    return formatPercentage(indicadoresSelecionados.roe)
+  }, [periodoIndicadores, indicadoresSelecionados, info.returnOnEquity])
+
+  const plExibido = useMemo(() => {
+    if (periodoIndicadores === 'atual' || !indicadoresSelecionados || indicadoresSelecionados.pl == null) {
+      return formatNumber(info.trailingPE)
+    }
+    return formatNumber(indicadoresSelecionados.pl)
+  }, [periodoIndicadores, indicadoresSelecionados, info.trailingPE])
+
+  const pvpExibido = useMemo(() => {
+    if (periodoIndicadores === 'atual' || !indicadoresSelecionados || indicadoresSelecionados.pvp == null) {
+      return formatNumber(info.priceToBook)
+    }
+    return formatNumber(indicadoresSelecionados.pvp)
+  }, [periodoIndicadores, indicadoresSelecionados, info.priceToBook])
+
+  const liquidezExibida = useMemo(() => {
+    if (periodoIndicadores === 'atual' || !indicadoresSelecionados || indicadoresSelecionados.liquidez == null) {
+      return formatCurrency(liquidezDiaria)
+    }
+    return formatCurrency(indicadoresSelecionados.liquidez)
+  }, [periodoIndicadores, indicadoresSelecionados, liquidezDiaria])
+
+  const labelPeriodoInd = periodosIndicadores.find((p) => p.value === periodoIndicadores)?.label || 'Agora'
   
   // Períodos disponíveis (estilo Google Finance)
   const periodos: Array<{ value: '1d' | '1w' | '1m' | '3m' | '6m' | '1y' | '5y' | 'max'; label: string }> = [
@@ -1113,45 +1170,70 @@ export default function DetalhesVisaoGeralTab({
       </motion.div>
 
       {/* Métricas principais */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <MetricCard
-          title="Preço Atual"
-          value={formatCurrency(info.currentPrice)}
-          icon={DollarSign}
-          trend={historico && historico.length > 1 ? {
-            value: calcularVariacao(historico[historico.length - 1].Close, historico[historico.length - 2].Close),
-            isPositive: historico[historico.length - 1].Close > historico[historico.length - 2].Close
-          } : undefined}
-          loading={loadingHistorico}
-        />
-        <MetricCard
-          title="P/L"
-          value={formatNumber(info.trailingPE)}
-          subtitle="Price/Earnings"
-          icon={Target}
-        />
-        <MetricCard
-          title="P/VP"
-          value={formatNumber(info.priceToBook)}
-          subtitle="Price/Book Value"
-          icon={FileText}
-        />
-        <MetricCard
-          title="Dividend Yield"
-          value={formatDividendYield(info.dividendYield)}
-          icon={TrendingUp}
-        />
-        <MetricCard
-          title="ROE"
-          value={formatPercentage(info.returnOnEquity ? info.returnOnEquity * 100 : null)}
-          subtitle="Return on Equity"
-          icon={Activity}
-        />
-        <MetricCard
-          title="Liquidez Diária"
-          value={formatCurrency(liquidezDiaria)}
-          icon={BarChart3}
-        />
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            Indicadores do filtro por período (DY, ROE, P/L, P/VP e liquidez)
+          </p>
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+            {periodosIndicadores.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setPeriodoIndicadores(p.value)}
+                className={`px-2 sm:px-2.5 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
+                  periodoIndicadores === p.value
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          <MetricCard
+            title="Preço Atual"
+            value={formatCurrency(info.currentPrice)}
+            icon={DollarSign}
+            trend={historico && historico.length > 1 ? {
+              value: calcularVariacao(historico[historico.length - 1].Close, historico[historico.length - 2].Close),
+              isPositive: historico[historico.length - 1].Close > historico[historico.length - 2].Close
+            } : undefined}
+            loading={loadingHistorico}
+          />
+          <MetricCard
+            title={`P/L (${labelPeriodoInd})`}
+            value={plExibido}
+            subtitle="Price/Earnings"
+            icon={Target}
+          />
+          <MetricCard
+            title={`P/VP (${labelPeriodoInd})`}
+            value={pvpExibido}
+            subtitle="Price/Book Value"
+            icon={FileText}
+          />
+          <MetricCard
+            title={`Dividend Yield (${labelPeriodoInd})`}
+            value={dyExibido}
+            subtitle={periodoIndicadores === 'atual' ? undefined : 'Média / anualizado no período'}
+            icon={TrendingUp}
+          />
+          <MetricCard
+            title={`ROE (${labelPeriodoInd})`}
+            value={roeExibido}
+            subtitle="Return on Equity"
+            icon={Activity}
+          />
+          <MetricCard
+            title={`Liquidez (${labelPeriodoInd})`}
+            value={liquidezExibida}
+            subtitle={periodoIndicadores === 'atual' ? undefined : 'Média diária no período'}
+            icon={BarChart3}
+          />
+        </div>
       </div>
 
       {/* Informações da empresa / FII */}

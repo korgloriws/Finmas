@@ -1322,6 +1322,8 @@ def api_analise_ativos():
                 filtros.get('pvp_max', float('inf')),
                 filtros.get('liq_min'),
                 filtros.get('setor'),
+                filtros.get('setores_excluir'),
+                filtros.get('periodo_indicadores', 'atual'),
                 should_cancel=should_cancel_analise,
             )
         elif tipo == 'bdrs':
@@ -1333,6 +1335,8 @@ def api_analise_ativos():
                 filtros.get('pvp_max', float('inf')),
                 filtros.get('liq_min'),
                 filtros.get('setor'),
+                filtros.get('setores_excluir'),
+                filtros.get('periodo_indicadores', 'atual'),
                 should_cancel=should_cancel_analise,
             )
         elif tipo == 'fiis':
@@ -1342,6 +1346,8 @@ def api_analise_ativos():
                 filtros.get('liq_min', 0),
                 filtros.get('tipo_fii'),
                 filtros.get('segmento_fii'),
+                filtros.get('segmentos_excluir'),
+                filtros.get('periodo_indicadores', 'atual'),
                 should_cancel=should_cancel_analise,
             )
         else:
@@ -2046,11 +2052,13 @@ def api_get_ativo_details(ticker):
         except Exception as _:
             fii_extra = None
         
+        from models import calcular_indicadores_por_periodo
         dados = {
             "info": info,
             "historico": historico_json,
             "dividends": dividends_json,
-            "fii": fii_extra
+            "fii": fii_extra,
+            "indicadores_por_periodo": calcular_indicadores_por_periodo(acao, info),
         }
         
         return jsonify(dados)
@@ -6020,7 +6028,25 @@ def api_cartoes_cadastrados():
             except Exception:
                 pass
             cartoes = listar_cartoes_cadastrados()
-            return jsonify(cartoes)
+            if isinstance(cartoes, dict) and not cartoes.get('success', True):
+                return jsonify(cartoes), 401
+            # Enriquece com total do mês (ou total geral) para cards da aba Financeiro
+            mes = request.args.get('mes')
+            ano = request.args.get('ano')
+            lista = cartoes if isinstance(cartoes, list) else []
+            enriquecidos = []
+            for c in lista:
+                item = dict(c) if isinstance(c, dict) else {}
+                try:
+                    cid = int(item.get('id'))
+                    total = calcular_total_compras_cartao(cid, mes, ano)
+                    if isinstance(total, dict):
+                        total = 0.0
+                    item['total_compras'] = float(total or 0)
+                except Exception:
+                    item['total_compras'] = 0.0
+                enriquecidos.append(item)
+            return jsonify(enriquecidos)
         
         elif request.method == "POST":
             data = request.get_json()

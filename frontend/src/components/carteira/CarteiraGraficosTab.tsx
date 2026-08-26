@@ -695,21 +695,40 @@ export default function CarteiraGraficosTab({
     const contribuicoes = carteira.map(ativo => {
       // Calcular preço médio (preferir preco_medio, senão preco_compra)
       const precoMedio = (ativo as any)?.preco_medio ?? ativo?.preco_compra ?? null
-      const precoAtual = ativo?.preco_atual ?? null
+      let precoAtual = ativo?.preco_atual ?? null
       const quantidade = ativo?.quantidade ?? 0
+      const tipoStr = String(ativo?.tipo || '').toLowerCase()
+      const isRf = tipoStr.includes('renda fixa') || tipoStr.includes('tesouro') || Boolean((ativo as any)?.indexador)
 
       if (!precoMedio || !precoAtual || quantidade <= 0) {
         return null
       }
 
+      let valorAtual = Number(ativo.valor_total || 0)
+      if (!Number.isFinite(valorAtual) || valorAtual <= 0) {
+        valorAtual = Number(precoAtual) * quantidade
+      }
+
       // Ganho/Perda absoluto em R$
-      const ganhoPerdaAbs = (precoAtual - precoMedio) * quantidade
+      let ganhoPerdaAbs = (Number(precoAtual) - Number(precoMedio)) * quantidade
+      // Preferir valor_total vs custo para RF (evita distorção se preços unitários divergirem)
+      if (isRf) {
+        ganhoPerdaAbs = valorAtual - Number(precoMedio) * quantidade
+      }
       
       // Ganho/Perda percentual
-      const ganhoPerdaPct = ((precoAtual - precoMedio) / precoMedio) * 100
+      let ganhoPerdaPct = ((Number(precoAtual) - Number(precoMedio)) / Number(precoMedio)) * 100
+      if (isRf && Number(precoMedio) * quantidade > 0) {
+        ganhoPerdaPct = (ganhoPerdaAbs / (Number(precoMedio) * quantidade)) * 100
+      }
+
+      // Guard RF: não listar como "perda" quedas >5% (quase sempre dado inconsistente)
+      if (isRf && ganhoPerdaAbs < 0 && Math.abs(ganhoPerdaAbs) > Number(precoMedio) * quantidade * 0.05) {
+        return null
+      }
 
       // Valor investido (custo)
-      const valorInvestido = precoMedio * quantidade
+      const valorInvestido = Number(precoMedio) * quantidade
 
       return {
         ticker: ativo.ticker || '',
@@ -718,7 +737,7 @@ export default function CarteiraGraficosTab({
         ganhoPerda: ganhoPerdaAbs,
         ganhoPerdaPct,
         valorInvestido,
-        valorAtual: ativo.valor_total || 0,
+        valorAtual,
         quantidade,
         precoMedio,
         precoAtual

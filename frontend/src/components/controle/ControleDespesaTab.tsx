@@ -297,8 +297,9 @@ export default function ControleDespesaTab({
   const totaisPorTipo = useMemo(() => {
     const result = { fixo: 0, variavel: 0 }
     despesasUnificadas.forEach((d) => {
-      const key = (String(d.tipo) === 'fixo') ? 'fixo' : 'variavel'
-      result[key as 'fixo' | 'variavel'] += d.valor || 0
+      const t = String(d.tipo || '').toLowerCase().trim()
+      const key = (t === 'fixo' || t === 'fixa') ? 'fixo' : 'variavel'
+      result[key as 'fixo' | 'variavel'] += Number(d.valor) || 0
     })
     return [
       { name: 'Fixas', value: result.fixo, fill: '#6366F1' },

@@ -41,6 +41,8 @@ export default function AnalisePage() {
               { title: 'Tabs', content: 'Use Lista ou Gráficos conforme a necessidade.' },
               { title: 'Tipos', content: 'Selecione Ações, BDRs ou FIIs para filtrar o universo.' },
               { title: 'Filtros', content: 'Ajuste ROE, DY, P/L, P/VP e liquidez para refinar os resultados.' },
+              { title: 'Período dos indicadores', content: 'Use Agora, 6M, 1A, 3A ou 5A para recalcular DY, ROE, P/L, P/VP e liquidez na janela escolhida. Dívida/EBITDA permanece no valor atual.' },
+              { title: 'Setor', content: 'Em Ações/BDRs use Setor; em FIIs use Segmento. Inclua um setor ou exclua os relacionados para diversificar e evitar comprar mais do mesmo.' },
               { title: 'Carteira', content: 'Itens marcados como "Na carteira" já existem na sua carteira.' },
             ]}
           />

@@ -29,6 +29,16 @@ import { ativoService, carteiraService } from '../../services/api'
 
 export type PeriodoValorizacao = '1m' | '3m' | '6m' | '1a' | 'ytd'
 
+type ValorizacaoPeriodoItem = {
+  valorizacao_reais: number | null
+  valorizacao_pct: number | null
+  preco_inicio_periodo?: number | null
+  meses_calculados?: number
+  meses_periodo?: number
+  periodo_parcial?: boolean
+  aviso?: string | null
+}
+
 type Lot = { qty: number; price: number; date: string }
 type IndicadoresFundamentais = { dy: number | null; pl: number | null; pvp: number | null; roe: number | null }
 
@@ -131,11 +141,32 @@ const calcularMetricasAtivo = (ativo: any, movimentacoesAll: any[], isRendaFixa:
       }
     }
 
-    const valorAtualTotal = Number(ativo?.valor_total || 0)
-    const valorizacaoAbsRf = valorInvestido > 0 ? (valorAtualTotal - valorInvestido) : null
-    const rendimentoPctRf = valorInvestido > 0 ? ((valorAtualTotal - valorInvestido) / valorInvestido) * 100 : null
+    // Se valor_total vier 0/null (preço ainda não atualizado), usa preco_atual * qtd —
+    // evita mostrar −investido como se o título tivesse virado zero.
+    let valorAtualTotal = Number(ativo?.valor_total)
+    if (!Number.isFinite(valorAtualTotal) || valorAtualTotal <= 0) {
+      const fallback = precoAtual * quantidadeAtivo
+      valorAtualTotal = (Number.isFinite(fallback) && fallback > 0) ? fallback : 0
+    }
 
-    const valorBrutoRf = Number.isFinite(valorAtualTotal) ? valorAtualTotal : null
+    let valorizacaoAbsRf: number | null = valorInvestido > 0 ? (valorAtualTotal - valorInvestido) : null
+    let rendimentoPctRf: number | null = valorInvestido > 0 ? ((valorAtualTotal - valorInvestido) / valorInvestido) * 100 : null
+
+    // Guard: RF accrual não deve parecer "perda absurda" por dado inconsistente.
+    // Ex.: valor_total corrompido / zero residual ainda abaixo do investido de forma irreal.
+    if (
+      valorizacaoAbsRf != null &&
+      valorInvestido > 0 &&
+      valorAtualTotal > 0 &&
+      valorizacaoAbsRf < 0 &&
+      Math.abs(valorizacaoAbsRf) > valorInvestido * 0.05
+    ) {
+      // Queda >5% em RF indexada é quase sempre bug de dado — não exibir como perda.
+      valorizacaoAbsRf = null
+      rendimentoPctRf = null
+    }
+
+    const valorBrutoRf = valorAtualTotal > 0 ? valorAtualTotal : null
     const diasRf = calcularDiasCorridos(((ativo as any)?.data_aplicacao as string | undefined) || (ativo?.data_adicao as string | undefined))
     const aliquotaIrRf = calcularAliquotaIrRegressiva(diasRf, Boolean((ativo as any)?.isento_ir))
     const ganhoBrutoRf = (valorBrutoRf != null && valorInvestido > 0) ? Math.max(valorBrutoRf - valorInvestido, 0) : null
@@ -233,7 +264,7 @@ function TabelaAtivosPorTipo({
   setRenameTipoValue: (value: string) => void
   getMetadadosAtivo: (ticker: string) => { tipo?: string; segmento?: string; p_vp?: number; valor_patrimonial?: number } | null
   getIndicadoresAtivo: (ativo: any) => IndicadoresFundamentais
-  valorizacaoPeriodoMap?: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>
+  valorizacaoPeriodoMap?: Record<number, ValorizacaoPeriodoItem>
   periodoLabel?: string
   onAporteRendaFixa?: (ativo: any) => void
   onOpenAddAtivo?: () => void
@@ -251,6 +282,19 @@ function TabelaAtivosPorTipo({
   const isFii = tipo.toLowerCase().includes('fii')
   const ipca12mAnual = normalizeIndexerAnnualRate('IPCA', (indicadores as any)?.ipca_12m ?? (indicadores as any)?.ipca)
   const ipcaMensalRaw = getIndicatorNumber((indicadores as any)?.ipca_mensal)
+
+  const avisosParciaisTipo = (() => {
+    if (!valorizacaoPeriodoMap) return [] as Array<{ ticker: string; aviso: string }>
+    const out: Array<{ ticker: string; aviso: string }> = []
+    for (const a of ativosDoTipo) {
+      const id = Number(a?.id)
+      const d = Number.isNaN(id) ? undefined : valorizacaoPeriodoMap[id]
+      if (d?.periodo_parcial && d.aviso) {
+        out.push({ ticker: String(a?.ticker || ''), aviso: d.aviso })
+      }
+    }
+    return out
+  })()
 
   const { valorizacaoReaisBarra, rendPctBarra } = (() => {
     if (valorizacaoPeriodoMap && periodoLabel) {
@@ -307,6 +351,17 @@ function TabelaAtivosPorTipo({
                   formatDividendYield(dyMedioTipo) : 
                   'N/A'
                 }</span>
+                {avisosParciaisTipo.length > 0 && (
+                  <>
+                    <span className="hidden xs:inline">•</span>
+                    <span
+                      className="text-xs text-amber-700 dark:text-amber-400"
+                      title={avisosParciaisTipo.map((x) => `${x.ticker}: ${x.aviso}`).join('\n')}
+                    >
+                      {avisosParciaisTipo.length} com período parcial
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -421,8 +476,22 @@ function TabelaAtivosPorTipo({
                     const indicadoresAtivo = getIndicadoresAtivo(ativo)
                     const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
                     const precoBase = metrica.precoBase
-                    const rendimentoPct = metrica.rendimentoPct
-                    const valorizacaoAbs = metrica.valorizacaoAbs
+                    const idAtivo = Number(ativo?.id)
+                    const periodoItem = (!Number.isNaN(idAtivo) && valorizacaoPeriodoMap)
+                      ? valorizacaoPeriodoMap[idAtivo]
+                      : undefined
+                    const usarPeriodo = Boolean(periodoItem && periodoLabel)
+                    const rendimentoPct = usarPeriodo
+                      ? (periodoItem?.valorizacao_pct ?? null)
+                      : metrica.rendimentoPct
+                    const valorizacaoAbs = usarPeriodo
+                      ? (periodoItem?.valorizacao_reais ?? null)
+                      : metrica.valorizacaoAbs
+                    const avisoPeriodo = periodoItem?.aviso || null
+                    const semHistoricoPeriodo = Boolean(
+                      periodoItem?.periodo_parcial &&
+                      (periodoItem?.meses_calculados ?? 0) <= 0
+                    )
                     const porcentagemAtivo = valorTotal > 0 ? ((ativo?.valor_total || 0) / valorTotal * 100).toFixed(1) : '0.0'
                     const valorBrutoRf = metrica.valorBrutoRf
                     const valorLiquidoRf = metrica.valorLiquidoRf
@@ -522,11 +591,51 @@ function TabelaAtivosPorTipo({
                           </td>
                         )}
                         <td className="px-3 py-2 text-sm">{precoBase != null ? formatCurrency(precoBase) : '-'}</td>
-                        <td className={`px-3 py-2 text-sm font-medium ${valorizacaoAbs != null ? (valorizacaoAbs >= 0 ? 'text-emerald-600' : 'text-red-600') : ''}`}>
-                          {valorizacaoAbs != null ? formatCurrency(valorizacaoAbs) : '-'}
+                        <td
+                          className={`px-3 py-2 text-sm font-medium ${
+                            semHistoricoPeriodo
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : valorizacaoAbs != null
+                                ? (valorizacaoAbs >= 0 ? 'text-emerald-600' : 'text-red-600')
+                                : ''
+                          }`}
+                          title={avisoPeriodo || undefined}
+                        >
+                          {semHistoricoPeriodo ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span>Sem histórico no período</span>
+                              {avisoPeriodo && (
+                                <span className="text-[10px] font-normal text-muted-foreground max-w-[180px] leading-snug">
+                                  {avisoPeriodo}
+                                </span>
+                              )}
+                            </span>
+                          ) : valorizacaoAbs != null ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span>{formatCurrency(valorizacaoAbs)}</span>
+                              {avisoPeriodo && (
+                                <span className="text-[10px] font-normal text-amber-700 dark:text-amber-400 max-w-[180px] leading-snug">
+                                  {avisoPeriodo}
+                                </span>
+                              )}
+                            </span>
+                          ) : '-'}
                         </td>
-                        <td className={`px-3 py-2 text-sm font-medium ${rendimentoPct != null ? (rendimentoPct >= 0 ? 'text-emerald-600' : 'text-red-600') : ''}`}>
-                          {rendimentoPct != null ? `${rendimentoPct.toFixed(1).replace('.', ',')}%` : '-'}
+                        <td
+                          className={`px-3 py-2 text-sm font-medium ${
+                            semHistoricoPeriodo
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : rendimentoPct != null
+                                ? (rendimentoPct >= 0 ? 'text-emerald-600' : 'text-red-600')
+                                : ''
+                          }`}
+                          title={avisoPeriodo || undefined}
+                        >
+                          {semHistoricoPeriodo
+                            ? '—'
+                            : rendimentoPct != null
+                              ? `${rendimentoPct >= 0 ? '+' : ''}${rendimentoPct.toFixed(1).replace('.', ',')}%`
+                              : '-'}
                         </td>
                         <td className="px-3 py-2 text-sm text-muted-foreground">{porcentagemAtivo}%</td>
                         {!isRendaFixa && !isCripto && !isFii && (
@@ -647,8 +756,22 @@ function TabelaAtivosPorTipo({
                   const indicadoresAtivo = getIndicadoresAtivo(ativo)
                   const metrica = calcularMetricasAtivo(ativo, movimentacoesAll, isRendaFixa)
                   const precoMedioLocal = metrica.precoMedioLocal
-                  const rendimentoPct = metrica.rendimentoPct
-                  const valorizacaoAbs = metrica.valorizacaoAbs
+                  const idAtivo = Number(ativo?.id)
+                  const periodoItem = (!Number.isNaN(idAtivo) && valorizacaoPeriodoMap)
+                    ? valorizacaoPeriodoMap[idAtivo]
+                    : undefined
+                  const usarPeriodo = Boolean(periodoItem && periodoLabel)
+                  const rendimentoPct = usarPeriodo
+                    ? (periodoItem?.valorizacao_pct ?? null)
+                    : metrica.rendimentoPct
+                  const valorizacaoAbs = usarPeriodo
+                    ? (periodoItem?.valorizacao_reais ?? null)
+                    : metrica.valorizacaoAbs
+                  const avisoPeriodo = periodoItem?.aviso || null
+                  const semHistoricoPeriodo = Boolean(
+                    periodoItem?.periodo_parcial &&
+                    (periodoItem?.meses_calculados ?? 0) <= 0
+                  )
                   const porcentagemAtivo = valorTotal > 0 ? ((ativo?.valor_total || 0) / valorTotal * 100).toFixed(1) : '0.0'
                   const valorBrutoRf = metrica.valorBrutoRf
                   const valorLiquidoRf = metrica.valorLiquidoRf
@@ -857,7 +980,7 @@ function TabelaAtivosPorTipo({
                       )}
 
                       {/* Informações Adicionais (se houver) */}
-                      {(ativo?.indexador || precoMedioLocal != null || valorizacaoAbs != null || rendimentoPct != null) && (
+                      {(ativo?.indexador || precoMedioLocal != null || valorizacaoAbs != null || rendimentoPct != null || avisoPeriodo) && (
                         <div className="pt-2 sm:pt-3 border-t border-border">
                           <div className="grid grid-cols-1 gap-1.5 sm:gap-2 text-xs">
                             {ativo?.indexador && (
@@ -872,21 +995,36 @@ function TabelaAtivosPorTipo({
                                 <span className="text-xs">{formatCurrency(precoMedioLocal as number)}</span>
                               </div>
                             )}
-                            {valorizacaoAbs != null && (
-                              <div className="flex justify-between">
+                            {(valorizacaoAbs != null || semHistoricoPeriodo) && (
+                              <div className="flex justify-between gap-2">
                                 <span className="text-muted-foreground">Valorização</span>
-                                <span className={`text-xs font-medium ${valorizacaoAbs >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                  {formatCurrency(valorizacaoAbs)}
-                                </span>
+                                {semHistoricoPeriodo ? (
+                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400 text-right">
+                                    Sem histórico no período
+                                  </span>
+                                ) : (
+                                  <span className={`text-xs font-medium ${valorizacaoAbs != null && valorizacaoAbs >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {valorizacaoAbs != null ? formatCurrency(valorizacaoAbs) : '-'}
+                                  </span>
+                                )}
                               </div>
                             )}
-                            {rendimentoPct != null && (
+                            {(rendimentoPct != null || semHistoricoPeriodo) && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Rendimento</span>
-                                <span className={`text-xs font-medium ${rendimentoPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                  {rendimentoPct.toFixed(1).replace('.', ',')}%
-                                </span>
+                                {semHistoricoPeriodo ? (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                ) : (
+                                  <span className={`text-xs font-medium ${rendimentoPct != null && rendimentoPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {rendimentoPct != null ? `${rendimentoPct.toFixed(1).replace('.', ',')}%` : '-'}
+                                  </span>
+                                )}
                               </div>
+                            )}
+                            {avisoPeriodo && (
+                              <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-snug pt-1">
+                                {avisoPeriodo}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -992,19 +1130,36 @@ export default function CarteiraAtivosTab({
 
   const valorizacaoPeriodoMap = useMemo(() => {
     if (!valorizacaoPeriodoList || !Array.isArray(valorizacaoPeriodoList)) return undefined
-    const map: Record<number, { valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }> = {}
-    for (const item of valorizacaoPeriodoList as Array<{ id: number; valorizacao_reais: number | null; valorizacao_pct: number | null; preco_inicio_periodo?: number | null }>) {
+    const map: Record<number, ValorizacaoPeriodoItem> = {}
+    for (const item of valorizacaoPeriodoList as Array<ValorizacaoPeriodoItem & { id: number }>) {
       const id = Number(item.id)
       if (!Number.isNaN(id)) {
         map[id] = {
           valorizacao_reais: item.valorizacao_reais,
           valorizacao_pct: item.valorizacao_pct,
           preco_inicio_periodo: item.preco_inicio_periodo ?? null,
+          meses_calculados: item.meses_calculados,
+          meses_periodo: item.meses_periodo,
+          periodo_parcial: item.periodo_parcial,
+          aviso: item.aviso ?? null,
         }
       }
     }
     return map
   }, [valorizacaoPeriodoList])
+
+  const avisosPeriodoParcial = useMemo(() => {
+    if (!valorizacaoPeriodoMap) return [] as Array<{ ticker: string; aviso: string }>
+    const out: Array<{ ticker: string; aviso: string }> = []
+    for (const a of carteira || []) {
+      const id = Number(a?.id)
+      const d = Number.isNaN(id) ? undefined : valorizacaoPeriodoMap[id]
+      if (d?.periodo_parcial && d.aviso) {
+        out.push({ ticker: String(a?.ticker || ''), aviso: d.aviso })
+      }
+    }
+    return out
+  }, [valorizacaoPeriodoMap, carteira])
 
   const periodoLabel = periodoValorizacao === '1m' ? '1 mês'
     : periodoValorizacao === '3m' ? '3 meses'
@@ -1230,7 +1385,7 @@ export default function CarteiraAtivosTab({
       {carteira && carteira.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 py-2 px-1">
           <span className="text-sm text-muted-foreground">
-            Período da valorização (R$ e %) nas barras abaixo:
+            Período da valorização (R$ e %) nas barras — acumulado mês a mês desde a compra:
           </span>
           <div className="flex flex-wrap gap-1">
             {(['1m', '3m', '6m', '1a', 'ytd'] as const).map((p) => (
@@ -1250,6 +1405,28 @@ export default function CarteiraAtivosTab({
           {carregandoValorizacaoPeriodo && <span className="text-sm text-muted-foreground">Carregando…</span>}
           {erroValorizacaoPeriodo && (
             <span className="text-sm text-destructive" title="Recarregue a página ou tente outro período">Erro ao carregar</span>
+          )}
+          {!carregandoValorizacaoPeriodo && avisosPeriodoParcial.length > 0 && (
+            <div className="w-full basis-full mt-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="font-medium">
+                {avisosPeriodoParcial.length} ativo{avisosPeriodoParcial.length !== 1 ? 's' : ''} ainda não completaram o filtro de {periodoLabel}.
+              </p>
+              <p className="mt-1 text-amber-800/90 dark:text-amber-200/80">
+                A valorização usa só o tempo em que o ativo esteve na carteira (não inventa performance anterior à compra).
+              </p>
+              <ul className="mt-1.5 space-y-0.5 list-disc list-inside">
+                {avisosPeriodoParcial.slice(0, 6).map((item) => (
+                  <li key={item.ticker}>
+                    <span className="font-medium">{item.ticker}</span>
+                    {' — '}
+                    {item.aviso}
+                  </li>
+                ))}
+                {avisosPeriodoParcial.length > 6 && (
+                  <li>+{avisosPeriodoParcial.length - 6} outros…</li>
+                )}
+              </ul>
+            </div>
           )}
         </div>
       )}
