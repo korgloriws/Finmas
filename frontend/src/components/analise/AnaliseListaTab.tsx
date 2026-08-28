@@ -166,22 +166,44 @@ function filtrarAcoesLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise):
   const setor = (filtros.setor || '').trim()
   const excluir = filtros.setores_excluir || []
 
-  return lista
-    .filter((ativo) => (
-      toFinite(ativo.roe, 0) >= roeMin &&
-      toFinite(ativo.dividend_yield, 0) > dyMin &&
-      toFinite(ativo.pl, 0) >= plMin &&
-      toFinite(ativo.pl, 0) <= plMax &&
-      toFinite(ativo.pvp, 0) <= pvpMax &&
-      toFinite(ativo.liquidez_diaria, 0) > liqMin &&
-      setorBate(ativo.setor, setor) &&
-      !setorExcluido(ativo.setor, excluir)
-    ))
-    .sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
+  return lista.filter((ativo) => (
+    toFinite(ativo.roe, 0) >= roeMin &&
+    toFinite(ativo.dividend_yield, 0) > dyMin &&
+    toFinite(ativo.pl, 0) >= plMin &&
+    toFinite(ativo.pl, 0) <= plMax &&
+    toFinite(ativo.pvp, 0) <= pvpMax &&
+    toFinite(ativo.liquidez_diaria, 0) > liqMin &&
+    setorBate(ativo.setor, setor) &&
+    !setorExcluido(ativo.setor, excluir)
+  ))
 }
 
 function filtrarBdrsLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
   return filtrarAcoesLocalmente(lista, filtros)
+}
+
+type OrdenacaoAnalise = 'dy' | 'earnings_yield'
+
+/** EY (%) = 1/P/L × 100. Só válido com P/L > 0. */
+function earningsYieldPct(pl: unknown): number | null {
+  const n = Number(pl)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return (1 / n) * 100
+}
+
+function ordenarAtivosFiltrados(lista: AtivoAnalise[], ordenacao: OrdenacaoAnalise): AtivoAnalise[] {
+  const copia = [...lista]
+  if (ordenacao === 'earnings_yield') {
+    return copia.sort((a, b) => {
+      const eyA = earningsYieldPct(a.pl)
+      const eyB = earningsYieldPct(b.pl)
+      if (eyA == null && eyB == null) return 0
+      if (eyA == null) return 1
+      if (eyB == null) return -1
+      return eyB - eyA
+    })
+  }
+  return copia.sort((a, b) => toFinite(b.dividend_yield, 0) - toFinite(a.dividend_yield, 0))
 }
 
 function filtrarFiisLocalmente(lista: AtivoAnalise[], filtros: FiltrosAnalise): AtivoAnalise[] {
@@ -930,6 +952,8 @@ function TabelaAtivos({
   fiiMetadataMap,
   onRetry,
   periodoLabel = 'Agora',
+  ordenacao = 'dy',
+  onOrdenacaoChange,
 }: {
   ativos: AtivoAnalise[]
   loading: boolean
@@ -939,7 +963,16 @@ function TabelaAtivos({
   fiiMetadataMap?: Record<string, { tipo?: string; segmento?: string }>
   onRetry?: () => void
   periodoLabel?: string
+  ordenacao?: OrdenacaoAnalise
+  onOrdenacaoChange?: (ordenacao: OrdenacaoAnalise) => void
 }) {
+  const permiteOrdenacaoEy = tipo === 'Ações' || tipo === 'BDRs'
+
+  const ativosOrdenados = useMemo(() => {
+    if (!permiteOrdenacaoEy) return ativos
+    return ordenarAtivosFiltrados(ativos, ordenacao)
+  }, [ativos, ordenacao, permiteOrdenacaoEy])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -1000,15 +1033,60 @@ function TabelaAtivos({
   }
 
   const isFiiTable = tipo === 'FIIs'
-  const ativosVisiveis = isFiiTable ? ativos.slice(0, MAX_FIIS_VISIVEIS) : ativos
-  const fiisOcultos = isFiiTable ? Math.max(0, ativos.length - MAX_FIIS_VISIVEIS) : 0
+  const ativosVisiveis = isFiiTable ? ativosOrdenados.slice(0, MAX_FIIS_VISIVEIS) : ativosOrdenados
+  const fiisOcultos = isFiiTable ? Math.max(0, ativosOrdenados.length - MAX_FIIS_VISIVEIS) : 0
 
   return (
+    <div className="space-y-3">
+      {permiteOrdenacaoEy && onOrdenacaoChange && (
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Ordenar resultados filtrados</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Só quem já passou no seu critério (ROE, DY, P/L, P/VP, liquidez…). Isto não altera o filtro.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOrdenacaoChange('dy')}
+                className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                  ordenacao === 'dy'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Dividend Yield
+              </button>
+              <button
+                type="button"
+                onClick={() => onOrdenacaoChange('earnings_yield')}
+                className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                  ordenacao === 'earnings_yield'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Earnings Yield (mais baratas)
+              </button>
+            </div>
+          </div>
+          {ordenacao === 'earnings_yield' && (
+            <div className="rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-xs sm:text-sm text-foreground">
+              <strong>Ranking de baratas entre as filtradas:</strong> Earnings Yield = 1 ÷ P/L (em %).
+              Quanto maior, mais barata — apenas entre ativos que já entraram no seu filtro.
+            </div>
+          )}
+        </div>
+      )}
+
     <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
       {/* Mobile: cards responsivos (evita corte visual da tabela em telas pequenas) */}
       <div className="md:hidden divide-y divide-border">
         {ativosVisiveis.map((ativo) => {
           const fiiMeta = fiiMetadataMap?.[ativo.ticker]
+          const ey = earningsYieldPct(ativo.pl)
           return (
             <div key={ativo.ticker} className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
@@ -1069,6 +1147,12 @@ function TabelaAtivos({
                   <p className="text-muted-foreground">P/L ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pl)) ? Number(ativo.pl).toFixed(2) : '-'}</p>
                 </div>
+                {!isFiiTable && (
+                  <div className={`rounded-lg p-2 ${ordenacao === 'earnings_yield' ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-muted/40'}`}>
+                    <p className="text-muted-foreground">Earnings Yield</p>
+                    <p className="font-semibold text-foreground">{ey != null ? `${ey.toFixed(2)}%` : '-'}</p>
+                  </div>
+                )}
                 <div className="bg-muted/40 rounded-lg p-2">
                   <p className="text-muted-foreground">P/VP ({periodoLabel})</p>
                   <p className="font-semibold text-foreground">{Number.isFinite(Number(ativo.pvp)) ? Number(ativo.pvp).toFixed(2) : '-'}</p>
@@ -1119,6 +1203,14 @@ function TabelaAtivos({
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Preço</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">DY ({periodoLabel})</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/L ({periodoLabel})</th>
+              {!isFiiTable && (
+                <th
+                  className={`px-6 py-4 text-left text-sm font-semibold ${ordenacao === 'earnings_yield' ? 'text-primary' : 'text-foreground'}`}
+                  title="Earnings Yield = 1 ÷ P/L. Ranking só entre quem já passou no filtro."
+                >
+                  EY ({periodoLabel})
+                </th>
+              )}
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">P/VP ({periodoLabel})</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">ROE ({periodoLabel})</th>
               {!isFiiTable && (
@@ -1134,6 +1226,7 @@ function TabelaAtivos({
           <tbody className="divide-y divide-border">
             {ativosVisiveis.map((ativo) => {
               const fiiMeta = fiiMetadataMap?.[ativo.ticker]
+              const ey = earningsYieldPct(ativo.pl)
               
               return (
               <tr key={ativo.ticker} className="hover:bg-muted/30 transition-colors duration-200">
@@ -1207,6 +1300,21 @@ function TabelaAtivos({
                     {Number.isFinite(Number(ativo.pl)) ? Number(ativo.pl).toFixed(2) : '-'}
                   </span>
                 </td>
+                {!isFiiTable && (
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                      ordenacao === 'earnings_yield'
+                        ? 'bg-primary/15 text-primary'
+                        : ey != null && ey >= 10
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                          : ey != null && ey >= 5
+                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                            : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {ey != null ? `${ey.toFixed(2)}%` : '-'}
+                    </span>
+                  </td>
+                )}
                 <td className="px-6 py-4">
                   <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
                     ativo.pvp <= 1.5 ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' : 
@@ -1275,6 +1383,7 @@ function TabelaAtivos({
           </p>
         </div>
       )}
+    </div>
     </div>
   )
 }
@@ -1747,6 +1856,8 @@ export default function AnaliseListaTab() {
   const [autoSearchAcoes, setAutoSearchAcoes] = useState(false)
   const [autoSearchBdrs, setAutoSearchBdrs] = useState(false)
   const [autoSearchFiis, setAutoSearchFiis] = useState(false)
+  const [ordenacaoAcoes, setOrdenacaoAcoes] = useState<OrdenacaoAnalise>('dy')
+  const [ordenacaoBdrs, setOrdenacaoBdrs] = useState<OrdenacaoAnalise>('dy')
 
 
   const [fiiMetadataMap, setFiiMetadataMap] = useState<Record<string, { tipo?: string; segmento?: string }>>({})
@@ -2337,6 +2448,8 @@ export default function AnaliseListaTab() {
               isAtivoNaCarteira={isAtivoNaCarteira}
               onRetry={handleBuscarAcoes}
               periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosAcoes))}
+              ordenacao={ordenacaoAcoes}
+              onOrdenacaoChange={setOrdenacaoAcoes}
             />
           </motion.div>
         )}
@@ -2370,6 +2483,8 @@ export default function AnaliseListaTab() {
               isAtivoNaCarteira={isAtivoNaCarteira}
               onRetry={handleBuscarBdrs}
               periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosBdrs))}
+              ordenacao={ordenacaoBdrs}
+              onOrdenacaoChange={setOrdenacaoBdrs}
             />
           </motion.div>
         )}

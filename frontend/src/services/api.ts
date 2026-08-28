@@ -1734,7 +1734,7 @@ export const homeService = {
   },
 }
 
-/** Histórico comparado: endpoint dedicado da Home + fallback /carteira/historico (deploy antigo ou resposta vazia). */
+
 export async function fetchHistoricoCarteiraComFallback(
   periodo: string,
   options?: { signal?: AbortSignal; carteiraLength?: number }
@@ -2082,6 +2082,44 @@ export const noticiasService = {
     params.append('url', url)
     
     const response = await api.get(`/noticias/detalhes?${params.toString()}`)
+    return response.data
+  },
+}
+
+export type AssistenteMensagem = { role: 'user' | 'assistant'; content: string }
+
+export type AssistenteChatPayload = {
+  mensagem: string
+  historico?: AssistenteMensagem[]
+  contexto?: Record<string, unknown>
+}
+
+export type AssistenteChatResponse = {
+  ok: boolean
+  reply?: string
+  model?: string
+  tools_used?: string[]
+  error?: string
+  code?: string
+  note?: string
+}
+
+export const assistenteService = {
+  status: async (): Promise<{ configured: boolean; models?: string[]; tools?: string[] }> => {
+    const response = await api.get('/assistente/status', { timeout: 15000 })
+    return response.data
+  },
+
+  chat: async (
+    payload: AssistenteChatPayload,
+    options?: { signal?: AbortSignal }
+  ): Promise<AssistenteChatResponse> => {
+    const response = await api.post('/assistente/chat', payload, {
+      timeout: 60000,
+      signal: options?.signal,
+      headers: { 'X-Priority': 'high' },
+      validateStatus: (s) => s < 500,
+    })
     return response.data
   },
 }

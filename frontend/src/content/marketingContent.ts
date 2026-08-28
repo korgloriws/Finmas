@@ -188,9 +188,9 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: Wallet,
     title: 'Carteira de investimentos',
     description:
-      'Centralize ações, FIIs, BDRs, ETFs, criptomoedas e renda fixa. Importe posições da B3, acompanhe valorização, proventos, rebalanceamento e gráficos com comparativo patrimonial vs benchmarks no mesmo capital inicial.',
+      'Centralize ações, FIIs, BDRs, ETFs, criptomoedas e renda fixa. Acompanhe valorização, proventos, rebalanceamento e gráficos com comparativo patrimonial vs benchmarks no mesmo capital inicial.',
     details: [
-      'Importação de relatório B3 e registro manual de ativos',
+      'Registro manual de ativos e posições',
       'Renda fixa com indexadores CDI, IPCA, SELIC e prefixado',
       'Comparativo vs índices em R$ ou % (sem distorcer por aportes)',
       'Evolução do patrimônio real com snapshots históricos',
@@ -395,7 +395,7 @@ export const CONHECER_TELAS: Array<{
     icon: Wallet,
     requiresLogin: true,
     description:
-      'Central da carteira: importação B3, valorização, proventos, gráficos com comparativo vs índices, rebalanceamento, movimentações e relatórios. Premium: impostos, insights, projeção e simulador.',
+      'Central da carteira: valorização, proventos, gráficos com comparativo vs índices, rebalanceamento, movimentações e relatórios. Premium: impostos, insights, projeção e simulador.',
   },
   {
     path: '/controle',

@@ -51,7 +51,7 @@ export default function AnaliseGraficosTab({
     )
   }
 
-  const topDy = todosAtivos
+  const topDy = [...todosAtivos]
     .sort((a, b) => (b.dividend_yield || 0) - (a.dividend_yield || 0))
     .slice(0, 5)
     .map(ativo => ({
@@ -59,7 +59,7 @@ export default function AnaliseGraficosTab({
       valor: ativo.dividend_yield || 0
     }))
 
-  const topRoe = todosAtivos
+  const topRoe = [...todosAtivos]
     .sort((a, b) => (b.roe || 0) - (a.roe || 0))
     .slice(0, 5)
     .map(ativo => ({
@@ -67,14 +67,15 @@ export default function AnaliseGraficosTab({
       valor: ativo.roe || 0
     }))
 
-  const menorPl = todosAtivos
-    .filter(ativo => ativo.pl && ativo.pl > 0)
-    .sort((a, b) => (a.pl || 0) - (b.pl || 0))
+  const topEarningsYield = [...todosAtivos]
+    .map(ativo => {
+      const pl = Number(ativo.pl)
+      const ey = Number.isFinite(pl) && pl > 0 ? (1 / pl) * 100 : null
+      return { ticker: ativo.ticker, valor: ey }
+    })
+    .filter((x): x is { ticker: string; valor: number } => x.valor != null)
+    .sort((a, b) => b.valor - a.valor)
     .slice(0, 5)
-    .map(ativo => ({
-      ticker: ativo.ticker,
-      valor: ativo.pl || 0
-    }))
 
   return (
     <motion.div 
@@ -126,7 +127,7 @@ export default function AnaliseGraficosTab({
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
           <div className="mb-4">
             <h3 className="text-lg font-bold text-foreground">Top 5 Dividend Yield</h3>
-            <p className="text-muted-foreground text-sm">Maiores rendimentos de dividendos</p>
+            <p className="text-muted-foreground text-sm">Maiores DY entre os ativos já filtrados</p>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <RechartsBarChart data={topDy}>
@@ -162,7 +163,7 @@ export default function AnaliseGraficosTab({
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
           <div className="mb-4">
             <h3 className="text-lg font-bold text-foreground">Top 5 ROE</h3>
-            <p className="text-muted-foreground text-sm">Maiores retornos sobre patrimônio</p>
+            <p className="text-muted-foreground text-sm">Maiores ROE entre os ativos já filtrados</p>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <RechartsBarChart data={topRoe}>
@@ -194,14 +195,16 @@ export default function AnaliseGraficosTab({
           </ResponsiveContainer>
         </div>
 
-        {/* Menor P/L */}
+        {/* Top 5 Earnings Yield — mais baratas entre as filtradas */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-foreground">Menor P/L</h3>
-            <p className="text-muted-foreground text-sm">Menores preços sobre lucro</p>
+            <h3 className="text-lg font-bold text-foreground">Top 5 Earnings Yield</h3>
+            <p className="text-muted-foreground text-sm">
+              Mais baratas entre quem já passou no filtro (EY = 1 ÷ P/L)
+            </p>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <RechartsBarChart data={menorPl}>
+            <RechartsBarChart data={topEarningsYield}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="ticker" 
@@ -223,7 +226,7 @@ export default function AnaliseGraficosTab({
                   fontSize: '13px',
                   boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
                 }}
-                formatter={(value: any) => [value.toFixed(2), 'P/L']} 
+                formatter={(value: any) => [`${Number(value).toFixed(2)}%`, 'Earnings Yield']} 
               />
               <Bar dataKey="valor" fill="hsl(var(--accent))" />
             </RechartsBarChart>

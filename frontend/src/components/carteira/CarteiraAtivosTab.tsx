@@ -6,7 +6,6 @@ import {
   Settings, 
   Edit, 
   Trash2,
-  FileSpreadsheet,
   Plus,
   DollarSign
 } from 'lucide-react'
@@ -21,8 +20,6 @@ import {
 } from '../../utils/fixedIncomeCalculator'
 import TickerWithLogo from '../TickerWithLogo'
 import VencimentoStatus from '../VencimentoStatus'
-import B3ImportModal from './B3ImportModal'
-import { B3Ativo } from '../../utils/excelParser'
 import { ativoService, carteiraService } from '../../services/api'
 
 
@@ -1047,8 +1044,6 @@ function TabelaAtivosPorTipo({
 
 interface CarteiraAtivosTabProps {
   user?: string | null
-  adicionarMutation: any
-  
 
   carteira: any[]
   loadingCarteira: boolean
@@ -1083,7 +1078,6 @@ interface CarteiraAtivosTabProps {
 
 export default function CarteiraAtivosTab({
   user,
-  adicionarMutation,
   carteira,
   loadingCarteira,
   ativosPorTipo,
@@ -1107,8 +1101,7 @@ export default function CarteiraAtivosTab({
   onAporteRendaFixa,
   onOpenAddAtivo
 }: CarteiraAtivosTabProps) {
-  const [showB3Import, setShowB3Import] = useState(false)
-  const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('1m')
+  const [periodoValorizacao, setPeriodoValorizacao] = useState<PeriodoValorizacao>('ytd')
 
   const periodoParaFetch = periodoValorizacao
   const carteiraFingerprint = useMemo(() => {
@@ -1271,51 +1264,6 @@ export default function CarteiraAtivosTab({
     }
   }
 
-  const handleB3Import = async (ativos: B3Ativo[]) => {
-    try {
-     
-      const compras = ativos.map(ativo => {
-
-        const precoUnitario = ativo.tipo.includes('Renda Fixa') || ativo.tipo === 'Tesouro Direto' 
-          ? ativo.valorTotal  
-          : ativo.precoMedio 
-
-        return {
-          ticker: ativo.ticker,
-          quantidade: ativo.quantidade,
-          preco: precoUnitario, 
-          tipo: ativo.tipo,
-          data_aplicacao: ativo.dataAplicacao || new Date().toISOString().split('T')[0],
-          vencimento: ativo.vencimento || '',
-          indexador: ativo.indexador || '',
-          indexador_pct: 0,
-          isento_ir: false
-        }
-      })
-
-
-      for (const compra of compras) {
-        console.log('Adicionando compra:', compra)
-        await adicionarMutation.mutateAsync({
-          ticker: compra.ticker,
-          quantidade: compra.quantidade,
-          preco: compra.preco,
-          tipo: compra.tipo,
-          data_aplicacao: compra.data_aplicacao,
-          vencimento: compra.vencimento,
-          indexador: compra.indexador,
-          indexador_pct: compra.indexador_pct,
-          isento_ir: compra.isento_ir
-        })
-      }
-
-      alert(`${ativos.length} ativos importados com sucesso! Os valores históricos da B3 foram preservados.`)
-    } catch (error) {
-      console.error('Erro ao importar ativos:', error)
-      alert('Erro ao importar ativos. Tente novamente.')
-    }
-  }
-
   return (
     <div className="space-y-6">
       {/* Formulário original removido: a adição de ativos acontece via modal */}
@@ -1344,13 +1292,6 @@ export default function CarteiraAtivosTab({
               <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               Resumo da Carteira
             </h3>
-            <button
-              onClick={() => setShowB3Import(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-xs"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Importar B3 .xlsx
-            </button>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             <div className="bg-card border border-border rounded-lg p-2 sm:p-3 md:p-4">
@@ -1509,7 +1450,7 @@ export default function CarteiraAtivosTab({
           ))}
         </div>
       ) : (
-        /* Carteira Vazia - Mostrar opções de importação */
+        /* Carteira Vazia */
         <div className="text-center py-12">
           <div className="mb-8">
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1519,40 +1460,21 @@ export default function CarteiraAtivosTab({
               Sua carteira está vazia
             </h3>
             <p className="text-muted-foreground mb-6">
-              Comece adicionando ativos manualmente ou importe um relatório da B3
+              Comece adicionando seus primeiros ativos
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => setShowB3Import(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-              Importar da B3
-            </button>
-            
-            <button
               onClick={() => onOpenAddAtivo?.()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors text-sm"
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               Adicionar Ativo
             </button>
           </div>
-
-          <div className="mt-8 text-sm text-muted-foreground">
-            <p><strong>Dica:</strong> Use a importação da B3 para adicionar todos os seus ativos de uma vez!</p>
-          </div>
         </div>
       )}
-
-      {/* Modal de Importação B3 */}
-      <B3ImportModal
-        isOpen={showB3Import}
-        onClose={() => setShowB3Import(false)}
-        onImport={handleB3Import}
-      />
     </div>
   )
 }

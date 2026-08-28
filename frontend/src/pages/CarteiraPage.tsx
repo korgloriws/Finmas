@@ -955,7 +955,6 @@ export default function CarteiraPage() {
         {activeTab === 'ativos' && (
           <CarteiraAtivosTab
             user={user}
-            adicionarMutation={adicionarMutation}
             carteira={carteira || []}
             loadingCarteira={loadingCarteira}
             ativosPorTipo={ativosPorTipo}
