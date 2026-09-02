@@ -27,6 +27,27 @@ function erroFoiCancelamento(err: unknown): boolean {
   return false
 }
 
+function isFiltrosAnalise(value: unknown): value is FiltrosAnalise {
+  if (!value || typeof value !== 'object') return false
+  // Clique em botão passa MouseEvent — não é filtro
+  if ('nativeEvent' in value) return false
+  if ('preventDefault' in value && 'target' in value) return false
+  return true
+}
+
+export type AnaliseProgresso = {
+  status: string
+  tipo?: string | null
+  periodo?: string | null
+  done: number
+  total: number
+  faltam: number
+  pct: number
+  current?: string | null
+  message?: string
+  recent?: string[]
+}
+
 const PERIODOS_INDICADORES: Array<{ value: PeriodoIndicadores; label: string; hint: string }> = [
   { value: 'atual', label: 'Agora', hint: 'DY e ROE do snapshot atual' },
   { value: '6m', label: '6M', hint: 'DY/ROE anualizados dos últimos 6 meses' },
@@ -134,6 +155,24 @@ const toFinite = (value: unknown, fallback: number) => {
 }
 
 const normTexto = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
+type UniversoPorPeriodo = Partial<Record<PeriodoIndicadores, AtivoAnalise[]>>
+
+function obterUniversoPeriodo(
+  cache: UniversoPorPeriodo,
+  periodo: PeriodoIndicadores,
+): AtivoAnalise[] | null {
+  const lista = cache[periodo]
+  return lista && lista.length > 0 ? lista : null
+}
+
+function salvarUniversoPeriodo(
+  cache: UniversoPorPeriodo,
+  periodo: PeriodoIndicadores,
+  lista: AtivoAnalise[],
+): UniversoPorPeriodo {
+  return { ...cache, [periodo]: lista }
+}
 
 function setorBate(ativoSetor: unknown, filtro: string | undefined): boolean {
   const f = (filtro || '').trim()
@@ -439,7 +478,6 @@ function FiltrosAcoes({
         <PeriodoIndicadoresPills
           value={periodoDosFiltros(filtros)}
           onChange={onPeriodoChange}
-          disabled={loading}
         />
       </div>
       
@@ -566,7 +604,8 @@ function FiltrosAcoes({
           </button>
         )}
         <button
-          onClick={onBuscar}
+          type="button"
+          onClick={() => onBuscar()}
           disabled={loading}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-all duration-200 shadow-sm hover:shadow-md text-sm"
         >
@@ -641,7 +680,6 @@ function FiltrosBdrs({
         <PeriodoIndicadoresPills
           value={periodoDosFiltros(filtros)}
           onChange={onPeriodoChange}
-          disabled={loading}
         />
       </div>
       
@@ -754,7 +792,7 @@ function FiltrosBdrs({
           </button>
         )}
         <button
-          onClick={onBuscar}
+          onClick={() => onBuscar()}
           disabled={loading}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-all duration-200 shadow-sm hover:shadow-md text-sm"
         >
@@ -829,7 +867,6 @@ function FiltrosFiis({
         <PeriodoIndicadoresPills
           value={periodoDosFiltros(filtros)}
           onChange={onPeriodoChange}
-          disabled={loading}
         />
       </div>
       
@@ -919,7 +956,7 @@ function FiltrosFiis({
           </button>
         )}
         <button
-          onClick={onBuscar}
+          onClick={() => onBuscar()}
           disabled={loading}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-all duration-200 shadow-sm hover:shadow-md text-sm"
         >
@@ -954,6 +991,7 @@ function TabelaAtivos({
   periodoLabel = 'Agora',
   ordenacao = 'dy',
   onOrdenacaoChange,
+  progresso,
 }: {
   ativos: AtivoAnalise[]
   loading: boolean
@@ -965,6 +1003,7 @@ function TabelaAtivos({
   periodoLabel?: string
   ordenacao?: OrdenacaoAnalise
   onOrdenacaoChange?: (ordenacao: OrdenacaoAnalise) => void
+  progresso?: AnaliseProgresso | null
 }) {
   const permiteOrdenacaoEy = tipo === 'Ações' || tipo === 'BDRs'
 
@@ -974,14 +1013,56 @@ function TabelaAtivos({
   }, [ativos, ordenacao, permiteOrdenacaoEy])
 
   if (loading) {
+    const total = progresso?.total || 0
+    const done = progresso?.done || 0
+    const faltam = progresso?.faltam ?? Math.max(total - done, 0)
+    const pct = total > 0 ? Math.min(100, Math.max(0, progresso?.pct ?? (done / total) * 100)) : 0
+    const recent = [...(progresso?.recent || [])].reverse()
+
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-center space-y-4 max-w-md mx-auto">
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-5 max-w-lg mx-auto w-full px-2">
           <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
           <div className="space-y-2">
-            <p className="text-lg font-semibold text-foreground">Carregando {tipo}...</p>
-            <p className="text-sm text-muted-foreground">Analisando dados do mercado. Janelas longas de DY/ROE podem demorar mais.</p>
+            <p className="text-lg font-semibold text-foreground">Analisando {tipo} ({periodoLabel})</p>
+            <p className="text-sm text-muted-foreground">
+              {progresso?.current
+                ? `Agora: ${progresso.current}`
+                : progresso?.message || 'Preparando busca no mercado...'}
+            </p>
           </div>
+
+          <div className="space-y-2 text-left">
+            <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
+              <span>
+                {total > 0 ? `${done} de ${total} processados` : 'Iniciando...'}
+              </span>
+              <span>{total > 0 ? `${faltam} restantes · ${pct.toFixed(0)}%` : '—'}</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${total > 0 ? pct : 8}%` }}
+              />
+            </div>
+          </div>
+
+          {recent.length > 0 && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3 text-left max-h-40 overflow-y-auto">
+              <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Log recente</p>
+              <ul className="space-y-1 font-mono text-xs text-foreground">
+                {recent.map((ticker, idx) => (
+                  <li key={`${ticker}-${idx}`} className="truncate">
+                    ✓ {ticker}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Você pode trocar o período para cancelar e reiniciar, ou usar Cancelar busca.
+          </p>
         </div>
       </div>
     )
@@ -1847,6 +1928,9 @@ export default function AnaliseListaTab() {
   const [loadingAcoes, setLoadingAcoes] = useState(false)
   const [loadingBdrs, setLoadingBdrs] = useState(false)
   const [loadingFiis, setLoadingFiis] = useState(false)
+  const [progressoAcoes, setProgressoAcoes] = useState<AnaliseProgresso | null>(null)
+  const [progressoBdrs, setProgressoBdrs] = useState<AnaliseProgresso | null>(null)
+  const [progressoFiis, setProgressoFiis] = useState<AnaliseProgresso | null>(null)
 
   const [errorAcoes, setErrorAcoes] = useState<string | null>(null)
   const [errorBdrs, setErrorBdrs] = useState<string | null>(null)
@@ -1865,31 +1949,38 @@ export default function AnaliseListaTab() {
   const abortAcoesRef = useRef<AbortController | null>(null)
   const abortBdrsRef = useRef<AbortController | null>(null)
   const abortFiisRef = useRef<AbortController | null>(null)
-  const universoAcoesRef = useRef<AtivoAnalise[] | null>(null)
-  const universoBdrsRef = useRef<AtivoAnalise[] | null>(null)
-  const universoFiisRef = useRef<AtivoAnalise[] | null>(null)
-  const periodoUniversoAcoesRef = useRef<PeriodoIndicadores>('atual')
-  const periodoUniversoBdrsRef = useRef<PeriodoIndicadores>('atual')
-  const periodoUniversoFiisRef = useRef<PeriodoIndicadores>('atual')
+  const universoAcoesRef = useRef<UniversoPorPeriodo>({})
+  const universoBdrsRef = useRef<UniversoPorPeriodo>({})
+  const universoFiisRef = useRef<UniversoPorPeriodo>({})
   const filtrosAcoesRef = useRef<FiltrosAnalise>(filtrosAcoes)
   const filtrosBdrsRef = useRef<FiltrosAnalise>(filtrosBdrs)
   const filtrosFiisRef = useRef<FiltrosAnalise>(filtrosFiis)
   const enrichFiisGenRef = useRef(0)
 
   const setoresAcoesOpcoes = useMemo(
-    () => coletarSetores(universoAcoesRef.current || ativosAcoes, SETORES_COMUNS),
+    () => coletarSetores(
+      obterUniversoPeriodo(universoAcoesRef.current, periodoDosFiltros(filtrosAcoes)) || ativosAcoes,
+      SETORES_COMUNS,
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ativosAcoes, universoTick]
+    [ativosAcoes, universoTick, filtrosAcoes.periodo_indicadores]
   )
   const setoresBdrsOpcoes = useMemo(
-    () => coletarSetores(universoBdrsRef.current || ativosBdrs, SETORES_COMUNS),
+    () => coletarSetores(
+      obterUniversoPeriodo(universoBdrsRef.current, periodoDosFiltros(filtrosBdrs)) || ativosBdrs,
+      SETORES_COMUNS,
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ativosBdrs, universoTick]
+    [ativosBdrs, universoTick, filtrosBdrs.periodo_indicadores]
   )
   const segmentosFiisOpcoes = useMemo(
-    () => coletarSegmentosFiis(universoFiisRef.current || ativosFiis, fiiMetadataMap, SEGMENTOS_FII_COMUNS),
+    () => coletarSegmentosFiis(
+      obterUniversoPeriodo(universoFiisRef.current, periodoDosFiltros(filtrosFiis)) || ativosFiis,
+      fiiMetadataMap,
+      SEGMENTOS_FII_COMUNS,
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ativosFiis, fiiMetadataMap, universoTick]
+    [ativosFiis, fiiMetadataMap, universoTick, filtrosFiis.periodo_indicadores]
   )
 
   // SEGURANCA: Incluir user na queryKey para isolamento entre usuários
@@ -1945,18 +2036,23 @@ export default function AnaliseListaTab() {
 
         setFiiMetadataMap(prev => ({ ...prev, ...newMetadataMap }))
 
-        if (universoFiisRef.current && Object.keys(newMetadataMap).length > 0) {
-          universoFiisRef.current = universoFiisRef.current.map((a) => {
-            const meta = newMetadataMap[a.ticker]
-            if (!meta) return a
-            return {
-              ...a,
-              tipo_fii: meta.tipo ?? a.tipo_fii,
-              segmento_fii: meta.segmento ?? a.segmento_fii,
-              setor: meta.segmento || a.setor,
-            }
-          })
-          setUniversoTick((t) => t + 1)
+        if (Object.keys(newMetadataMap).length > 0) {
+          const periodo = periodoDosFiltros(filtrosFiisRef.current)
+          const atual = obterUniversoPeriodo(universoFiisRef.current, periodo)
+          if (atual) {
+            const atualizado = atual.map((a) => {
+              const meta = newMetadataMap[a.ticker]
+              if (!meta) return a
+              return {
+                ...a,
+                tipo_fii: meta.tipo ?? a.tipo_fii,
+                segmento_fii: meta.segmento ?? a.segmento_fii,
+                setor: meta.segmento || a.setor,
+              }
+            })
+            universoFiisRef.current = salvarUniversoPeriodo(universoFiisRef.current, periodo, atualizado)
+            setUniversoTick((t) => t + 1)
+          }
         }
 
         if (i + batchSize < faltando.length) {
@@ -2000,8 +2096,10 @@ export default function AnaliseListaTab() {
       if (Object.keys(newMetadataMap).length === 0) continue
 
       setFiiMetadataMap((prev) => ({ ...prev, ...newMetadataMap }))
-      if (universoFiisRef.current) {
-        universoFiisRef.current = universoFiisRef.current.map((a) => {
+      const periodo = periodoDosFiltros(filtrosFiisRef.current)
+      const atual = obterUniversoPeriodo(universoFiisRef.current, periodo)
+      if (atual) {
+        const atualizado = atual.map((a) => {
           const meta = newMetadataMap[a.ticker]
           if (!meta) return a
           return {
@@ -2011,9 +2109,10 @@ export default function AnaliseListaTab() {
             setor: meta.segmento || a.setor,
           }
         })
+        universoFiisRef.current = salvarUniversoPeriodo(universoFiisRef.current, periodo, atualizado)
         setUniversoTick((t) => t + 1)
         if (temFiltroSetorialFiis(filtrosFiisRef.current)) {
-          setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosFiisRef.current))
+          setAtivosFiis(filtrarFiisLocalmente(atualizado, filtrosFiisRef.current))
         }
       }
 
@@ -2028,6 +2127,7 @@ export default function AnaliseListaTab() {
     abortAcoesRef.current?.abort()
     abortAcoesRef.current = null
     setLoadingAcoes(false)
+    setProgressoAcoes(null)
   }, [])
 
   const cancelarBuscaBdrs = useCallback(() => {
@@ -2035,6 +2135,7 @@ export default function AnaliseListaTab() {
     abortBdrsRef.current?.abort()
     abortBdrsRef.current = null
     setLoadingBdrs(false)
+    setProgressoBdrs(null)
   }, [])
 
   const cancelarBuscaFiis = useCallback(() => {
@@ -2042,7 +2143,32 @@ export default function AnaliseListaTab() {
     abortFiisRef.current?.abort()
     abortFiisRef.current = null
     setLoadingFiis(false)
+    setProgressoFiis(null)
   }, [])
+
+  useEffect(() => {
+    const loading = loadingAcoes || loadingBdrs || loadingFiis
+    if (!loading) return
+
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const p = await analiseService.getProgresso()
+        if (cancelled) return
+        if (loadingAcoes) setProgressoAcoes(p)
+        if (loadingBdrs) setProgressoBdrs(p)
+        if (loadingFiis) setProgressoFiis(p)
+      } catch {
+        // ignore poll errors
+      }
+    }
+    void tick()
+    const id = window.setInterval(() => { void tick() }, 700)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [loadingAcoes, loadingBdrs, loadingFiis])
 
   useEffect(() => {
     return () => {
@@ -2065,35 +2191,42 @@ export default function AnaliseListaTab() {
   }, [filtrosFiis])
 
   useEffect(() => {
-    if (!universoAcoesRef.current) return
-    setAtivosAcoes(filtrarAcoesLocalmente(universoAcoesRef.current, filtrosAcoes))
+    const periodo = periodoDosFiltros(filtrosAcoes)
+    const universo = obterUniversoPeriodo(universoAcoesRef.current, periodo)
+    if (!universo) return
+    setAtivosAcoes(filtrarAcoesLocalmente(universo, filtrosAcoes))
   }, [filtrosAcoes, setAtivosAcoes])
 
   useEffect(() => {
-    if (!universoBdrsRef.current) return
-    setAtivosBdrs(filtrarBdrsLocalmente(universoBdrsRef.current, filtrosBdrs))
+    const periodo = periodoDosFiltros(filtrosBdrs)
+    const universo = obterUniversoPeriodo(universoBdrsRef.current, periodo)
+    if (!universo) return
+    setAtivosBdrs(filtrarBdrsLocalmente(universo, filtrosBdrs))
   }, [filtrosBdrs, setAtivosBdrs])
 
   useEffect(() => {
-    if (!universoFiisRef.current) return
+    const periodo = periodoDosFiltros(filtrosFiis)
+    const universo = obterUniversoPeriodo(universoFiisRef.current, periodo)
+    if (!universo) return
     if (temFiltroSetorialFiis(filtrosFiis)) {
-      const temMeta = universoFiisRef.current.some((a) => a.segmento_fii || a.tipo_fii)
+      const temMeta = universo.some((a) => a.segmento_fii || a.tipo_fii)
       if (!temMeta) return
     }
-    setAtivosFiis(filtrarFiisLocalmente(universoFiisRef.current, filtrosFiis))
+    setAtivosFiis(filtrarFiisLocalmente(universo, filtrosFiis))
   }, [filtrosFiis, setAtivosFiis])
 
   const handleBuscarAcoes = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
-    const filtrosAtuais = filtrosOverride || filtrosAcoesRef.current
+    const filtrosAtuais = isFiltrosAnalise(filtrosOverride) ? filtrosOverride : filtrosAcoesRef.current
     const periodo = periodoDosFiltros(filtrosAtuais)
-    if (
-      universoAcoesRef.current &&
-      periodoUniversoAcoesRef.current === periodo
-    ) {
+    const cached = obterUniversoPeriodo(universoAcoesRef.current, periodo)
+
+    // Já buscamos este período: só refiltra em memória
+    if (cached) {
       setErrorAcoes(null)
-      setAtivosAcoes(filtrarAcoesLocalmente(universoAcoesRef.current, filtrosAtuais))
+      setAtivosAcoes(filtrarAcoesLocalmente(cached, filtrosAtuais))
       return
     }
+
     try {
       await analiseService.cancelarBusca()
     } catch {}
@@ -2101,11 +2234,21 @@ export default function AnaliseListaTab() {
     const ctrl = new AbortController()
     abortAcoesRef.current = ctrl
     setLoadingAcoes(true)
+    setProgressoAcoes({
+      status: 'running',
+      done: 0,
+      total: 0,
+      faltam: 0,
+      pct: 0,
+      message: `Carregando universo (${labelPeriodoCurto(periodo)})...`,
+      recent: [],
+      periodo,
+    })
     setErrorAcoes(null)
     try {
       const universo = await analiseService.getAtivos('acoes', filtrosUniversoAcoes(periodo), { signal: ctrl.signal })
-      universoAcoesRef.current = universo
-      periodoUniversoAcoesRef.current = periodo
+      if (ctrl.signal.aborted) return
+      universoAcoesRef.current = salvarUniversoPeriodo(universoAcoesRef.current, periodo, universo)
       setUniversoTick((t) => t + 1)
       setAtivosAcoes(filtrarAcoesLocalmente(universo, filtrosAcoesRef.current))
     } catch (error) {
@@ -2113,22 +2256,25 @@ export default function AnaliseListaTab() {
         setErrorAcoes(mensagemErroAnalise(error))
       }
     } finally {
-      setLoadingAcoes(false)
-      if (abortAcoesRef.current === ctrl) abortAcoesRef.current = null
+      if (abortAcoesRef.current === ctrl) {
+        setLoadingAcoes(false)
+        setProgressoAcoes(null)
+        abortAcoesRef.current = null
+      }
     }
   }, [setAtivosAcoes])
 
   const handleBuscarBdrs = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
-    const filtrosAtuais = filtrosOverride || filtrosBdrsRef.current
+    const filtrosAtuais = isFiltrosAnalise(filtrosOverride) ? filtrosOverride : filtrosBdrsRef.current
     const periodo = periodoDosFiltros(filtrosAtuais)
-    if (
-      universoBdrsRef.current &&
-      periodoUniversoBdrsRef.current === periodo
-    ) {
+    const cached = obterUniversoPeriodo(universoBdrsRef.current, periodo)
+
+    if (cached) {
       setErrorBdrs(null)
-      setAtivosBdrs(filtrarBdrsLocalmente(universoBdrsRef.current, filtrosAtuais))
+      setAtivosBdrs(filtrarBdrsLocalmente(cached, filtrosAtuais))
       return
     }
+
     try {
       await analiseService.cancelarBusca()
     } catch {}
@@ -2136,11 +2282,21 @@ export default function AnaliseListaTab() {
     const ctrl = new AbortController()
     abortBdrsRef.current = ctrl
     setLoadingBdrs(true)
+    setProgressoBdrs({
+      status: 'running',
+      done: 0,
+      total: 0,
+      faltam: 0,
+      pct: 0,
+      message: `Carregando universo (${labelPeriodoCurto(periodo)})...`,
+      recent: [],
+      periodo,
+    })
     setErrorBdrs(null)
     try {
       const universo = await analiseService.getAtivos('bdrs', filtrosUniversoBdrs(periodo), { signal: ctrl.signal })
-      universoBdrsRef.current = universo
-      periodoUniversoBdrsRef.current = periodo
+      if (ctrl.signal.aborted) return
+      universoBdrsRef.current = salvarUniversoPeriodo(universoBdrsRef.current, periodo, universo)
       setUniversoTick((t) => t + 1)
       setAtivosBdrs(filtrarBdrsLocalmente(universo, filtrosBdrsRef.current))
     } catch (error) {
@@ -2148,22 +2304,24 @@ export default function AnaliseListaTab() {
         setErrorBdrs(mensagemErroAnalise(error))
       }
     } finally {
-      setLoadingBdrs(false)
-      if (abortBdrsRef.current === ctrl) abortBdrsRef.current = null
+      if (abortBdrsRef.current === ctrl) {
+        setLoadingBdrs(false)
+        setProgressoBdrs(null)
+        abortBdrsRef.current = null
+      }
     }
   }, [setAtivosBdrs])
 
   const handleBuscarFiis = useCallback(async (filtrosOverride?: FiltrosAnalise) => {
-    const filtrosAtuais = filtrosOverride || filtrosFiisRef.current
+    const filtrosAtuais = isFiltrosAnalise(filtrosOverride) ? filtrosOverride : filtrosFiisRef.current
     const periodo = periodoDosFiltros(filtrosAtuais)
     const setorial = temFiltroSetorialFiis(filtrosAtuais)
-    const universo = universoFiisRef.current
-    const universoMesmoPeriodo = !!universo && periodoUniversoFiisRef.current === periodo
-    const universoTemMeta = !!universo?.some((a) => a.segmento_fii || a.tipo_fii)
+    const cached = obterUniversoPeriodo(universoFiisRef.current, periodo)
+    const universoTemMeta = !!cached?.some((a) => a.segmento_fii || a.tipo_fii)
 
-    if (universoMesmoPeriodo && (!setorial || universoTemMeta)) {
+    if (cached && (!setorial || universoTemMeta)) {
       setErrorFiis(null)
-      setAtivosFiis(filtrarFiisLocalmente(universo!, filtrosAtuais))
+      setAtivosFiis(filtrarFiisLocalmente(cached, filtrosAtuais))
       return
     }
 
@@ -2174,16 +2332,26 @@ export default function AnaliseListaTab() {
     const ctrl = new AbortController()
     abortFiisRef.current = ctrl
     setLoadingFiis(true)
+    setProgressoFiis({
+      status: 'running',
+      done: 0,
+      total: 0,
+      faltam: 0,
+      pct: 0,
+      message: `Carregando universo (${labelPeriodoCurto(periodo)})...`,
+      recent: [],
+      periodo,
+    })
     setErrorFiis(null)
     try {
-      if (setorial && !(universoMesmoPeriodo && universoTemMeta)) {
-        // Busca no backend com tipo/segmento/exclusões (metadados FundsExplorer)
+      if (setorial && !(cached && universoTemMeta)) {
         const dados = await analiseService.getAtivos('fiis', { ...filtrosAtuais, periodo_indicadores: periodo }, { signal: ctrl.signal })
+        if (ctrl.signal.aborted) return
         setAtivosFiis(dados)
       } else {
         const novoUniverso = await analiseService.getAtivos('fiis', filtrosUniversoFiis(periodo), { signal: ctrl.signal })
-        universoFiisRef.current = novoUniverso
-        periodoUniversoFiisRef.current = periodo
+        if (ctrl.signal.aborted) return
+        universoFiisRef.current = salvarUniversoPeriodo(universoFiisRef.current, periodo, novoUniverso)
         setUniversoTick((t) => t + 1)
         setAtivosFiis(filtrarFiisLocalmente(novoUniverso, filtrosFiisRef.current))
         void enriquecerUniversoFiis(novoUniverso)
@@ -2193,16 +2361,20 @@ export default function AnaliseListaTab() {
         setErrorFiis(mensagemErroAnalise(error))
       }
     } finally {
-      setLoadingFiis(false)
-      if (abortFiisRef.current === ctrl) abortFiisRef.current = null
+      if (abortFiisRef.current === ctrl) {
+        setLoadingFiis(false)
+        setProgressoFiis(null)
+        abortFiisRef.current = null
+      }
     }
   }, [enriquecerUniversoFiis, setAtivosFiis])
 
-  // Funções de mudança de filtro
+  // Filtros: com cache do período, o useEffect refiltra localmente (sem nova API)
   const handleFiltroAcoesChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
     const nextFiltros = { ...filtrosAcoes, [key]: value }
     setFiltrosAcoes(nextFiltros)
-    if (autoSearchAcoes) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchAcoes && !obterUniversoPeriodo(universoAcoesRef.current, periodo)) {
       void handleBuscarAcoes(nextFiltros)
     }
   }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
@@ -2210,7 +2382,8 @@ export default function AnaliseListaTab() {
   const handleFiltroAcoesStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosAcoes, [key]: value }
     setFiltrosAcoes(nextFiltros)
-    if (autoSearchAcoes) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchAcoes && !obterUniversoPeriodo(universoAcoesRef.current, periodo)) {
       void handleBuscarAcoes(nextFiltros)
     }
   }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
@@ -2218,7 +2391,8 @@ export default function AnaliseListaTab() {
   const handleFiltroAcoesExclusaoChange = useCallback((key: 'setores_excluir', value: string[]) => {
     const nextFiltros = { ...filtrosAcoes, [key]: value }
     setFiltrosAcoes(nextFiltros)
-    if (autoSearchAcoes) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchAcoes && !obterUniversoPeriodo(universoAcoesRef.current, periodo)) {
       void handleBuscarAcoes(nextFiltros)
     }
   }, [autoSearchAcoes, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
@@ -2226,7 +2400,8 @@ export default function AnaliseListaTab() {
   const handleFiltroBdrsChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
     const nextFiltros = { ...filtrosBdrs, [key]: value }
     setFiltrosBdrs(nextFiltros)
-    if (autoSearchBdrs) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchBdrs && !obterUniversoPeriodo(universoBdrsRef.current, periodo)) {
       void handleBuscarBdrs(nextFiltros)
     }
   }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
@@ -2234,7 +2409,8 @@ export default function AnaliseListaTab() {
   const handleFiltroBdrsStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosBdrs, [key]: value }
     setFiltrosBdrs(nextFiltros)
-    if (autoSearchBdrs) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchBdrs && !obterUniversoPeriodo(universoBdrsRef.current, periodo)) {
       void handleBuscarBdrs(nextFiltros)
     }
   }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
@@ -2242,7 +2418,8 @@ export default function AnaliseListaTab() {
   const handleFiltroBdrsExclusaoChange = useCallback((key: 'setores_excluir', value: string[]) => {
     const nextFiltros = { ...filtrosBdrs, [key]: value }
     setFiltrosBdrs(nextFiltros)
-    if (autoSearchBdrs) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchBdrs && !obterUniversoPeriodo(universoBdrsRef.current, periodo)) {
       void handleBuscarBdrs(nextFiltros)
     }
   }, [autoSearchBdrs, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
@@ -2250,7 +2427,8 @@ export default function AnaliseListaTab() {
   const handleFiltroFiisChange = useCallback((key: keyof FiltrosAnalise, value: number) => {
     const nextFiltros = { ...filtrosFiis, [key]: value }
     setFiltrosFiis(nextFiltros)
-    if (autoSearchFiis) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchFiis && !obterUniversoPeriodo(universoFiisRef.current, periodo)) {
       void handleBuscarFiis(nextFiltros)
     }
   }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
@@ -2258,7 +2436,8 @@ export default function AnaliseListaTab() {
   const handleFiltroFiisStringChange = useCallback((key: keyof FiltrosAnalise, value: string) => {
     const nextFiltros = { ...filtrosFiis, [key]: value }
     setFiltrosFiis(nextFiltros)
-    if (autoSearchFiis) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchFiis && !obterUniversoPeriodo(universoFiisRef.current, periodo)) {
       void handleBuscarFiis(nextFiltros)
     }
   }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
@@ -2266,7 +2445,8 @@ export default function AnaliseListaTab() {
   const handleFiltroFiisExclusaoChange = useCallback((key: 'segmentos_excluir', value: string[]) => {
     const nextFiltros = { ...filtrosFiis, [key]: value }
     setFiltrosFiis(nextFiltros)
-    if (autoSearchFiis) {
+    const periodo = periodoDosFiltros(nextFiltros)
+    if (autoSearchFiis && !obterUniversoPeriodo(universoFiisRef.current, periodo)) {
       void handleBuscarFiis(nextFiltros)
     }
   }, [autoSearchFiis, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
@@ -2274,35 +2454,37 @@ export default function AnaliseListaTab() {
   const handlePeriodoAcoesChange = useCallback((periodo: PeriodoIndicadores) => {
     if (periodoDosFiltros(filtrosAcoes) === periodo) return
     const nextFiltros = { ...filtrosAcoes, periodo_indicadores: periodo }
-    const tinhaDados = !!universoAcoesRef.current || ativosAcoes.length > 0
-    universoAcoesRef.current = null
     setFiltrosAcoes(nextFiltros)
-    if (tinhaDados || autoSearchAcoes) {
-      void handleBuscarAcoes(nextFiltros)
+    // Se o período já foi buscado: useEffect filtra na hora.
+    // Se não: busca só esse período.
+    if (!obterUniversoPeriodo(universoAcoesRef.current, periodo)) {
+      if (loadingAcoes || autoSearchAcoes || ativosAcoes.length > 0) {
+        void handleBuscarAcoes(nextFiltros)
+      }
     }
-  }, [autoSearchAcoes, ativosAcoes.length, filtrosAcoes, handleBuscarAcoes, setFiltrosAcoes])
+  }, [autoSearchAcoes, ativosAcoes.length, filtrosAcoes, handleBuscarAcoes, loadingAcoes, setFiltrosAcoes])
 
   const handlePeriodoBdrsChange = useCallback((periodo: PeriodoIndicadores) => {
     if (periodoDosFiltros(filtrosBdrs) === periodo) return
     const nextFiltros = { ...filtrosBdrs, periodo_indicadores: periodo }
-    const tinhaDados = !!universoBdrsRef.current || ativosBdrs.length > 0
-    universoBdrsRef.current = null
     setFiltrosBdrs(nextFiltros)
-    if (tinhaDados || autoSearchBdrs) {
-      void handleBuscarBdrs(nextFiltros)
+    if (!obterUniversoPeriodo(universoBdrsRef.current, periodo)) {
+      if (loadingBdrs || autoSearchBdrs || ativosBdrs.length > 0) {
+        void handleBuscarBdrs(nextFiltros)
+      }
     }
-  }, [autoSearchBdrs, ativosBdrs.length, filtrosBdrs, handleBuscarBdrs, setFiltrosBdrs])
+  }, [autoSearchBdrs, ativosBdrs.length, filtrosBdrs, handleBuscarBdrs, loadingBdrs, setFiltrosBdrs])
 
   const handlePeriodoFiisChange = useCallback((periodo: PeriodoIndicadores) => {
     if (periodoDosFiltros(filtrosFiis) === periodo) return
     const nextFiltros = { ...filtrosFiis, periodo_indicadores: periodo }
-    const tinhaDados = !!universoFiisRef.current || ativosFiis.length > 0
-    universoFiisRef.current = null
     setFiltrosFiis(nextFiltros)
-    if (tinhaDados || autoSearchFiis) {
-      void handleBuscarFiis(nextFiltros)
+    if (!obterUniversoPeriodo(universoFiisRef.current, periodo)) {
+      if (loadingFiis || autoSearchFiis || ativosFiis.length > 0) {
+        void handleBuscarFiis(nextFiltros)
+      }
     }
-  }, [autoSearchFiis, ativosFiis.length, filtrosFiis, handleBuscarFiis, setFiltrosFiis])
+  }, [autoSearchFiis, ativosFiis.length, filtrosFiis, handleBuscarFiis, loadingFiis, setFiltrosFiis])
 
   return (
     <div>
@@ -2446,10 +2628,11 @@ export default function AnaliseListaTab() {
               error={errorAcoes} 
               tipo="Ações"
               isAtivoNaCarteira={isAtivoNaCarteira}
-              onRetry={handleBuscarAcoes}
+              onRetry={() => { void handleBuscarAcoes() }}
               periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosAcoes))}
               ordenacao={ordenacaoAcoes}
               onOrdenacaoChange={setOrdenacaoAcoes}
+              progresso={progressoAcoes}
             />
           </motion.div>
         )}
@@ -2481,10 +2664,11 @@ export default function AnaliseListaTab() {
               error={errorBdrs} 
               tipo="BDRs"
               isAtivoNaCarteira={isAtivoNaCarteira}
-              onRetry={handleBuscarBdrs}
+              onRetry={() => { void handleBuscarBdrs() }}
               periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosBdrs))}
               ordenacao={ordenacaoBdrs}
               onOrdenacaoChange={setOrdenacaoBdrs}
+              progresso={progressoBdrs}
             />
           </motion.div>
         )}
@@ -2517,8 +2701,9 @@ export default function AnaliseListaTab() {
               tipo="FIIs"
               isAtivoNaCarteira={isAtivoNaCarteira}
               fiiMetadataMap={fiiMetadataMap}
-              onRetry={handleBuscarFiis}
+              onRetry={() => { void handleBuscarFiis() }}
               periodoLabel={labelPeriodoCurto(periodoDosFiltros(filtrosFiis))}
+              progresso={progressoFiis}
             />
           </motion.div>
         )}

@@ -1550,8 +1550,13 @@ export const analiseService = {
     const response = await api.post(
       '/analise/ativos',
       { tipo, filtros },
-      { timeout: 300000, signal: options?.signal }
+      { timeout: 300000, signal: options?.signal, validateStatus: (s) => (s >= 200 && s < 300) || s === 499 }
     )
+    if (response.status === 499 || response.data?.cancelled) {
+      const err = new Error('cancelled')
+      err.name = 'AbortError'
+      throw err
+    }
     return response.data
   },
 
@@ -1562,6 +1567,22 @@ export const analiseService = {
 
   cancelarBusca: async (): Promise<{ ok: boolean; generation: number }> => {
     const response = await api.post('/analise/cancelar')
+    return response.data
+  },
+
+  getProgresso: async (): Promise<{
+    status: string
+    tipo?: string | null
+    periodo?: string | null
+    done: number
+    total: number
+    faltam: number
+    pct: number
+    current?: string | null
+    message?: string
+    recent?: string[]
+  }> => {
+    const response = await api.get('/analise/progresso', { timeout: 10000 })
     return response.data
   },
 }

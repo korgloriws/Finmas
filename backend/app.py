@@ -232,6 +232,8 @@ ANALISE_ATIVOS_SEM = threading.Semaphore(2)
 MONTE_CARLO_SEM = threading.Semaphore(1)
 _ANALISE_CANCEL_LOCK = threading.Lock()
 _ANALISE_CANCEL_GEN_BY_USER = {}
+_ANALISE_PROGRESS_LOCK = threading.Lock()
+_ANALISE_PROGRESS_BY_USER = {}
 
 
 def _analise_cancel_user_key() -> str:
@@ -257,6 +259,29 @@ def _analise_bump_cancel_generation(user_key: str) -> int:
         next_gen = int(_ANALISE_CANCEL_GEN_BY_USER.get(user_key, 0)) + 1
         _ANALISE_CANCEL_GEN_BY_USER[user_key] = next_gen
         return next_gen
+
+
+def _analise_set_progress(user_key: str, **fields):
+    with _ANALISE_PROGRESS_LOCK:
+        cur = dict(_ANALISE_PROGRESS_BY_USER.get(user_key) or {})
+        recent = list(cur.get("recent") or [])
+        current = fields.get("current")
+        if current:
+            recent.append(str(current))
+            recent = recent[-12:]
+            fields = {**fields, "recent": recent}
+        cur.update(fields)
+        _ANALISE_PROGRESS_BY_USER[user_key] = cur
+
+
+def _analise_get_progress(user_key: str) -> dict:
+    with _ANALISE_PROGRESS_LOCK:
+        return dict(_ANALISE_PROGRESS_BY_USER.get(user_key) or {})
+
+
+def _analise_clear_progress(user_key: str):
+    with _ANALISE_PROGRESS_LOCK:
+        _ANALISE_PROGRESS_BY_USER.pop(user_key, None)
 
 
 _SLOW_REQUEST_THRESHOLD_S = float(os.getenv('SLOW_REQUEST_THRESHOLD', '3.0'))
@@ -1269,17 +1294,27 @@ def api_analise_ativos():
     import time as _time
     _inicio = _time.time()
     tipo = "?"
+    user_key = _analise_cancel_user_key()
 
     aguardando = ANALISE_ATIVOS_SEM._value == 0
     if aguardando:
         print("[ANALISE] fila cheia, aguardando slot livre...")
+        _analise_set_progress(
+            user_key,
+            status="waiting",
+            tipo=tipo,
+            done=0,
+            total=0,
+            current=None,
+            message="Aguardando slot no servidor...",
+        )
     adquirido = ANALISE_ATIVOS_SEM.acquire(timeout=540)
     if not adquirido:
+        _analise_set_progress(user_key, status="error", message="Servidor ocupado")
         return jsonify({
             "error": "Servidor ocupado processando outras análises. Tente novamente em alguns instantes."
         }), 503
     try:
-        user_key = _analise_cancel_user_key()
         request_generation = _analise_cancel_generation_for(user_key)
 
         def should_cancel_analise():
@@ -1289,30 +1324,68 @@ def api_analise_ativos():
             # automático em buscas longas.
             return _analise_cancel_generation_for(user_key) != request_generation
 
-        data = request.get_json()
-        tipo = data.get('tipo', 'acoes')  
-        filtros = data.get('filtros', {})
-        print(f"[ANALISE] Início /api/analise/ativos tipo={tipo}")
-        
+        data = request.get_json() or {}
+        tipo = data.get('tipo', 'acoes')
+        filtros = data.get('filtros', {}) or {}
+        periodo = filtros.get('periodo_indicadores', 'atual')
+        print(f"[ANALISE] Início /api/analise/ativos tipo={tipo} periodo={periodo}")
+
         # Criar chave de cache baseada nos parâmetros da requisição
         import hashlib
         cache_key_data = {
             'tipo': tipo,
             'filtros': filtros
         }
-        cache_key_str = f"analise_ativos_{hashlib.md5(json.dumps(cache_key_data, sort_keys=True).encode()).hexdigest()}"
-        
+        cache_key_str = f"analise_ativos_v2_{hashlib.md5(json.dumps(cache_key_data, sort_keys=True).encode()).hexdigest()}"
+
         # Verificar cache primeiro
         cached_result = cache.get(cache_key_str)
         if cached_result is not None:
+            _analise_set_progress(
+                user_key,
+                status="done",
+                tipo=tipo,
+                periodo=periodo,
+                done=len(cached_result) if isinstance(cached_result, list) else 0,
+                total=len(cached_result) if isinstance(cached_result, list) else 0,
+                current=None,
+                message="Resultado em cache",
+                recent=[],
+            )
             return jsonify(cached_result)
-        
+
         from models import (
             processar_ativos_acoes_com_filtros,
             processar_ativos_bdrs_com_filtros,
             processar_ativos_fiis_com_filtros
         )
-        
+
+        _analise_set_progress(
+            user_key,
+            status="running",
+            tipo=tipo,
+            periodo=periodo,
+            done=0,
+            total=0,
+            current=None,
+            message="Iniciando análise...",
+            recent=[],
+        )
+
+        def on_progress_analise(done, total, ticker=None):
+            faltam = max(int(total or 0) - int(done or 0), 0)
+            _analise_set_progress(
+                user_key,
+                status="running",
+                tipo=tipo,
+                periodo=periodo,
+                done=int(done or 0),
+                total=int(total or 0),
+                current=ticker,
+                message=f"Analisando {ticker}" if ticker else "Processando...",
+                faltam=faltam,
+            )
+
         if tipo == 'acoes':
             dados = processar_ativos_acoes_com_filtros(
                 filtros.get('roe_min', 0),
@@ -1323,8 +1396,9 @@ def api_analise_ativos():
                 filtros.get('liq_min'),
                 filtros.get('setor'),
                 filtros.get('setores_excluir'),
-                filtros.get('periodo_indicadores', 'atual'),
+                periodo,
                 should_cancel=should_cancel_analise,
+                on_progress=on_progress_analise,
             )
         elif tipo == 'bdrs':
             dados = processar_ativos_bdrs_com_filtros(
@@ -1336,8 +1410,9 @@ def api_analise_ativos():
                 filtros.get('liq_min'),
                 filtros.get('setor'),
                 filtros.get('setores_excluir'),
-                filtros.get('periodo_indicadores', 'atual'),
+                periodo,
                 should_cancel=should_cancel_analise,
+                on_progress=on_progress_analise,
             )
         elif tipo == 'fiis':
             dados = processar_ativos_fiis_com_filtros(
@@ -1347,27 +1422,48 @@ def api_analise_ativos():
                 filtros.get('tipo_fii'),
                 filtros.get('segmento_fii'),
                 filtros.get('segmentos_excluir'),
-                filtros.get('periodo_indicadores', 'atual'),
+                periodo,
                 should_cancel=should_cancel_analise,
+                on_progress=on_progress_analise,
             )
         else:
             return jsonify({"error": "Tipo inválido"}), 400
 
         if should_cancel_analise():
             _duracao = round(_time.time() - _inicio, 1)
-            print(f"[ANALISE] Cancelada /api/analise/ativos tipo={tipo} duracao={_duracao}s")
+            print(f"[ANALISE] Cancelada /api/analise/ativos tipo={tipo} periodo={periodo} duracao={_duracao}s")
+            _analise_set_progress(
+                user_key,
+                status="cancelled",
+                tipo=tipo,
+                periodo=periodo,
+                message="Análise cancelada",
+                current=None,
+            )
             return jsonify({"cancelled": True}), 499
-        
+
         # Armazenar no cache por 30 minutos (1800 segundos)
         cache.set(cache_key_str, dados, timeout=1800)
         _duracao = round(_time.time() - _inicio, 1)
-        print(f"[ANALISE] Fim /api/analise/ativos tipo={tipo} duracao={_duracao}s len={len(dados)}")
+        print(f"[ANALISE] Fim /api/analise/ativos tipo={tipo} periodo={periodo} duracao={_duracao}s len={len(dados)}")
+        _analise_set_progress(
+            user_key,
+            status="done",
+            tipo=tipo,
+            periodo=periodo,
+            done=len(dados),
+            total=len(dados),
+            faltam=0,
+            current=None,
+            message="Análise concluída",
+        )
         resp = jsonify(dados)
         resp.headers["X-Finmas-Backend"] = "ok"
         return resp
     except Exception as e:
         _duracao = round(_time.time() - _inicio, 1)
         print(f"[ANALISE] Erro /api/analise/ativos tipo={tipo} duracao={_duracao}s err={e}")
+        _analise_set_progress(user_key, status="error", message=str(e), current=None)
         return jsonify({"error": str(e)}), 500
     finally:
         try:
@@ -1381,7 +1477,40 @@ def api_analise_cancelar():
     try:
         user_key = _analise_cancel_user_key()
         gen = _analise_bump_cancel_generation(user_key)
+        _analise_set_progress(
+            user_key,
+            status="cancelled",
+            message="Cancelamento solicitado",
+            current=None,
+        )
         return jsonify({"ok": True, "generation": gen})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@server.route("/api/analise/progresso", methods=["GET"])
+def api_analise_progresso():
+    try:
+        user_key = _analise_cancel_user_key()
+        progress = _analise_get_progress(user_key)
+        done = int(progress.get("done") or 0)
+        total = int(progress.get("total") or 0)
+        faltam = progress.get("faltam")
+        if faltam is None and total > 0:
+            faltam = max(total - done, 0)
+        pct = round((done / total) * 100, 1) if total > 0 else 0
+        return jsonify({
+            "status": progress.get("status") or "idle",
+            "tipo": progress.get("tipo"),
+            "periodo": progress.get("periodo"),
+            "done": done,
+            "total": total,
+            "faltam": faltam if faltam is not None else 0,
+            "pct": pct,
+            "current": progress.get("current"),
+            "message": progress.get("message") or "",
+            "recent": progress.get("recent") or [],
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -6709,6 +6838,40 @@ def api_obter_lista_ranking():
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
+
+@server.route("/api/assistente/status", methods=["GET"])
+def api_assistente_status():
+    try:
+        from assistente_agent import status_assistente
+        return jsonify(status_assistente())
+    except Exception as e:
+        return jsonify({"configured": False, "error": str(e)}), 500
+
+
+@server.route("/api/assistente/chat", methods=["POST"])
+def api_assistente_chat():
+    """Chat do assistente OpenRouter com tools (carteira, ativo, notícias, taxas)."""
+    try:
+        usuario_atual, erro = validar_usuario_autenticado(validar_token=True)
+        if erro:
+            return erro[0], erro[1]
+
+        data = request.get_json(silent=True) or {}
+        mensagem = data.get('mensagem') or data.get('message') or ''
+        historico = data.get('historico') or data.get('history') or []
+        contexto = data.get('contexto') or data.get('context') or {}
+
+        from assistente_agent import rodar_assistente
+        resultado = rodar_assistente(mensagem, historico=historico, contexto=contexto)
+        status = 200 if resultado.get('ok') else (
+            503 if resultado.get('code') in ('missing_api_key', 'all_models_failed') else 400
+        )
+        return jsonify(resultado), status
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 if __name__ == "__main__":
     # Debug: Listar todas as rotas registradas

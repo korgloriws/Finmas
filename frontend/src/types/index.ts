@@ -238,9 +238,17 @@ export interface AtivoAnalise {
   /** Snapshot “agora” (antes de reescrever DY/ROE pelo período). */
   dy_atual?: number
   roe_atual?: number
+  pl_atual?: number | null
+  pvp_atual?: number | null
+  liquidez_atual?: number
   periodo_indicadores?: PeriodoIndicadores | string
   dy_fonte?: string
   roe_fonte?: string
+  pl_fonte?: string
+  pvp_fonte?: string
+  liquidez_fonte?: string
+  /** Indicadores pré-calculados por janela — permite trocar período sem nova busca. */
+  indicadores_por_periodo?: Partial<Record<PeriodoIndicadores, IndicadoresPeriodo>>
 }
 
 export interface ResumoAnalise {

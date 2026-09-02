@@ -16,3 +16,5 @@ tesouro-direto-br
 mercados
 authlib
 openpyxl
+requests
+python-dotenv

@@ -2246,7 +2246,7 @@ def calcular_pvp_periodo(acao, meses, shares_outstanding=None, hist=None):
 
 
 def calcular_indicadores_por_periodo(acao, info):
-    """Calcula DY/ROE/P/L/P/VP/liquidez para todos os períodos (Detalhes)."""
+    """Calcula DY/ROE/P/L/P/VP/liquidez para todos os períodos (Detalhes e Análise)."""
     import math
 
     def _safe(v, fallback=0.0):
@@ -2293,14 +2293,18 @@ def calcular_indicadores_por_periodo(acao, info):
             'liquidez_fonte': 'atual',
         },
     }
+
+    # Uma única série longa reutilizada nos períodos (evita N history por ticker)
+    hist_max = None
+    try:
+        hist_max = acao.history(period='5y')
+    except Exception:
+        hist_max = None
+
     for key, meses in PERIODO_INDICADORES_MESES.items():
         if not meses:
             continue
-        hist = None
-        try:
-            hist = acao.history(period=_yf_period_str(meses))
-        except Exception:
-            hist = None
+        hist = hist_max
         dy = calcular_dy_periodo_pct(acao, preco, meses)
         roe = calcular_roe_periodo_pct(acao, meses)
         pl = calcular_pl_periodo(acao, meses, shares, hist=hist)
@@ -2328,9 +2332,39 @@ def calcular_indicadores_por_periodo(acao, info):
     return out
 
 
+def _aplicar_periodo_nos_campos(ativo_base, indicadores_por_periodo, periodo_indicadores='atual'):
+    """Escreve DY/ROE/P/L/P/VP/liquidez do período escolhido nos campos principais."""
+    periodo = (periodo_indicadores or 'atual').strip().lower()
+    bloco = (indicadores_por_periodo or {}).get(periodo) or (indicadores_por_periodo or {}).get('atual') or {}
+    dy = bloco.get('dy')
+    roe = bloco.get('roe')
+    pl = bloco.get('pl')
+    pvp = bloco.get('pvp')
+    liq = bloco.get('liquidez')
+
+    ativo_base['dividend_yield'] = dy if dy is not None else ativo_base.get('dy_atual', 0.0)
+    ativo_base['roe'] = roe if roe is not None else ativo_base.get('roe_atual', 0.0)
+    if pl is None:
+        ativo_base['pl'] = float('inf') if ativo_base.get('tipo') != 'FII' else 0.0
+    else:
+        ativo_base['pl'] = pl
+    if pvp is None:
+        ativo_base['pvp'] = float('inf') if ativo_base.get('tipo') != 'FII' else 0.0
+    else:
+        ativo_base['pvp'] = pvp
+    ativo_base['liquidez_diaria'] = liq if liq is not None else ativo_base.get('liquidez_atual', 0.0)
+    ativo_base['periodo_indicadores'] = periodo if periodo in (indicadores_por_periodo or {}) else 'atual'
+    ativo_base['dy_fonte'] = bloco.get('dy_fonte', 'atual')
+    ativo_base['roe_fonte'] = bloco.get('roe_fonte', 'atual')
+    ativo_base['pl_fonte'] = bloco.get('pl_fonte', 'atual')
+    ativo_base['pvp_fonte'] = bloco.get('pvp_fonte', 'atual')
+    ativo_base['liquidez_fonte'] = bloco.get('liquidez_fonte', 'atual')
+    return ativo_base
+
+
 def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
     """Obtém informações do ativo no yfinance. Uma única tentativa por ticker (sem retentativas).
-    periodo_indicadores: 'atual' | '6m' | '1a' | '3a' | '5a' — redefine DY/ROE/P/L/P/VP/liquidez na análise.
+    periodo_indicadores: 'atual' | '6m' | '1a' | '3a' | '5a' — recalcula só a janela pedida (rápido).
     """
     def to_float_or_inf(valor):
         try:
@@ -2340,7 +2374,6 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
             return None
 
     try:
-        print(f"[YF] Buscando informacoes para {ticker} (periodo={periodo_indicadores})...")
         acao = yf.Ticker(ticker)
         info = acao.info
 
@@ -2349,11 +2382,9 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
 
         if tipo_ativo == 'FII':
             if not info.get("longName") and not info.get("shortName"):
-                print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
                 return None
         else:
             if "sector" not in info:
-                print(f" Ativo {ticker} não encontrado na API do Yahoo Finance. Ignorando...")
                 return None
 
         preco_atual = info.get("currentPrice")
@@ -2382,7 +2413,6 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
         elif tipo_ativo == 'FII':
             dy_atual = round((dividend_yield_api * 100) if dividend_yield_api < 1 else dividend_yield_api, 2)
         else:
-            # Yahoo pode devolver fração (0.12) ou percentual (12); normalizar para %
             dy_atual = round(dividend_yield_api * 100, 2) if 0 < dividend_yield_api < 1 else round(float(dividend_yield_api or 0), 2)
 
         periodo = (periodo_indicadores or 'atual').strip().lower()
@@ -2398,6 +2428,7 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
         pvp = pvp_atual
         liquidez_diaria = liquidez_diaria_atual
 
+        # Só calcula histórico quando o período NÃO é "atual"
         if meses:
             hist = None
             try:
@@ -2428,6 +2459,34 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
 
         setor = info.get("sector", "").strip() or "Desconhecido"
 
+        indicadores = {
+            'atual': {
+                'dy': dy_atual,
+                'roe': roe_atual,
+                'pl': pl_atual if pl_atual != float('inf') else None,
+                'pvp': pvp_atual if pvp_atual != float('inf') else None,
+                'liquidez': liquidez_diaria_atual,
+                'dy_fonte': 'atual',
+                'roe_fonte': 'atual',
+                'pl_fonte': 'atual',
+                'pvp_fonte': 'atual',
+                'liquidez_fonte': 'atual',
+            },
+        }
+        if periodo != 'atual':
+            indicadores[periodo] = {
+                'dy': dividend_yield,
+                'roe': roe,
+                'pl': pl if pl != float('inf') else None,
+                'pvp': pvp if pvp != float('inf') else None,
+                'liquidez': liquidez_diaria,
+                'dy_fonte': dy_fonte,
+                'roe_fonte': roe_fonte,
+                'pl_fonte': pl_fonte,
+                'pvp_fonte': pvp_fonte,
+                'liquidez_fonte': liq_fonte,
+            }
+
         return {
             "ticker": ticker,
             "nome_completo": info.get("longName", ""),
@@ -2454,6 +2513,7 @@ def obter_informacoes(ticker, tipo_ativo, periodo_indicadores='atual'):
             "pl_fonte": pl_fonte,
             "pvp_fonte": pvp_fonte,
             "liquidez_fonte": liq_fonte,
+            "indicadores_por_periodo": indicadores,
         }
 
     except Exception as e:
@@ -3065,6 +3125,7 @@ def processar_ativos_com_filtros_geral(
     setores_excluir=None,
     periodo_indicadores='atual',
     should_cancel=None,
+    on_progress=None,
 ):
     """Processa lista de ativos com filtros. Requisições em paralelo ao yfinance para evitar timeout (504); retorna todos os ativos filtrados."""
     if not lista_ativos:
@@ -3073,8 +3134,15 @@ def processar_ativos_com_filtros_geral(
     periodo = (periodo_indicadores or 'atual').strip().lower()
     # Paralelizar para concluir em tempo hábil (evitar 504 em proxy/load balancer)
     dados = []
-    max_workers = min(len(lista_ativos), 40)
+    total = len(lista_ativos)
+    done_count = 0
+    max_workers = min(total, 40)
     client_gone = False
+    if callable(on_progress):
+        try:
+            on_progress(0, total, None)
+        except Exception:
+            pass
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
         future_to_ticker = {
@@ -3088,13 +3156,19 @@ def processar_ativos_com_filtros_geral(
                 break
             done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
             for future in done:
+                ticker = future_to_ticker[future]
+                done_count += 1
                 try:
                     resultado = future.result()
                     if resultado is not None:
                         dados.append(resultado)
                 except Exception as e:
-                    ticker = future_to_ticker[future]
                     print(f"Erro ao processar {ticker}: {str(e)}")
+                if callable(on_progress):
+                    try:
+                        on_progress(done_count, total, ticker)
+                    except Exception:
+                        pass
     finally:
         if client_gone:
             try:
@@ -3129,6 +3203,7 @@ def processar_ativos_acoes_com_filtros(
     setores_excluir=None,
     periodo_indicadores='atual',
     should_cancel=None,
+    on_progress=None,
 ):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
@@ -3145,6 +3220,7 @@ def processar_ativos_acoes_com_filtros(
         setores_excluir,
         periodo_indicadores,
         should_cancel=should_cancel,
+        on_progress=on_progress,
     )
 
 def processar_ativos_bdrs_com_filtros(
@@ -3158,6 +3234,7 @@ def processar_ativos_bdrs_com_filtros(
     setores_excluir=None,
     periodo_indicadores='atual',
     should_cancel=None,
+    on_progress=None,
 ):
     # Respeitar exatamente o valor informado pelo usuário (sem piso obrigatório)
     liq_threshold = int(liq_min or 0)
@@ -3174,6 +3251,7 @@ def processar_ativos_bdrs_com_filtros(
         setores_excluir,
         periodo_indicadores,
         should_cancel=should_cancel,
+        on_progress=on_progress,
     )
 
 def processar_ativos_fiis_com_filtros(
@@ -3185,6 +3263,7 @@ def processar_ativos_fiis_com_filtros(
     segmentos_excluir=None,
     periodo_indicadores='atual',
     should_cancel=None,
+    on_progress=None,
 ):
     """Processa lista de FIIs com filtros. Requisições em paralelo ao yfinance; retorna todos os FIIs filtrados."""
     fiis = LISTA_FIIS
@@ -3193,8 +3272,15 @@ def processar_ativos_fiis_com_filtros(
 
     periodo = (periodo_indicadores or 'atual').strip().lower()
     dados = []
-    max_workers = min(len(fiis), 40)
+    total = len(fiis)
+    done_count = 0
+    max_workers = min(total, 40)
     client_gone = False
+    if callable(on_progress):
+        try:
+            on_progress(0, total, None)
+        except Exception:
+            pass
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
         future_to_ticker = {
@@ -3208,13 +3294,19 @@ def processar_ativos_fiis_com_filtros(
                 break
             done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
             for future in done:
+                ticker = future_to_ticker[future]
+                done_count += 1
                 try:
                     resultado = future.result()
                     if resultado is not None:
                         dados.append(resultado)
                 except Exception as e:
-                    ticker = future_to_ticker[future]
                     print(f"Erro ao processar FII {ticker}: {str(e)}")
+                if callable(on_progress):
+                    try:
+                        on_progress(done_count, total, ticker)
+                    except Exception:
+                        pass
     finally:
         if client_gone:
             try:
