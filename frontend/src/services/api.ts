@@ -1557,6 +1557,9 @@ export const analiseService = {
       err.name = 'AbortError'
       throw err
     }
+    if (!Array.isArray(response.data)) {
+      throw new Error(response.data?.error || 'Erro ao carregar. Tente novamente.')
+    }
     return response.data
   },
 
@@ -1582,7 +1585,7 @@ export const analiseService = {
     message?: string
     recent?: string[]
   }> => {
-    const response = await api.get('/analise/progresso', { timeout: 10000 })
+    const response = await api.get('/analise/progresso', { timeout: 10000, headers: { 'X-Priority': 'high' } })
     return response.data
   },
 }

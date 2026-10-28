@@ -1,28 +1,33 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
-import { AtivoAnalise, FiltrosAnalise } from '../types'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { AtivoAnalise, FiltrosAnalise, PeriodoIndicadores } from '../types'
+import { useAuth } from './AuthContext'
+
+export type UniversoPorPeriodo = Partial<Record<PeriodoIndicadores, AtivoAnalise[]>>
 
 interface AnaliseContextType {
-  // Estados para dados dos ativos
   ativosAcoes: AtivoAnalise[]
   ativosBdrs: AtivoAnalise[]
   ativosFiis: AtivoAnalise[]
-  
-  // Setters para os dados
+
   setAtivosAcoes: (ativos: AtivoAnalise[]) => void
   setAtivosBdrs: (ativos: AtivoAnalise[]) => void
   setAtivosFiis: (ativos: AtivoAnalise[]) => void
-  
-  // Filtros padrão
+
   filtrosAcoes: FiltrosAnalise
   filtrosBdrs: FiltrosAnalise
   filtrosFiis: FiltrosAnalise
-  
-  // Setters para os filtros
+
   setFiltrosAcoes: (filtros: FiltrosAnalise) => void
   setFiltrosBdrs: (filtros: FiltrosAnalise) => void
   setFiltrosFiis: (filtros: FiltrosAnalise) => void
-  
-  // Função para obter todos os ativos combinados
+
+  universoAcoes: UniversoPorPeriodo
+  universoBdrs: UniversoPorPeriodo
+  universoFiis: UniversoPorPeriodo
+  salvarUniversoAcoes: (periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => void
+  salvarUniversoBdrs: (periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => void
+  salvarUniversoFiis: (periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => void
+
   getTodosAtivos: () => AtivoAnalise[]
 }
 
@@ -41,11 +46,14 @@ interface AnaliseProviderProps {
 }
 
 export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
+  const { user } = useAuth()
   const [ativosAcoes, setAtivosAcoes] = useState<AtivoAnalise[]>([])
   const [ativosBdrs, setAtivosBdrs] = useState<AtivoAnalise[]>([])
   const [ativosFiis, setAtivosFiis] = useState<AtivoAnalise[]>([])
+  const [universoAcoes, setUniversoAcoes] = useState<UniversoPorPeriodo>({})
+  const [universoBdrs, setUniversoBdrs] = useState<UniversoPorPeriodo>({})
+  const [universoFiis, setUniversoFiis] = useState<UniversoPorPeriodo>({})
 
-  // Filtros padrão
   const [filtrosAcoes, setFiltrosAcoes] = useState<FiltrosAnalise>({
     roe_min: 15,
     dy_min: 12,
@@ -75,6 +83,27 @@ export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
     periodo_indicadores: 'atual',
   })
 
+  useEffect(() => {
+    setAtivosAcoes([])
+    setAtivosBdrs([])
+    setAtivosFiis([])
+    setUniversoAcoes({})
+    setUniversoBdrs({})
+    setUniversoFiis({})
+  }, [user])
+
+  const salvarUniversoAcoes = useCallback((periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => {
+    setUniversoAcoes((prev) => ({ ...prev, [periodo]: lista }))
+  }, [])
+
+  const salvarUniversoBdrs = useCallback((periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => {
+    setUniversoBdrs((prev) => ({ ...prev, [periodo]: lista }))
+  }, [])
+
+  const salvarUniversoFiis = useCallback((periodo: PeriodoIndicadores, lista: AtivoAnalise[]) => {
+    setUniversoFiis((prev) => ({ ...prev, [periodo]: lista }))
+  }, [])
+
   const getTodosAtivos = () => {
     return [...ativosAcoes, ...ativosBdrs, ...ativosFiis]
   }
@@ -92,7 +121,13 @@ export const AnaliseProvider = ({ children }: AnaliseProviderProps) => {
     setFiltrosAcoes,
     setFiltrosBdrs,
     setFiltrosFiis,
-    getTodosAtivos
+    universoAcoes,
+    universoBdrs,
+    universoFiis,
+    salvarUniversoAcoes,
+    salvarUniversoBdrs,
+    salvarUniversoFiis,
+    getTodosAtivos,
   }
 
   return (

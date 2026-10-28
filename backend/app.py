@@ -1292,9 +1292,38 @@ def api_verificar_pergunta():
 @server.route("/api/analise/ativos", methods=["POST"])
 def api_analise_ativos():
     import time as _time
+    import hashlib
     _inicio = _time.time()
     tipo = "?"
     user_key = _analise_cancel_user_key()
+
+    data = request.get_json() or {}
+    tipo = data.get('tipo', 'acoes')
+    filtros = data.get('filtros', {}) or {}
+    periodo = filtros.get('periodo_indicadores', 'atual')
+    cache_key_data = {
+        'tipo': tipo,
+        'filtros': filtros
+    }
+    cache_key_str = f"analise_ativos_v2_{hashlib.md5(json.dumps(cache_key_data, sort_keys=True).encode()).hexdigest()}"
+
+    def _responder_cache(cached_result):
+        _analise_set_progress(
+            user_key,
+            status="done",
+            tipo=tipo,
+            periodo=periodo,
+            done=len(cached_result) if isinstance(cached_result, list) else 0,
+            total=len(cached_result) if isinstance(cached_result, list) else 0,
+            current=None,
+            message="Resultado em cache",
+            recent=[],
+        )
+        return jsonify(cached_result)
+
+    cached_result = cache.get(cache_key_str)
+    if cached_result is not None:
+        return _responder_cache(cached_result)
 
     aguardando = ANALISE_ATIVOS_SEM._value == 0
     if aguardando:
@@ -1315,6 +1344,10 @@ def api_analise_ativos():
             "error": "Servidor ocupado processando outras análises. Tente novamente em alguns instantes."
         }), 503
     try:
+        cached_result = cache.get(cache_key_str)
+        if cached_result is not None:
+            return _responder_cache(cached_result)
+
         request_generation = _analise_cancel_generation_for(user_key)
 
         def should_cancel_analise():
@@ -1324,35 +1357,7 @@ def api_analise_ativos():
             # automático em buscas longas.
             return _analise_cancel_generation_for(user_key) != request_generation
 
-        data = request.get_json() or {}
-        tipo = data.get('tipo', 'acoes')
-        filtros = data.get('filtros', {}) or {}
-        periodo = filtros.get('periodo_indicadores', 'atual')
         print(f"[ANALISE] Início /api/analise/ativos tipo={tipo} periodo={periodo}")
-
-        # Criar chave de cache baseada nos parâmetros da requisição
-        import hashlib
-        cache_key_data = {
-            'tipo': tipo,
-            'filtros': filtros
-        }
-        cache_key_str = f"analise_ativos_v2_{hashlib.md5(json.dumps(cache_key_data, sort_keys=True).encode()).hexdigest()}"
-
-        # Verificar cache primeiro
-        cached_result = cache.get(cache_key_str)
-        if cached_result is not None:
-            _analise_set_progress(
-                user_key,
-                status="done",
-                tipo=tipo,
-                periodo=periodo,
-                done=len(cached_result) if isinstance(cached_result, list) else 0,
-                total=len(cached_result) if isinstance(cached_result, list) else 0,
-                current=None,
-                message="Resultado em cache",
-                recent=[],
-            )
-            return jsonify(cached_result)
 
         from models import (
             processar_ativos_acoes_com_filtros,

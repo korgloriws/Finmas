@@ -22,6 +22,11 @@ except Exception:
 
 # Concorrência para requisições ao yfinance (evita rate limit; 5-8 estável)
 YF_MAX_CONCURRENT = 3
+# Análise de universo: poucos workers (Yahoo bloqueia rajadas de 40) + orçamento
+# para SEMPRE devolver lista, mesmo incompleta, antes do timeout do browser.
+ANALISE_YF_WORKERS = int(os.getenv("ANALISE_YF_WORKERS", "8"))
+ANALISE_TICKER_TIMEOUT_S = float(os.getenv("ANALISE_TICKER_TIMEOUT_S", "12"))
+ANALISE_BUDGET_S = float(os.getenv("ANALISE_BUDGET_S", "240"))
 
 USUARIO_ATUAL = None  
 SESSION_LOCK = threading.Lock()
@@ -3112,6 +3117,109 @@ def _setor_na_lista_exclusao(ativo_setor, setores_excluir):
     return False
 
 
+def _obter_informacoes_com_teto(ticker, tipo_ativo, periodo):
+    """Roda obter_informacoes em thread daemon com teto de tempo.
+
+    yfinance (acao.info) às vezes trava para sempre. Thread do Python não
+    pode ser morta, então abandonamos o resultado e seguimos. A daemon
+    continua em background e some quando o processo reciclar.
+    """
+    box = []
+
+    def _run():
+        try:
+            box.append(obter_informacoes(ticker, tipo_ativo, periodo))
+        except Exception as e:
+            print(f"Erro ao processar {ticker}: {e}")
+            box.append(None)
+
+    t = threading.Thread(target=_run, daemon=True, name=f"analise-{ticker}")
+    t.start()
+    t.join(ANALISE_TICKER_TIMEOUT_S)
+    if t.is_alive():
+        print(f"[ANALISE] timeout ticker {ticker} ({ANALISE_TICKER_TIMEOUT_S:.0f}s)")
+        return None
+    return box[0] if box else None
+
+
+def _coletar_universo_yfinance(
+    lista_ativos,
+    tipo_ativo,
+    periodo,
+    should_cancel=None,
+    on_progress=None,
+):
+    """Busca yfinance com orçamento de tempo. Sempre devolve o que já coletou.
+
+    Problemas que isto evita:
+    - 40 threads simultâneas no Yahoo → rate limit / hang
+    - um ticker travado em acao.info bloqueava a lista inteira
+    - timeout do browser (5 min) chegava antes da resposta → erro vazio
+    """
+    if not lista_ativos:
+        return []
+
+    dados = []
+    total = len(lista_ativos)
+    done_count = 0
+    max_workers = min(total, max(1, ANALISE_YF_WORKERS))
+    started = time.monotonic()
+    abortar_pendentes = False
+
+    if callable(on_progress):
+        try:
+            on_progress(0, total, None)
+        except Exception:
+            pass
+
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        future_to_ticker = {
+            executor.submit(_obter_informacoes_com_teto, ticker, tipo_ativo, periodo): ticker
+            for ticker in lista_ativos
+        }
+        pending = set(future_to_ticker.keys())
+        while pending:
+            if callable(should_cancel) and should_cancel():
+                abortar_pendentes = True
+                break
+            elapsed = time.monotonic() - started
+            if elapsed >= ANALISE_BUDGET_S:
+                print(
+                    f"[ANALISE] orçamento {ANALISE_BUDGET_S:.0f}s esgotado "
+                    f"tipo={tipo_ativo} done={done_count}/{total} coletados={len(dados)}"
+                )
+                abortar_pendentes = True
+                break
+
+            done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
+            for future in done:
+                ticker = future_to_ticker[future]
+                done_count += 1
+                try:
+                    resultado = future.result(timeout=1)
+                    if resultado is not None:
+                        dados.append(resultado)
+                except Exception as e:
+                    print(f"Erro ao processar {ticker}: {str(e)}")
+                if callable(on_progress):
+                    try:
+                        on_progress(done_count, total, ticker)
+                    except Exception:
+                        pass
+    finally:
+        try:
+            if abortar_pendentes:
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=True)
+        except TypeError:
+            executor.shutdown(wait=False)
+
+    print(f"[ANALISE] universo tipo={tipo_ativo} coletados={len(dados)}/{total}")
+    return dados
+
+
 def processar_ativos_com_filtros_geral(
     lista_ativos,
     tipo_ativo,
@@ -3127,56 +3235,18 @@ def processar_ativos_com_filtros_geral(
     should_cancel=None,
     on_progress=None,
 ):
-    """Processa lista de ativos com filtros. Requisições em paralelo ao yfinance para evitar timeout (504); retorna todos os ativos filtrados."""
+    """Processa lista de ativos com filtros. Sempre retorna a lista coletada (parcial se o tempo acabar)."""
     if not lista_ativos:
         return []
 
     periodo = (periodo_indicadores or 'atual').strip().lower()
-    # Paralelizar para concluir em tempo hábil (evitar 504 em proxy/load balancer)
-    dados = []
-    total = len(lista_ativos)
-    done_count = 0
-    max_workers = min(total, 40)
-    client_gone = False
-    if callable(on_progress):
-        try:
-            on_progress(0, total, None)
-        except Exception:
-            pass
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    try:
-        future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, tipo_ativo, periodo): ticker
-            for ticker in lista_ativos
-        }
-        pending = set(future_to_ticker.keys())
-        while pending:
-            if callable(should_cancel) and should_cancel():
-                client_gone = True
-                break
-            done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
-            for future in done:
-                ticker = future_to_ticker[future]
-                done_count += 1
-                try:
-                    resultado = future.result()
-                    if resultado is not None:
-                        dados.append(resultado)
-                except Exception as e:
-                    print(f"Erro ao processar {ticker}: {str(e)}")
-                if callable(on_progress):
-                    try:
-                        on_progress(done_count, total, ticker)
-                    except Exception:
-                        pass
-    finally:
-        if client_gone:
-            try:
-                executor.shutdown(wait=False, cancel_futures=True)
-            except TypeError:
-                executor.shutdown(wait=False)
-        else:
-            executor.shutdown(wait=True)
+    dados = _coletar_universo_yfinance(
+        lista_ativos,
+        tipo_ativo,
+        periodo,
+        should_cancel=should_cancel,
+        on_progress=on_progress,
+    )
 
     filtrados = [
         ativo for ativo in dados if (
@@ -3189,7 +3259,6 @@ def processar_ativos_com_filtros_geral(
             not _setor_na_lista_exclusao(ativo.get('setor'), setores_excluir)
         )
     ]
-    # Retornar todos os ativos filtrados (lista completa), ordenados por dividend_yield
     return sorted(filtrados, key=lambda x: x['dividend_yield'], reverse=True)
 
 def processar_ativos_acoes_com_filtros(
@@ -3265,56 +3334,19 @@ def processar_ativos_fiis_com_filtros(
     should_cancel=None,
     on_progress=None,
 ):
-    """Processa lista de FIIs com filtros. Requisições em paralelo ao yfinance; retorna todos os FIIs filtrados."""
+    """Processa lista de FIIs com filtros. Sempre retorna o que já coletou (parcial se o tempo acabar)."""
     fiis = LISTA_FIIS
     if not fiis:
         return []
 
     periodo = (periodo_indicadores or 'atual').strip().lower()
-    dados = []
-    total = len(fiis)
-    done_count = 0
-    max_workers = min(total, 40)
-    client_gone = False
-    if callable(on_progress):
-        try:
-            on_progress(0, total, None)
-        except Exception:
-            pass
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    try:
-        future_to_ticker = {
-            executor.submit(obter_informacoes, ticker, 'FII', periodo): ticker
-            for ticker in fiis
-        }
-        pending = set(future_to_ticker.keys())
-        while pending:
-            if callable(should_cancel) and should_cancel():
-                client_gone = True
-                break
-            done, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
-            for future in done:
-                ticker = future_to_ticker[future]
-                done_count += 1
-                try:
-                    resultado = future.result()
-                    if resultado is not None:
-                        dados.append(resultado)
-                except Exception as e:
-                    print(f"Erro ao processar FII {ticker}: {str(e)}")
-                if callable(on_progress):
-                    try:
-                        on_progress(done_count, total, ticker)
-                    except Exception:
-                        pass
-    finally:
-        if client_gone:
-            try:
-                executor.shutdown(wait=False, cancel_futures=True)
-            except TypeError:
-                executor.shutdown(wait=False)
-        else:
-            executor.shutdown(wait=True)
+    dados = _coletar_universo_yfinance(
+        fiis,
+        'FII',
+        periodo,
+        should_cancel=should_cancel,
+        on_progress=on_progress,
+    )
 
     filtrados = [
         ativo for ativo in dados if (

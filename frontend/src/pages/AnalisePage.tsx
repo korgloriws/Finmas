@@ -96,9 +96,10 @@ export default function AnalisePage() {
         </div>
 
         <div className="p-4 sm:p-6">
-          {activeTab === 'lista' ? (
+          <div className={activeTab === 'lista' ? '' : 'hidden'}>
             <AnaliseListaTab />
-          ) : (
+          </div>
+          {activeTab === 'graficos' && (
             <AnaliseGraficosTab 
               ativosAcoes={ativosAcoes} 
               ativosBdrs={ativosBdrs} 
